@@ -1,0 +1,14 @@
+Tournament — Unreal development integration
+
+Original integration code, launch scripts, and documentation only.
+Unreal Tournament and Unreal Engine belong to Epic Games, Inc. Their source,
+engine binaries, game assets, and associated rights are not included here.
+Game screenshots document development verification and depict Epic content;
+they are excluded from this repository's MIT license.
+
+Use of a separate UT installation remains subject to its applicable Epic
+agreements. This repository does not grant permission to redistribute Epic
+content, create a separate commercial UT game, or operate platform rewards.
+
+Tournament branding and styling are used for the user's requested integration
+prototype. No live account, wallet, payout, or anti-cheat service is connected.

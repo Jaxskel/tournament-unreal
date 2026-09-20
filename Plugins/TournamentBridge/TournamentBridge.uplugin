@@ -1,0 +1,13 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "Tournament Bridge",
+  "Description": "Local server observability for practice/demo matches.",
+  "Category": "UnrealTournament.Mutator",
+  "EnabledByDefault": false,
+  "CanContainContent": false,
+  "Modules": [
+    { "Name": "TournamentBridge", "Type": "Runtime", "LoadingPhase": "Default" }
+  ]
+}

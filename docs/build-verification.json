@@ -1,0 +1,21 @@
+﻿{
+    "compiled_features":  [
+                              "server event bridge",
+                              "automatic arena rotation",
+                              "Tournament HUD",
+                              "native menu/settings",
+                              "remote reconnect",
+                              "diagnostics"
+                          ],
+    "launchers":  "PowerShell checks and installation preflight passed",
+    "runtime_gate":  "Explicit local development license decision pending",
+    "verified_at_utc":  "2026-09-20T19:05:49.0420953Z",
+    "engine":  "UE4.15 CL3228288",
+    "notes":  "Incremental module build using recovered editor/engine libraries; no packaged shipping client.",
+    "artifact":  "UE4Editor-TournamentBridge.dll",
+    "sha256":  "31AF10E805067BC1D2E3CAFECB5E2A3CDED4EA127C5EF4CB734FE2318A4C49BD",
+    "target":  "UnrealTournamentEditor Win64 Development",
+    "bytes":  491008,
+    "runtime_verified":  false,
+    "toolchain":  "MSVC v140 / Windows SDK 8.1 / UCRT 10.0.10240.0"
+}
