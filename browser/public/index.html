@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#16120e">
+  <title>Tournament · Unreal Arena</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" type="module"></script>
+</head>
+<body>
+  <main>
+    <header class="masthead">
+      <a class="brand" href="/" aria-label="Tournament home"><span class="emblem" aria-hidden="true">T</span>TOURNAMENT</a>
+      <span class="demo"><span class="dot"></span> LIVE DEMO <span class="divider">/</span> NO REWARDS</span>
+    </header>
+    <section class="intro">
+      <div><p class="eyebrow">THE ARENA IS CALLING</p><h1>Unreal Arena<span>.</span></h1><p class="subtitle">Real Unreal Tournament. Two players. One arena.</p></div>
+      <div class="availability"><span id="availability">Checking the arena…</span><small>Invite a friend with this same URL.</small></div>
+    </section>
+    <section class="stream-shell" id="stream-shell" aria-label="Game stream">
+      <div class="stage" id="stage">
+        <canvas id="game" width="960" height="540" tabindex="0" aria-label="Live Unreal Tournament viewport. Click to capture your mouse; Escape opens the menu."></canvas>
+        <div class="landing" id="landing">
+          <div class="arena-mark" aria-hidden="true">T</div>
+          <p class="eyebrow">ENTER THE TOURNAMENT</p>
+          <h2>Your next frag starts here.</h2>
+          <p>A live game streamed from the host.<br>Grab a seat and meet your friend in the arena.</p>
+          <button class="primary" id="play" type="button">PLAY NOW <span aria-hidden="true">↗</span></button>
+          <p class="feedback" id="feedback" role="status" aria-live="polite">Desktop keyboard and mouse required.</p>
+        </div>
+        <div class="stream-notice" id="stream-notice" hidden role="status">Connecting to your game…</div>
+        <div class="capture-hint" id="capture-hint" hidden>Click the game to aim · Esc for menu</div>
+      </div>
+      <div class="toolbar">
+        <div class="connection"><span class="dot" id="connection-dot"></span><span id="connection">READY TO JOIN</span><span class="metrics" id="metrics">— FPS · — ms RTT</span></div>
+        <div class="actions">
+          <button id="capture" type="button" disabled title="Capture your mouse for aiming">Capture mouse</button>
+          <button id="menu" type="button" disabled>Menu</button>
+          <button id="fullscreen" type="button">Fullscreen</button>
+          <button id="disconnect" type="button" disabled>Disconnect</button>
+        </div>
+      </div>
+    </section>
+    <section class="below">
+      <div class="controls"><strong>HOW TO PLAY</strong><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</span><span><kbd>SPACE</kbd> Jump</span><span><kbd>CLICK</kbd> Fire</span><span><kbd>1–9</kbd> Weapons</span><span><kbd>TAB</kbd> Scores</span><span><kbd>ESC</kbd> Menu</span></div>
+      <p id="input-help">In menus, use your cursor. After choosing Resume, use Capture mouse to aim again.</p>
+      <p class="smallprint">Audio is unavailable in this first stream. Demo play carries no platform rewards. Two independent browser seats share the host’s native multiplayer arena.</p>
+    </section>
+    <footer><span>TOURNAMENT / UNREAL ARENA</span><span>Powered by Unreal Tournament · Development demo</span></footer>
+  </main>
+</body>
+</html>

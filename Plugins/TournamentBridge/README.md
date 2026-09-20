@@ -1,7 +1,7 @@
 # TournamentBridge
 
 Original practice/demo observability plugin for the supplied UT4 UE4.15 source.
-**Windows UE4.15 compilation and linking passed; runtime event verification remains pending.**
+**Windows UE4.15 compilation, linking, and completed runtime event-log validation passed.**
 Epic files were read selectively as API references; none are included here.
 
 Enable the plugin in the restored UT project and add the native mutator using
@@ -62,7 +62,7 @@ the plugin, parse every JSONL line, and verify no remote-client event file.
 
 ## Build verification (20 September 2026)
 
-Compiled successfully as `UE4Editor-TournamentBridge.dll` on the Windows PC with the recovered UE4.15 changelist 3228288 project, MSVC v140, Windows SDK 8.1 and UCRT 10.0.10240.0. This verifies compilation and linking. Runtime JSONL event validation is still pending; the dedicated-server run requires the user’s first-run license decision.
+Compiled successfully as `UE4Editor-TournamentBridge.dll` on the Windows PC with the recovered UE4.15 changelist 3228288 project, MSVC v140, Windows SDK 8.1 and UCRT 10.0.10240.0. This verifies compilation and linking. A completed source-built multiplayer match produced 35 valid JSONL records (33 kills plus start/end), and automatic Deck → Outpost rotation was observed.
 
 ## Automatic arena rotation
 
@@ -78,4 +78,4 @@ This class passed UHT, compilation, and linking on Windows. Runtime rotation is 
 
 The Diagnostics page shows map/match, network role, connection state, endpoint (never URL credentials/options), and the replicated ping estimate. Reconnect is enabled only for an active remote client and preserves the engine's last remote URL. It is not a recovery frontend after UT destroys the controller and returns to its entry menu.
 
-These UI classes passed Windows UE4.15 compilation/linking. Rendering, menu input/focus, settings persistence, and reconnect runtime checks remain pending. UT's entry/login frontend remains stock; these classes replace the in-match presentation.
+These UI classes compiled and ran in the browser-streamed source build. Escape, sensitivity adjustment, resume, capture, and respawning were exercised. The browser stream suppresses entry-menu frames while its configured native server connection recovers; it exposes the Tournament in-match presentation. See the runtime verification document for the scope and remaining checks.

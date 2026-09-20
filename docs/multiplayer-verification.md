@@ -15,13 +15,20 @@ Use one authoritative `UnrealTournamentEditor -server` process and two independe
 7. Verify wrong protocol versions reject cleanly. Check a missing map produces a clear server error. Do not claim platform anti-cheat or ticket validation from those checks.
 8. Run `verify-events.py` on every completed JSONL file. Keep original logs locally; redact machine paths, addresses, tokens, and player identifiers before sharing diagnostics.
 
-## Current record
+## Runtime record — 20 September 2026
 
-- Preserved shipping client: local bot match, scoring, deaths, respawn, completion, and both maps observed on Mac.
-- Recovered source: base game module and event/rotation plugin compiled on Windows.
-- Native Tournament HUD, settings/menu controller, reconnect, and diagnostics compiled and linked against the recovered Windows UE4.15 project. Launcher tests and eight event-contract tests passed.
-- Native multiplayer runtime: pending the first-run license decision.
-- New Tournament UI input/focus, source-built rotation, event output, and two-client reconnect: pending runtime verification.
-- Spectator delay, internet hosting, packaged clients, Tournament tickets, rewards, and anti-cheat: not implemented/verified in this Unreal integration.
+The recovered Windows source build ran one authoritative TournamentDeathmatch server and two offscreen GPU clients, streamed to two independent browser sessions through the public HTTPS gateway.
 
-The stock shipping client used for the Mac visual checks is CL3525360. It does not contain this repository's new UI and is not the client for a CL3228288 source-built server test.
+- Both clients joined Deck, appeared as separate non-bot participants, and received independent frames. Normal streamed play on Deck was observed around 21–22 FPS at 960×540 before remaining cache work completed.
+- Browser capture, movement, aiming, firing, deaths, respawning, Escape menu, settings sensitivity changes, and absolute menu close were exercised.
+- A complete Deck round produced 35 ordered records: one match start, 33 kills, and one final ranking. `verify-events.py` accepted the completed log. Both human clients were present in the server scoreboard and recorded deaths.
+- Deck → Outpost rotation was observed on the server. Both clients loaded Outpost and resumed frames after initial asset preparation. Source-built character models were visible; the recovered archive uses available fallback content where optional EpicInternal packages are absent.
+- First-run texture/shader compilation initially produced placeholder materials and long map loads. The host caches were prepared before the final demo handoff. Cached map loads and public input must still be measured separately from cold-start asset preparation.
+- Native modules and the offscreen D3D11RHI patch compiled and linked. PowerShell launcher/INI/consent tests, eight event-validator tests, and 24 browser/gateway tests passed.
+- Live rejoin after leaving a menu open returned to game input with the menu closed. Two occupied seats rejected a third join with HTTP 409. Native Diagnostics → Reconnect reloaded Deck in 1.34 seconds; both streams were healthy afterward.
+- Final screenshots show distinct PlayerOne and PlayerTwo viewpoints, both alive, with textured Deck and approximately 20–22 streamed FPS.
+- Gateway tests include three-second liveness reset, absolute menu state, seat acquisition after a menu was left open, TCP reconnects, strict origin/input/token checks, and capped mouse transmission at 360/1000 Hz display loops.
+
+Remaining production checks: independent Firefox/Safari performance, extended soak testing, a permanent host/domain, audio transport, delayed spectators, Tournament-issued tickets/identity, account restrictions, reward configuration/settlement, and anti-cheat ingestion. A successful demo is not production certification. Current demo seats are shared native players and award no platform money or points.
+
+The preserved Mac shipping client (CL3525360) is separate. The browser demo streams the recovered source build and its Tournament plugin, not that preserved client.

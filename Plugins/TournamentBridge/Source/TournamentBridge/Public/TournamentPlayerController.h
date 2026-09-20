@@ -17,6 +17,7 @@ public:
     virtual bool InputKey(FKey Key, EInputEvent EventType, float AmountDepressed, bool bGamepad) override;
     virtual bool InputAxis(FKey Key, float Delta, float DeltaTime, int32 NumSamples, bool bGamepad) override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+    void ReleaseBrowserInput();
 
     bool IsTournamentMenuOpen() const { return bTournamentMenuOpen; }
     int32 GetTournamentPage() const { return MenuPage; }

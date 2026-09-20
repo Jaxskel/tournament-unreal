@@ -17,3 +17,5 @@ work/
 evidence/*.log
 evidence/*.json
 .DS_Store
+
+**/node_modules/

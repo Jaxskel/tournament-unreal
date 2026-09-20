@@ -6,7 +6,7 @@ On 20 September 2026, the preserved Windows UT4 client ran on this Mac through C
 
 On the Windows PC, the recovered UE4.15 source successfully compiled and linked the `UnrealTournament` editor game module and the original `TournamentBridge` plugin. Local build evidence (`evidence/build-artifacts.json`, excluded from Git) records artifact sizes and SHA-256 hashes; the full game/plugin logs are retained locally and excluded from the public repository. This was an incremental build using the recovered engine/editor and its build libraries, not a full engine rebuild or a newly packaged shipping game.
 
-The plugin is a foundation for authoritative match telemetry: server-side kill/weapon records, bot flags, match IDs, event IDs, and final rankings. Its `TournamentDeathmatch` subclass replaces map selection with a configured arena rotation. Compilation passed for both features; runtime event and automatic rotation verification is pending. It does not authenticate Tournament accounts or award money. See [plugin contract and limitations](../Plugins/TournamentBridge/README.md).
+The plugin is a foundation for authoritative match telemetry: server-side kill/weapon records, bot flags, match IDs, event IDs, and final rankings. Its `TournamentDeathmatch` subclass replaces map selection with a configured arena rotation. Compilation and runtime event checks passed, including a 35-record completed match and observed Deck → Outpost rotation. It does not authenticate Tournament accounts or award money. See [plugin contract and limitations](../Plugins/TournamentBridge/README.md).
 
 ## Play on this Mac
 
@@ -62,11 +62,11 @@ The running Mac client and rebuilt source are different UT revisions. The new pl
 
 ## Remaining gates and limitations
 
-- The dedicated server explicitly stops at its first-run EULA requirement. User authorization to accept that agreement is pending; acceptance flags have not been set. The stopped Docker container is `tournament-ut4-dev` and its UDP binding is loopback-only on port 7787.
+- The preserved Linux dedicated-server experiment stopped at its first-run agreement. That Docker container remains stopped. The subsequent Windows source-development setup has an explicit local acceptance record and ran the server plus two clients.
 - Verify the plugin in an authoritative match after that decision, including winning-kill ordering, one final ranking event, reconnects, duplicate notifications, and file-write failure handling.
 - Verify two independent network clients, server rotation, and delayed spectating. Local bot combat does not establish multiplayer readiness.
-- This UT4 build uses the original game menus and HUD. Tournament menu/HUD adaptation, ticket validation, identity binding, rewards, anti-cheat ingestion, and settlement are not implemented here. No live money or account integration is enabled.
-- This is a native UT4 experiment, not a browser port or a UE5 conversion. The existing ioquake3/OpenArena browser demo and GitHub repository remain separate. A browser-accessible Unreal route would require further work such as GPU-hosted streaming and access control.
+- The preserved shipping client uses stock menus. The source build now includes the original Tournament HUD/menu, viewport streaming, settings, and diagnostics. Ticket validation, identity binding, rewards, anti-cheat ingestion, and settlement remain unavailable; no live money or account integration is enabled.
+- UT4 now has a GPU-hosted browser streaming route with two exclusive game-control seats. It remains UE4.15, not a WebAssembly port or UE5 conversion. The ioquake3/OpenArena demo remains separate. See [browser hosting](browser-hosting.md) for architecture and the mixed asset-version caveat.
 - The UT source and restricted assets have a dedicated Epic license. Finding a downloadable archive does not make them freely redistributable or authorize a separate commercial game. No recovered Epic engine/content was added to the public GitHub repository. Production distribution requires a suitable rights basis.
 
 ## Engine choice

@@ -15,7 +15,11 @@ void ATournamentPlayerController::ShowMenu(const FString& Parameters)
     if (!IsLocalController() || bTournamentMenuOpen) return;
     // Leave stock dialogs alone. They manage their own focus and close behavior.
     UUTLocalPlayer* LP = GetUTLocalPlayer();
-    if (LP && LP->AreMenusOpen()) { Super::ShowMenu(Parameters); return; }
+    if (LP && LP->AreMenusOpen())
+    {
+        if (FParse::Param(FCommandLine::Get(), TEXT("TournamentOffscreen"))) LP->CloseAllUI();
+        else { Super::ShowMenu(Parameters); return; }
+    }
     ToggleScoreboard(false);
     OnStopFire();
     OnStopAltFire();
@@ -47,6 +51,13 @@ void ATournamentPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReas
 {
     if (bTournamentMenuOpen) HideMenu();
     Super::EndPlay(EndPlayReason);
+}
+
+void ATournamentPlayerController::ReleaseBrowserInput()
+{
+    OnStopFire();
+    OnStopAltFire();
+    if (PlayerInput) PlayerInput->FlushPressedKeys();
 }
 
 bool ATournamentPlayerController::InputKey(FKey Key, EInputEvent EventType, float AmountDepressed, bool bGamepad)
@@ -113,7 +124,8 @@ FString ATournamentPlayerController::GetTournamentItemLabel(int32 Index) const
     UUTGameUserSettings* Settings = GEngine ? Cast<UUTGameUserSettings>(GEngine->GetGameUserSettings()) : nullptr;
     if (Index < 4)
         return FString::Printf(TEXT("MASTER VOLUME  %d%%   %s"), Settings ? FMath::RoundToInt(100.f * Settings->GetSoundClassVolume(EUTSoundClass::Master)) : 0, Index == 2 ? TEXT("[-]") : TEXT("[+]"));
-    if (Index == 4) return TEXT("TOGGLE WINDOW / FULLSCREEN");
+    if (Index == 4) return FParse::Param(FCommandLine::Get(), TEXT("TournamentOffscreen"))
+        ? TEXT("FULLSCREEN: USE BROWSER TOOLBAR") : TEXT("TOGGLE WINDOW / FULLSCREEN");
     return TEXT("BACK");
 }
 
@@ -239,6 +251,8 @@ void ATournamentPlayerController::AdjustSetting(int32 Index, int32 Direction)
     }
     else if (Index == 4)
     {
+        // Browser fullscreen belongs to the web player; keep the native stream size fixed.
+        if (FParse::Param(FCommandLine::Get(), TEXT("TournamentOffscreen"))) return;
         Settings->SetFullscreenMode(Settings->GetFullscreenMode() == EWindowMode::Windowed ? EWindowMode::WindowedFullscreen : EWindowMode::Windowed);
         Settings->ApplyResolutionSettings(false);
         Settings->ConfirmVideoMode();

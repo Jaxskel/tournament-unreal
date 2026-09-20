@@ -1,37 +1,37 @@
 # Tournament — Unreal
 
-A native Unreal Tournament 4 development project with a Tournament-style in-game menu, server-owned deathmatch, automatic arena rotation, and a server event bridge.
+Real Unreal Tournament 4, streamed into a desktop browser with a Tournament game menu. Two independent native players join one authoritative deathmatch server, with bots and automatic arena rotation. The browser controls its own game instance; it cannot control the Windows desktop.
 
-**This repository contains our integration code, not Epic's engine or game assets.** It is a development handoff, not a browser game or a downloadable finished UT installer. Demo play awards no money or platform points.
+**[Open the live development demo](https://wallpaper-supposed-cure-tokyo.trycloudflare.com/)** · [Host/build instructions](docs/browser-hosting.md)
 
-![UT4 running with visible players and six bots](evidence/outpost23.png)
+This is a free demo, with **no audio stream or platform rewards**. The Windows GPU host must remain awake and online. The temporary play address changes if its tunnel restarts. Two browser seats are available; another browser sees an arena-full message. No Unreal game download is required in the browser.
 
-## For Dad
+![Two-player Unreal browser demo](evidence/browser-gameplay.png)
 
-The real UT4 client has run on the Mac with six bots. Both Deck and Outpost 23 load; bot combat, deaths, respawning, scoring, and a completed match have been observed. [See the finished match](evidence/completed-match.png).
+## Play with Dad
 
-The new Tournament layer is being built against the recovered UE4.15 source on Windows. It adds the gold/brown Tournament game styling, top-three standings, and a native menu. The original game retains movement, weapons, player models, and combat feedback.
+Open the demo link in two separate browsers/computers and choose **Play Now**. Click **Capture mouse** to aim. WASD moves, left-click fires, right-click uses alternate fire, Space jumps, 1–9 selects weapons, and Tab shows scores. **Escape releases the mouse and opens the Tournament menu.** Use the browser toolbar for fullscreen. Fire to respawn; the menu also offers Play/Respawn when applicable.
 
-**Multiplayer runtime verification is pending.** The server stopped at Epic's first-run license requirement. The launchers below require explicit acceptance before starting; a successful build is not evidence that two clients have played together. The newer menu and automatic rotation also need runtime verification in the source-built game.
+Settings adjusts sensitivity. Disconnect releases a browser seat; Play Again requests a free seat. The host keeps the native players connected between browser sessions, so these are shared demo seats rather than authenticated Tournament accounts. The server fills seven total player slots with bots: six bots with one native human client, five with two.
 
-| Feature | Current evidence |
-| --- | --- |
-| Preserved UT4 client | Played locally on Mac through CrossOver |
-| Six bots, combat, scoring, respawning | Observed in the preserved client |
-| Deck and Outpost 23 | Both loaded; match completion observed on Deck |
-| Recovered UE4.15 game module | Compiled and linked on Windows |
-| Server event bridge and automatic rotation | Compiled and linked; runtime pending |
-| Tournament native menu, settings, HUD, reconnect, diagnostics | Compiled and linked on Windows; runtime pending |
-| Two-client multiplayer and reconnect | Not yet verified |
-| Browser access, Tournament accounts, rewards, anti-cheat | Not connected |
+## What has actually been checked
+
+- Both native clients joined the same Deck server and supplied separate live browser streams.
+- Browser mouse capture, movement, Tournament Escape menu, sensitivity adjustment, deaths, and respawning were exercised.
+- A full source-built multiplayer match produced 33 authoritative kill events plus a final ranked scoreboard; its 35-record event log passed the event validator.
+- Automatic server rotation from Deck to Outpost was observed, and both browser streams resumed on Outpost after its first asset preparation.
+- A browser disconnected with its native menu open and rejoined with the menu correctly closed. A third simultaneous join returned HTTP 409 with the arena-full message. Native Diagnostics → Reconnect reloaded Deck in approximately 1.34 seconds and resumed the stream.
+- The browser gateway has 24 passing tests covering two-seat isolation, origins, tokens, input validation, interrupted connections, menu state, reconnects, and high-refresh mouse handling. Eight event-validator tests also pass.
+
+Both arena caches have been prepared on the current host. A fresh installation still needs first-run texture and shader preparation; placeholder materials during compilation are not a finished visual result. The stream targets 24 FPS at 960×540; initial live checks saw approximately 21–22 FPS on Deck and lower performance while compiling Outpost. Those numbers are observations, not a 60 FPS or cross-browser performance guarantee. See [runtime verification](docs/multiplayer-verification.md) and [browser transport details](browser/README.md) for limits and further checks.
 
 ## Windows development setup
 
-Use the recovered **UE4.15 CL3228288** source/content/editor installation. Keep the project separate from the preserved CL3525360 shipping client: they are different versions. See [recovery details and archive sources](docs/recovery.md).
+This repository contains original integration source and launch scripts, **not Epic's engine, game packages, or a downloadable finished installer**. You need your own licensed local Unreal Tournament source/content installation.
 
-Prerequisites: MSVC v140, Windows SDK 8.1, UCRT 10.0.10240.0, and the restored source/content/editor. The full archive is about 42 GB compressed and 78 GB extracted; reserve additional build space. The scripts accept `-SourceRoot` so the project can live on a different drive.
+The recovered editor reports **UE4.15 CL3228288**, while some included assets were saved in later UE4.15 revisions. It also lacks optional EpicInternal character packages. Treat this as a recovered source-development installation, not a version-matched shipping distribution. The preserved CL3525360 shipping client is a separate build; do not mix it with this server. [Recovery details](docs/recovery.md).
 
-From this repository in PowerShell:
+Prerequisites: MSVC v140, Windows SDK 8.1, UCRT 10.0.10240.0, the restored engine/content/editor, Python 3, Node.js 20+, and a suitable Windows GPU. The full archive is approximately 42 GB compressed and 78 GB extracted, before caches and build output.
 
 ```powershell
 $SourceRoot = 'F:\TournamentUT4\source\UnrealTournament-clean-master'
@@ -41,47 +41,36 @@ $SourceRoot = 'F:\TournamentUT4\source\UnrealTournament-clean-master'
 ./scripts/build-plugin.ps1 -SourceRoot $SourceRoot
 ```
 
-The UCRT patch is local to the recovered UnrealBuildTool. It avoids selecting a modern CRT that the older compiler cannot compile. These commands build editor modules; they do not package a shipping game.
-
-## Start a local multiplayer development session
-
-First read the Epic/UT agreement included with your own installation. **Only if you accept it**, add `-AcceptLicense` to the first launch. The launcher records that local decision outside this repository. It does not give permission to publish Epic assets or operate a separate commercial UT game.
+Read the Epic agreement supplied with your installation. Only if you accept it, pass `-AcceptLicense` on the first server launch. The launcher stores that local decision outside Git; acceptance does not grant commercial distribution rights.
 
 ```powershell
-# Server: loopback only by default, 30-frag / 15-minute deathmatch.
 ./scripts/start-server.ps1 -SourceRoot $SourceRoot -AcceptLicense
-
-# Two separate native client processes, joining the same authoritative server.
 ./scripts/join-game.ps1 -SourceRoot $SourceRoot -Name Alpha
 ./scripts/join-game.ps1 -SourceRoot $SourceRoot -Name Bravo
 ```
 
-Use `-ValidateOnly` to check the required installation/version without starting a game or accepting a license. `-Headless` on a client supports network/log testing, but cannot verify rendering, controls, or menus. The server fills seven total player slots with bots, leaving six bots when one human joins; additional humans replace bots.
+The native server binds loopback UDP 7787; its beacon uses 7788. Use `-ValidateOnly` to check the installation without launching. A `-Headless` client can test networking but cannot produce browser video. Browser clients use the separate opt-in GPU offscreen patch, game-only capture, and loopback input sockets. Follow the [browser-hosting instructions](docs/browser-hosting.md) to build and run those components as persistent Windows tasks.
 
-For another computer on your trusted LAN, run the server with `-ListenAddress 0.0.0.0`, permit its UDP port **7787** through the host's private-network firewall, and use `-Server HOST_LAN_IP:7787` on a matching source-built client. The launcher intentionally uses UT's LAN mode without pretending that local player names are authenticated Tournament accounts. Public internet hosting and a dad-friendly packaged client remain additional work.
+## Tournament integration and scoring
 
-Do not disable version checks or mix the stock shipping client with the source-built development server.
+The native game retains Unreal movement, weapons, pickups, models, and combat feedback. The original Tournament layer adds a game menu, settings, diagnostics, top-three display, and automatic rotation. Server observations produce event IDs, weapon damage types, scores, kills, and final ranks.
 
-## Controls and Tournament UI
+No browser message awards money or platform points. Tournament-issued accounts, ticket validation, weapon reward configuration, settlement, restrictions, delayed spectator service, and anti-cheat ingestion still require the private Tournament contracts and staging access. This repository does not invent a wallet or claim production Tournament integration. [Integration boundary](docs/integration.md).
 
-WASD moves, mouse aims, left-click fires, Space jumps, and Tab shows the native scoreboard. The new game mode assigns a Tournament HUD and player controller. Escape opens the Tournament menu; Resume returns mouse control to the game. Local settings cover sensitivity, volume, and fullscreen. Diagnostics shows match state, connection, and estimated ping; Reconnect preserves the active remote server URL. Match rules remain server-owned. PPK payouts and cash rewards are not enabled. These new controls have compiled but still need in-game input/focus tests.
-
-The two-map rotation is configured in [config/Game.ini](config/Game.ini). The custom game mode requests the next arena directly instead of presenting the stock map chooser. It must be loaded on the server **and available in each matching client build**. Merely changing the stock client's INI does not install this functionality.
-
-## Diagnostics and verification
-
-Logs are under `UnrealTournament/Saved/Logs/Tournament` in the restored installation. The launchers return process IDs and log paths. Authoritative match records are under `UnrealTournament/Saved/Tournament/events-*.jsonl`.
+## Verification commands
 
 ```powershell
-python scripts/verify-events.py PATH_TO_COMPLETED_MATCH.jsonl
 python -m unittest discover -s tests -v
 ./tests/launchers.ps1
+python scripts/verify-events.py PATH_TO_COMPLETED_MATCH.jsonl
+cd browser
+npm ci
+npm run check
+npm test
 ```
 
-The event checker rejects duplicated/out-of-order IDs, events after the final ranking, mixed matches, ineligible kill points, incorrect tied ranks, and any stream marked as real-money play. These checks diagnose recorded server events; they do not authenticate an external upload or settle rewards.
-
-GitHub CI checks the event contract and Windows launcher behavior. CI does **not** compile the proprietary engine or claim multiplayer passed. [Runtime verification checklist](docs/multiplayer-verification.md) · [Tournament integration boundary](docs/integration.md).
+Native logs: `UnrealTournament/Saved/Logs/Tournament`. Authoritative events: `UnrealTournament/Saved/Tournament/events-*.jsonl`. CI checks integration contracts, gateway behavior, and Windows launcher behavior; it does not compile Epic's proprietary engine or substitute for live gameplay tests.
 
 ## License and credits
 
-Original integration source is MIT-licensed, subject to the exclusions in [LICENSE](LICENSE). Unreal Tournament/Unreal Engine and their content are Epic Games property and separately licensed. Screenshots depict Epic's game and are not MIT-licensed assets. See [NOTICE](NOTICE). No Epic source, game packages, credentials, or binaries are included in this repository.
+Original integration source is MIT-licensed, with exclusions in [LICENSE](LICENSE). Unreal Tournament, Unreal Engine, and their assets are Epic Games property and separately licensed. Screenshots depict Epic's game and are not MIT-licensed assets. See [NOTICE](NOTICE). No Epic game packages, credentials, or compiled engine binaries are included in this repository.
