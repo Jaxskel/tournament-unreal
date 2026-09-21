@@ -36,7 +36,7 @@ function enginePrint(level, parts) {
   const line = parts.map(String).join(' ');
   // Legacy DebugBreak throws a bare Error. Retain its preceding native cause
   // so the menu shows the useful failure rather than an opaque WASM stack.
-  if (/Fatal error:|Ensure condition failed:|Assertion failed:|LogOutputDevice:Error:/.test(line)) {
+  if (/LogLoad:\s*Error:/i.test(line) || (!engineDiagnostic && /Fatal error:|Ensure condition failed:|Assertion failed:|LogOutputDevice:Error:/.test(line))) {
     engineDiagnostic = line.slice(0, 1800);
   }
   console[level]('[UT4]', ...parts);
@@ -65,9 +65,24 @@ function resume() {
   if (pausedByMenu) { pausedByMenu = false; window.Module.resumeMainLoop(); }
   canvas.focus();
 }
+let audioCaptureAttempt = 0;
+function activateBrowserAudio() {
+  const attempt = ++audioCaptureAttempt;
+  const report = detail => { if (attempt === audioCaptureAttempt && !failed) send('audio', detail); };
+  const rejected = error => report({ state: 'error', message: String(error?.message ?? error).slice(0, 500) });
+  try {
+    const module = window.Module;
+    if (typeof module?.resumeBrowserAudio !== 'function') { report({ state: 'unavailable' }); return; }
+    // Do not await or defer this call: pointer lock may consume activation.
+    // Audio failures are nonfatal, and every subsequent capture retries.
+    const result = module.resumeBrowserAudio();
+    Promise.resolve(result).then(state => report({ state }), rejected);
+  } catch (error) { rejected(error); }
+}
 window.captureUT4Pointer = function() {
   if (!initialized || failed) return;
   resume();
+  activateBrowserAudio();
   if (!canvas.requestPointerLock) { send('pointer-error', 'Pointer lock is unavailable'); return; }
   const denied = error => send('pointer-error', 'Mouse capture denied' + (error?.message ? ': ' + error.name + ' — ' + error.message : '') + '; click the viewport to retry');
   try { canvas.requestPointerLock()?.catch(denied); }

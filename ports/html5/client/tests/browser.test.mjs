@@ -33,6 +33,9 @@ function manifest() {
     value.bindings = Object.keys(BINDINGS);
     value.files['bindings.js'] = 'tests/fixtures/bindings.js'; value.supportScripts.push('bindings.js');
   }
+  if (mode === 'audio') {
+    value.files['audio.js'] = 'tests/fixtures/audio.js'; value.supportScripts.push('audio.js');
+  }
   return value;
 }
 before(async () => {
@@ -76,6 +79,49 @@ async function session(t, scenario='normal') {
 async function waitVisible(page, selector) { await page.locator(selector).waitFor({ state:'visible' }); }
 async function launch(page) { await page.locator('#launch').click(); await waitVisible(page,'#resume'); }
 const runtime = page => page.frames().find(frame => frame.url().endsWith('/runtime.html'));
+
+test('audio capture runs in the gesture before pointer lock, never waits, and retries nonfatal failures', async t => {
+  const page = await session(t, 'audio');
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.evaluate(() => {
+    window.audioEvents = [];
+    window.addEventListener('message', event => {
+      if (event.data?.channel === 'ut4-runtime' && event.data.type === 'audio') audioEvents.push(event.data.detail);
+    });
+  });
+  await launch(page);
+  for (const behavior of ['suspended', 'reject', 'throw', 'pending', 'running']) {
+    await runtime(page).evaluate(value => { fixture.audioBehavior = value; fixture.audioCalls = []; }, behavior);
+    await page.evaluate(() => { audioEvents.length = 0; });
+    await page.locator('#capture').click();
+    assert.deepEqual(await runtime(page).evaluate(() => fixture.audioCalls), [['audio', true], ['pointer', true]]);
+    if (behavior !== 'pending') {
+      await page.waitForFunction(() => audioEvents.length === 1);
+      const result = await page.evaluate(() => audioEvents[0]);
+      assert.equal(result.state, ['reject', 'throw'].includes(behavior) ? 'error' : behavior);
+      if (result.state === 'error') assert.match(result.message, /fixture audio/);
+    }
+    assert.equal(await page.locator('#error').isVisible(), false);
+    await page.locator('#menu').click();
+  }
+  // An older pending attempt must not overwrite the latest capture's state.
+  await runtime(page).evaluate(() => fixture.finishAudio('suspended'));
+  await runtime(page).evaluate(() => new Promise(resolve => setTimeout(resolve, 30)));
+  assert.deepEqual(await page.evaluate(() => audioEvents), [{state: 'running'}]);
+  assert.deepEqual(errors, [], 'audio rejection must not become an unhandled engine error');
+});
+
+test('capture works without the optional audio adapter', async t => {
+  const page = await session(t);
+  await launch(page);
+  await runtime(page).evaluate(() => {
+    Module.canvas.requestPointerLock = () => { fixture.pointerRequested = true; };
+  });
+  await page.locator('#capture').click();
+  assert.equal(await runtime(page).evaluate(() => fixture.pointerRequested), true);
+  assert.equal(await page.locator('#error').isVisible(), false);
+});
 
 test('fixture lifecycle, ordered scripts, heap override, packet URL, explicit resolution and truthful metrics', async t => {
   const page = await session(t);
@@ -139,6 +185,19 @@ test('legacy bare abort retains its bounded native diagnostic', async t => {
   assert.match(message, /Engine aborted: Error/);
   assert.ok(message.length < 1900);
   assert.equal(page.frames().length, 1);
+});
+
+test('failed-map diagnostic survives secondary renderer ensures', async t => {
+  const page = await session(t);
+  await launch(page);
+  await runtime(page).evaluate(() => {
+    Module.print('LogLoad:Error: Failed to enter DM-DeckTest: missing package');
+    Module.print('Ensure condition failed: CVS.bTimesSet [SceneView.cpp]');
+    Module.onAbort('Error');
+  });
+  await waitVisible(page, '#error');
+  assert.match(await page.locator('#error').textContent(), /Failed to enter DM-DeckTest: missing package/);
+  assert.doesNotMatch(await page.locator('#error').textContent(), /CVS.bTimesSet/);
 });
 
 test('Escape, settings and capture denial cannot strand the menu', async t => {

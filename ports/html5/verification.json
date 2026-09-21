@@ -22,7 +22,7 @@
     "legacyAssetPreloader": "passed in Chrome with real matching file_packager fixture; not a cooked map",
     "browserControlExports": "all nine present including SessionEpoch; return not-ready before main; actual allocator and matching preloader passed; in-game behavior unverified",
     "launcherTests": {
-      "passed": 33,
+      "passed": 36,
       "skipped": 1,
       "scope": "fixtures and actual-body native logic; headed pointer skipped in this run"
     },
@@ -34,7 +34,7 @@
     "browserPacingBuild": "passed; HTML5 build exit0 after removing the desktop busy-wait only on browser target",
     "converterRegressionTests": {
       "python": 3,
-      "realWasmJavascript": 6
+      "realWasmJavascript": 14
     },
     "materialReport": "Editor plugin build and read-only asset reporting passed; actual first-person base mesh included in fresh Verify",
     "privateMaterialPreparation": "Windows sparse copy preparation passed; 281 files copied, original source audit passed",
@@ -48,13 +48,20 @@
       "python": 10,
       "javascriptBoundsCases": 37
     },
-    "actualLauncherStartup": "Real converted engine initializes WebGL via blob-hosted launcher; incomplete package stops at Party::RegisterIdentityDelegates ensure(World); visible clean failure verified, world not ready",
+    "actualLauncherStartup": "Updated Chrome engine initializes WebGL and correct frame prefixes; partial package reaches missing Deck error past the Party callback, then a secondary SceneView ensure. No world-ready or FPS result.",
     "patcherPreflightTests": 30,
     "partyCallbackTests": 11,
     "runtimeHarness": "CLI and 113 diagnostic checks passed; real partial package correctly fails on missing material/map with metrics uninitialized",
-    "matchReadiness": "Tightened to require Tournament match controller; native build queued after Party/logging build",
+    "matchReadiness": "Full HTML5 build passed in 540.22 seconds without unresolved symbols; converted runtime initializes in Chrome with nine exports returning not-ready before main.",
     "browserPlatformConfiguration": "Pinned idempotent installer preserves existing values and overrides UTGameEngine subclass IP game driver; temporary-directory checks passed; not yet staged",
-    "partyAndLoggingBuild": "passed; full HTML5 link exit0 in582.80seconds; newest match-readiness change still building"
+    "partyAndLoggingBuild": "Full HTML5 link passed in 582.80 seconds; subsequent match-readiness build also passed.",
+    "crossBrowserRuntimeSmoke": {
+      "firefox": "Firefox 146.0.1 passed actual WASM initialization, allocator and matching file-packager fixture; not gameplay.",
+      "playwrightWebKit": "Playwright WebKit 26.0 passed actual WASM initialization, allocator and matching file-packager fixture; not actual Safari gameplay."
+    },
+    "browserAudio": "Resume runs synchronously before pointer lock for suspended or interrupted audio and retries the active context on each capture. Generated-adapter and launcher fixtures pass; actual sound and interruption recovery in gameplay remain unverified.",
+    "legacyWidePrintProbe": "Original asm.js and converted WASM passed eight direct LocalPrint/wprintf cases, including >1 KiB lines; write sink and TTY bytes matched. Aggregated CDO warning repetition remains unexplained.",
+    "fixedSceneResolution": "Source review: current ES2/ES3.1 view finalization forces effective 100% scene percentage. Gameplay render target and viewport dimensions remain unmeasured."
   },
   "limitations": [
     "Full Deck shader cook in progress; map readiness, appearance, and performance remain unverified",

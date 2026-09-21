@@ -102,6 +102,26 @@ if (Module.arguments === undefined) Module.arguments = [];
 Module.wasmMemory = Module.wasmMemory || new WebAssembly.Memory(MEMORY_LIMITS);
 Module.buffer = Module.wasmMemory.buffer;
 Module.TOTAL_MEMORY = Module.buffer.byteLength;
+// AL stays inside the legacy closure. Resolve its active context on every
+// capture, including after context recreation; never resume retired contexts.
+// Result is a context state, not proof of audible playback.
+Module.resumeBrowserAudio = function() {
+  function activeContext() {
+    return typeof AL !== 'undefined' && AL && AL.currentContext && AL.currentContext.ctx;
+  }
+  try {
+    var ctx = activeContext();
+    if (!ctx) return Promise.resolve('unavailable');
+    // WebKit also exposes recoverable interruptions. Attempt once per gesture;
+    // an ongoing system interruption may keep resume pending or reject it.
+    if (ctx.state !== 'suspended' && ctx.state !== 'interrupted') return Promise.resolve(ctx.state || 'unavailable');
+    if (typeof ctx.resume !== 'function') return Promise.resolve('unavailable');
+    // This call must execute synchronously in the user's capture gesture.
+    return Promise.resolve(ctx.resume()).then(function() {
+      return activeContext() === ctx ? (ctx.state || 'unavailable') : 'context-changed';
+    });
+  } catch (error) { return Promise.reject(error); }
+};
 '''.replace('MEMORY_LIMITS', json.dumps(memory_limits))
     replacement = '''// EMSCRIPTEN_START_ASM
 var asm=await (async function(global,env,buffer) {

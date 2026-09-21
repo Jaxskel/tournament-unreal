@@ -15,6 +15,8 @@ async function load(overrides = {}) {
   vm.runInContext(source, context);
   assert.equal(context.Module, Module, 'legacy var Module must preserve the incoming object');
   await Module.gameRuntimeReady;
+  assert.equal(context.AL, undefined, 'AL must remain closure-local');
+  assert.equal(Module.AL, undefined, 'do not expose the audio backend');
   return Module;
 }
 
@@ -53,4 +55,79 @@ test('converted adapter instantiates against the shared memory and fixed table',
   assert.equal(module.asmLibraryArg.table.length, 1);
   assert.throws(() => module.wasmMemory.grow(1), RangeError);
   assert.throws(() => module.asmLibraryArg.table.grow(1), RangeError);
+});
+
+test('audio activation tolerates missing/closed/running contexts and missing resume', async () => {
+  const module = await load();
+  assert.equal(await module.resumeBrowserAudio(), 'unavailable');
+  for (const state of ['closed', 'running', 'unknown-future-state']) {
+    module.fixtureSetAudioContext({state, resume() { assert.fail('must not resume this state'); }});
+    assert.equal(await module.resumeBrowserAudio(), state);
+  }
+  for (const state of ['suspended', 'interrupted']) {
+    module.fixtureSetAudioContext({state});
+    assert.equal(await module.resumeBrowserAudio(), 'unavailable');
+  }
+  module.fixtureSetAudioContext(null);
+  assert.equal(await module.resumeBrowserAudio(), 'unavailable');
+});
+
+for (const state of ['suspended', 'interrupted']) {
+test(`audio resume from ${state} is synchronous, retries on capture only, and reports actual state`, async () => {
+  const module = await load();
+  let calls = 0;
+  const ctx = {state, resume() { assert.equal(this, ctx); calls++; return Promise.resolve(); }};
+  module.fixtureSetAudioContext(ctx);
+  const first = module.resumeBrowserAudio();
+  assert.equal(calls, 1, 'resume must happen before returning to the gesture handler');
+  assert.equal(await first, state, 'fulfilled resume is not proof of running');
+  assert.equal(calls, 1, 'an unchanged state must not trigger an automatic retry loop');
+  ctx.resume = function() { calls++; this.state = 'running'; return Promise.resolve(); };
+  assert.equal(await module.resumeBrowserAudio(), 'running');
+  assert.equal(calls, 2);
+});
+
+test(`recreated context replaces ${state} context during pending resume`, async () => {
+  const module = await load();
+  let finish, oldCalls = 0, newCalls = 0;
+  const old = {state, resume() { oldCalls++; return new Promise(resolve => { finish = resolve; }); }};
+  const current = {state, resume() { newCalls++; this.state = 'running'; }};
+  module.fixtureSetAudioContext(old);
+  const pending = module.resumeBrowserAudio();
+  module.fixtureSetAudioContext(current);
+  old.state = 'running'; finish();
+  assert.equal(await pending, 'context-changed');
+  assert.equal(await module.resumeBrowserAudio(), 'running');
+  assert.equal(oldCalls, 1); assert.equal(newCalls, 1);
+});
+
+test(`resume from ${state}: rejection and synchronous exception remain catchable and permit retry`, async () => {
+  const module = await load();
+  let calls = 0;
+  const ctx = {state, resume() {
+    calls++;
+    if (calls === 1) return Promise.reject(Error('fixture autoplay rejection'));
+    if (calls === 2) throw Error('fixture synchronous rejection');
+    this.state = 'running';
+  }};
+  module.fixtureSetAudioContext(ctx);
+  await assert.rejects(module.resumeBrowserAudio(), /autoplay rejection/);
+  await assert.rejects(module.resumeBrowserAudio(), /synchronous rejection/);
+  assert.equal(await module.resumeBrowserAudio(), 'running');
+  assert.equal(calls, 3);
+});
+}
+
+test('a suspension that transitions to interrupted can be resumed on the next capture', async () => {
+  const module = await load();
+  let calls = 0;
+  const ctx = {state: 'suspended', resume() {
+    this.state = ++calls === 1 ? 'interrupted' : 'running';
+    return Promise.resolve();
+  }};
+  module.fixtureSetAudioContext(ctx);
+  assert.equal(await module.resumeBrowserAudio(), 'interrupted');
+  assert.equal(calls, 1);
+  assert.equal(await module.resumeBrowserAudio(), 'running');
+  assert.equal(calls, 2);
 });

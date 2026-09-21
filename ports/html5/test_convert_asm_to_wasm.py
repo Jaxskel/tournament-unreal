@@ -62,6 +62,9 @@ if (!Module.arguments) Module.arguments = [];
 Module.preRun = []; Module.postRun = [];
 for (var key in moduleOverrides) Module[key] = moduleOverrides[key];
 var buffer = Module.buffer;
+// Test-only injection; the generated production helper never exposes AL/ctx.
+var AL = { currentContext: null, contexts: [] };
+Module.fixtureSetAudioContext = function(ctx) { AL.currentContext = ctx ? {ctx: ctx} : null; };
 Module.asmGlobalArg = {}; Module.asmLibraryArg = {};
 var runtimeInitialized = false, runtimeExited = false;
 function assert(condition, message) { if (!condition) throw new Error(message); }

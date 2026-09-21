@@ -10,15 +10,15 @@ Status recorded on 2026-09-21, using [verification.json](verification.json), the
 
 | Area | Recorded result and remaining gate |
 | --- | --- |
-| Matching legacy build | Full engine compile/link exited zero; nine browser exports, including SessionEpoch, are recorded as present. The latest wrapper also installs configuration, logging and Party fixes. Its newly consolidated whole flow still needs a fresh replay. |
+| Matching legacy build | The latest match-readiness build passed in **540.22 seconds** with no unresolved symbols; the reconverted runtime initializes in Chrome with all nine browser exports, including SessionEpoch. The latest wrapper also installs configuration, logging and Party fixes. Its newly consolidated whole flow still needs a fresh replay. |
 | Shader profile | Original patch changes only WebGL fragment samplers to 16 and shader version 61 → 62. Both editor and ShaderCompileWorker shader-format DLL rebuilds are required; patch application alone is insufficient. |
 | Private compatibility assets | Copy-on-write preparation, Apply with rendering, fresh-process Verify, and original/sibling hash audit passed for **18 textured weapon surfaces plus 3 Robot repairs**. This supersedes older untested wording in the compatibility README. Browser appearance is unverified. |
 | Current cook | Full non-iterative **Deck** cook is still processing through normal shader workers. Do not interpret progress, an existing cooked directory, or a partial package as cook success. |
 | Packaging | UAT previously produced an approximately 185 MB **partial** package after packaging fixes. That establishes the packaging mechanism, not complete assets. |
-| Converted WASM | Matching-runtime conversion validates and has initialized in Chrome with 1.5 GiB, including allocator smoke. The allocator probe used `noInitialRun=true`; it proves neither a world nor FPS. |
-| Actual launcher probe | The incomplete package initializes WebGL but fails on real missing assets: the latest harness first reported missing `RemoveSurfaceMaterial`, then captured missing Deck, the Party World ensure and DebugBreak. World/tick metrics remained uninitialized. This probe predates validation of the newest Party/control build. |
-| Latest readiness correction | Source now requires an `ATournamentPlayerController` in `TournamentBrowserReady()`, and TournamentDeathmatch explicitly sets that controller class. The current Party/logging link is finishing; this newer controls change still needs the next Windows incremental build and conversion. A ticking UTEntry world with a generic controller must not pass readiness. |
-| Final rotation / networking | Explicit Deck, UTEntry and Outpost23 cook/package coverage, complete browser gameplay, actual multiplayer handshake, rotation, reconnect and performance remain unverified. Native/streaming success does not validate this port. |
+| Converted WASM | Matching-runtime conversion validates and has initialized in Chrome with 1.5 GiB, including allocator smoke. **Firefox 146 and Playwright WebKit 26** also passed actual runtime initialization, allocator and matching file-packager preloader smoke. The preloader used fixture data; these results prove neither gameplay nor actual Safari behavior. The allocator probe used `noInitialRun=true`; it proves neither a world nor FPS. |
+| Actual launcher probe | The latest incomplete-package probe initializes WebGL and reports missing Deck. The Party guard now gets past the failed-map callback without the former Party World ensure; a secondary SceneView ensure follows because the package is incomplete. Earlier probes also reported missing `RemoveSurfaceMaterial`. World/tick metrics remain uninitialized; this is failure-path evidence, not gameplay. |
+| Latest readiness correction | The **540.22-second** build includes the `ATournamentPlayerController` requirement in `TournamentBrowserReady()` and TournamentDeathmatch's explicit controller class. The reconverted Chrome runtime exposes all nine controls and returns not-ready before main. A ticking UT-Entry world with a generic controller must not pass readiness; actual match readiness remains unverified. |
+| Final rotation / networking | Explicit Deck, UT-Entry and Outpost23 cook/package coverage, complete browser gameplay, actual multiplayer handshake, rotation, reconnect and performance remain unverified. Native/streaming success does not validate this port. |
 
 ## 2. Prepare an isolated checkout and tools
 
@@ -99,7 +99,7 @@ Retain `UnrealTournament/Saved/Logs/BrowserPort/build-tool.log` and `compile.log
 
 The legacy default heap is 256 MiB. A larger initial heap is an explicit experiment, not an automatically selected fix for missing assets. Keep the JS, `.js.mem`, later WASM conversion and manifest from one consistent build.
 
-When continuing the current work, wait for the active Party/logging link to finish before installing/rebuilding the newer readiness/controller sources. The next incremental build must include both the cast in Ready and the game mode's controller-class assignment; nine export names alone cannot detect an older implementation. Reconvert that output before using it for readiness verification.
+The latest readiness/controller build passed in 540.22 seconds and its reconverted runtime initialized in Chrome with all nine exports. For subsequent reproductions, include both the cast in Ready and the game mode's controller-class assignment; nine export names alone cannot detect an older implementation. Use the conversion from that same build for readiness verification. This milestone does not establish a fresh replay of the consolidated wrapper or complete recipe.
 
 ## 4. Install compatibility tools and rebuild both shader consumers
 
@@ -278,7 +278,7 @@ for ($i = 0; $i -lt $paks.Count; $i++) {
 }
 $required = @(
     '/Content/RestrictedAssets/Maps/WIP/DM-DeckTest.umap',
-    '/UTEntry.umap',
+    '/Content/RestrictedAssets/Maps/UT-Entry.umap',
     '/Content/RestrictedAssets/Maps/DM-Outpost23.umap',
     '/AssetRegistry.bin',
     '/GlobalShaderCache-GLSL_ES2_WEBGL.bin'
@@ -288,7 +288,7 @@ foreach ($entry in $required) {
 }
 ```
 
-This is a minimum presence gate, not a substitute for inspection. Check the actual listed entry sizes/paths, the UTEntry source-to-cooked path, expected engine/default material dependencies, compatibility packages/parents and errors in each `-Test`/`-List` log. `DevelopmentAssetRegistry.bin` is not a substitute for runtime `AssetRegistry.bin`. If this matching staging implementation deliberately stages a required shader cache loose, stop and account explicitly for that file in both stage and `.data.js` preload metadata; do not silently waive the gate.
+This is a minimum presence gate, not a substitute for inspection. Check the actual listed entry sizes/paths, the configured `/Game/RestrictedAssets/Maps/UT-Entry` package's cooked `/Content/RestrictedAssets/Maps/UT-Entry.umap` path, expected engine/default material dependencies, compatibility packages/parents and errors in each `-Test`/`-List` log. `DevelopmentAssetRegistry.bin` is not a substitute for runtime `AssetRegistry.bin`. If this matching staging implementation deliberately stages a required shader cache loose, stop and account explicitly for that file in both stage and `.data.js` preload metadata; do not silently waive the gate.
 
 Inspect the emitted `.data.js` package metadata: it must load the **same tested pak(s)**, with matching entry names/lengths and byte contents in the corresponding `.data` slices. Record hashes of those slices and compare with the listed pak files when accepting the package. Verify any deliberately loose runtime files likewise. Never infer completeness from a `.data` file's size, an existing AssetRegistry, UAT exit zero, or a previous approximately 185 MB package. A listed map alone also does not prove all its dependencies or material shader maps are usable.
 
@@ -374,6 +374,6 @@ if ($LASTEXITCODE) { throw 'Actual runtime verification failed; inspect scratch 
 
 This command starts neither server nor gateway. Use installed Chrome, or install Playwright Chromium separately and specify `--channel chromium`. The harness writes a unique `ut4-runtime-*` report/screenshot directory under scratch. The 30-second world deadline is a deliberately bounded diagnostic; a full load may require a larger explicitly chosen limit. A later `--resolution both --seconds 30 --ready-timeout-seconds 300` run checks fresh 1080p/1440p instances, but no speed or successful-load guarantee is implied.
 
-Require the actual nine exports, native world readiness and a positive session epoch, successful control calls, and agreement between native viewport, canvas and real WebGL drawing buffer before measuring. Ready must require the Tournament controller, not merely `HasBegunPlay`: UTEntry can tick while a multiplayer connection is pending. UTEntry activity is not proof of joining a match or gameplay. FPS/p95 come from native frame advances observed in engine main-loop callbacks, not a synthetic animation loop. The harness narrowly records/exempts three known legacy startup notices; missing material/map errors, Party failures, DebugBreak, aborts, context loss and readiness timeouts remain failures. A zero engine exit after DebugBreak cannot count as a pass.
+Require the actual nine exports, native world readiness and a positive session epoch, successful control calls, and agreement between native viewport, canvas and real WebGL drawing buffer before measuring. Ready must require the Tournament controller, not merely `HasBegunPlay`: UT-Entry can tick while a multiplayer connection is pending. UT-Entry activity is not proof of joining a match or gameplay. FPS/p95 come from native frame advances observed in engine main-loop callbacks, not a synthetic animation loop. The harness narrowly records/exempts three known legacy startup notices; missing material/map errors, Party failures, DebugBreak, aborts, context loss and readiness timeouts remain failures. A zero engine exit after DebugBreak cannot count as a pass.
 
-Archive the report with package/build hashes and all cook/pak/conversion logs. Even a future passing harness run still needs visible Deck/characters/weapons/material review, real input/audio checks, six-bot practice, completed rounds and **Deck → Outpost23 → Deck** travel with UTEntry available, followed by authoritative multiplayer join/replication/reconnect testing. Do not claim gameplay readiness or replace the public streaming demo on the strength of this recipe, link success, allocator smoke or partial-package startup.
+Archive the report with package/build hashes and all cook/pak/conversion logs. Even a future passing harness run still needs visible Deck/characters/weapons/material review, real input/audio checks, six-bot practice, completed rounds and **Deck → Outpost23 → Deck** travel with UT-Entry available, followed by authoritative multiplayer join/replication/reconnect testing. Do not claim gameplay readiness or replace the public streaming demo on the strength of this recipe, link success, allocator smoke or partial-package startup.
