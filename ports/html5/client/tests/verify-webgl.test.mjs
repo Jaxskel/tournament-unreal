@@ -125,17 +125,18 @@ test('observation failure cannot swallow a real draw return or exception',()=>{
   assert.equal(gl.drawArrays(),17);assert.deepEqual(s.finish().issues,['query failed']);
 });
 
-test('real browser WebGL1/2 attachment evidence preserves bindings and GL error state',async()=>{
+test('real browser WebGL1/2 attachment evidence preserves bindings and GL error state',async t=>{
   const {chromium}=await import('playwright');
   const browser=await chromium.launch({headless:true,...(process.env.CHROME_CHANNEL?{channel:process.env.CHROME_CHANNEL}:{})});
   try {
     const page=await browser.newPage();await page.setContent('<iframe src="about:blank"></iframe>');
     const frame=page.frames().find(f=>f!==page.mainFrame());
     for(const version of ['webgl','webgl2']) {
+      await t.test(version,async t=>{
       await frame.goto('about:blank');await frame.evaluate(installProbe,{webglSample:true});
       const result=await frame.evaluate(({version,begin,finish})=>{
         const canvas=document.createElement('canvas');canvas.id='canvas';canvas.width=320;canvas.height=240;document.body.append(canvas);
-        const gl=canvas.getContext(version);if(!gl)throw Error(version+' context unavailable');
+        const gl=canvas.getContext(version);if(!gl)return {contextUnavailable:true};
         const p=window.__ut4Verify;p.api={TournamentBrowserReady:()=>1,TournamentBrowserSessionEpoch:()=>1,TournamentBrowserFrame:()=>5};
         const originalDraw=Object.getPrototypeOf(gl).drawArrays;
         function shader(type,source){const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s;}
@@ -154,11 +155,19 @@ test('real browser WebGL1/2 attachment evidence preserves bindings and GL error 
         gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,320,240);gl.drawArrays(gl.POINTS,0,1);
         const report=(0,eval)('('+finish+')')();return {report,statePreserved,error:gl.getError(),restored:gl.drawArrays===originalDraw};
       },{version,begin:beginWebGLSample.toString(),finish:finishWebGLSample.toString()});
+      if(result.contextUnavailable) {
+        const finding=`${version} context unavailable in ${process.env.CHROME_CHANNEL || 'bundled Chromium'} ${browser.version()}; real GL assertions did not run`;
+        // Only absent context creation is skippable. Shader, FBO, GL-error and
+        // observer failures still fail normally. CI's explicit Chrome run requires GL.
+        assert.notEqual(process.env.REQUIRE_WEBGL,'1',finding);
+        t.skip(finding);return;
+      }
       assert.equal(result.error,0,version);assert.equal(result.statePreserved,true);assert.equal(result.restored,true);
       assert.equal(result.report.observedDrawCalls,2);assert.deepEqual(result.report.issues,[]);
       assert.deepEqual(result.report.groups[0].color0.size,[160,120]);assert.deepEqual(result.report.groups[0].depth.size,[160,120]);
       assert.deepEqual(result.report.groups[0].viewport,[0,0,160,120]);assert.equal(result.report.groups[1].framebuffer,'default');
       assert.deepEqual(result.report.groups[1].drawingBuffer,[320,240]);
+      });
     }
   } finally {await browser.close();}
 });

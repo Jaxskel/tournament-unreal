@@ -2,7 +2,7 @@
 
 This is an ordered operator recipe for the **licensed, locally recovered UT4 beta / UE4.15.0 CL3228288**. It uses only the original integration code in this repository; obtain the matching engine, source assets, SDKs and binaries from the user's authorized local installation. Do not add those files or generated game packages to this repository. Keep the public Vercel streaming demo and its running Windows installation unchanged.
 
-**The local browser game is not ready.** This document assembles previously separate steps; the latest wrapper and this complete sequence have **not** been freshly replayed from a clean isolated checkout. Commands below are reproduction instructions, not evidence that they were executed while writing this document. No Windows changes were made for this documentation task.
+**The local browser game is not ready.** The isolated engine now runs Deck and six bots locally at a fixed 1920×1080, but the final 3D image is black while the HUD renders. Browser shader diagnostics are in progress. Commands below form a reproduction recipe; the complete sequence has not yet been replayed from a clean checkout.
 
 ## 1. Know which results exist
 
@@ -10,15 +10,15 @@ Status recorded on 2026-09-21, using [verification.json](verification.json), the
 
 | Area | Recorded result and remaining gate |
 | --- | --- |
-| Matching legacy build | The latest match-readiness build passed in **540.22 seconds** with no unresolved symbols; the reconverted runtime initializes in Chrome with all nine browser exports, including SessionEpoch. The latest wrapper also installs configuration, logging and Party fixes. Its newly consolidated whole flow still needs a fresh replay. |
+| Matching legacy build | The latest fixed-window and standalone-practice wrapper build passed in **361.64 seconds** with all nine exports and no unresolved symbols. It includes configuration, logging, Party, pacing and browser window fixes. A fresh clean-checkout replay remains required. |
 | Shader profile | Original patch changes only WebGL fragment samplers to 16 and shader version 61 → 62. Both editor and ShaderCompileWorker shader-format DLL rebuilds are required; patch application alone is insufficient. |
 | Private compatibility assets | Copy-on-write preparation, Apply with rendering, fresh-process Verify, and original/sibling hash audit passed for **18 textured weapon surfaces plus 3 Robot repairs**. This supersedes older untested wording in the compatibility README. Browser appearance is unverified. |
-| Current cook | Full non-iterative **Deck** cook is still processing through normal shader workers. Do not interpret progress, an existing cooked directory, or a partial package as cook success. |
-| Packaging | UAT previously produced an approximately 185 MB **partial** package after packaging fixes. That establishes the packaging mechanism, not complete assets. |
+| Current cook | Full non-iterative **Deck** cook through normal shader workers passed: **0 errors, 2,710 warnings, 4,107.55 seconds**. Review the warnings; cook completion does not validate browser appearance or gameplay. Outpost has not yet been cooked/packaged. |
+| Packaging | UAT packaging exited **0**. The compressed pak is **1,419,313,050 bytes** and `.data` is **1,424,709,491 bytes** (v2 Arrow-material configuration). Matching UnrealPak `-Test` passed with exit **0** for **8,328 files**; `-List` listed those files successfully with the pinned success exit **1**. Deck, UT-Entry, runtime AssetRegistry and WebGL shader cache presence are confirmed. Outpost remains missing; this is not a final rotation-capable or gameplay-validated package. |
 | Converted WASM | Matching-runtime conversion validates and has initialized in Chrome with 1.5 GiB, including allocator smoke. **Firefox 146 and Playwright WebKit 26** also passed actual runtime initialization, allocator and matching file-packager preloader smoke. The preloader used fixture data; these results prove neither gameplay nor actual Safari behavior. The allocator probe used `noInitialRun=true`; it proves neither a world nor FPS. |
-| Actual launcher probe | The latest incomplete-package probe initializes WebGL and reports missing Deck. The Party guard now gets past the failed-map callback without the former Party World ensure; a secondary SceneView ensure follows because the package is incomplete. Earlier probes also reported missing `RemoveSurfaceMaterial`. World/tick metrics remain uninitialized; this is failure-path evidence, not gameplay. |
+| Actual launcher probe | Chrome runs the actual WASM world and six-bot match locally, with native window/canvas/backing buffer at 1920×1080. Removed Web Audio velocity calls and cubemap mip activation have been corrected. A one-time startup I/O queue diagnostic remains under investigation. **The 3D scene turns black in a final image pass despite valid earlier scene-color pixels; the HUD alone is visible. No valid gameplay FPS result.** |
 | Latest readiness correction | The **540.22-second** build includes the `ATournamentPlayerController` requirement in `TournamentBrowserReady()` and TournamentDeathmatch's explicit controller class. The reconverted Chrome runtime exposes all nine controls and returns not-ready before main. A ticking UT-Entry world with a generic controller must not pass readiness; actual match readiness remains unverified. |
-| Final rotation / networking | Explicit Deck, UT-Entry and Outpost23 cook/package coverage, complete browser gameplay, actual multiplayer handshake, rotation, reconnect and performance remain unverified. Native/streaming success does not validate this port. |
+| Final rotation / networking | Deck and UT-Entry package presence is confirmed; Outpost23 coverage is still outstanding. Complete browser gameplay, actual multiplayer handshake, rotation, reconnect and performance remain unverified. Native/streaming success does not validate this port. |
 
 ## 2. Prepare an isolated checkout and tools
 
@@ -56,7 +56,7 @@ if (!(Test-Path "$port\.tournament-browser-port")) {
 Set-Location $repo
 ```
 
-Stop editors, cookers and compilers using this isolated checkout before applying source/configuration patches, installing plugins or changing the Content overlay. Do not stop the currently active cook merely to replay this document: coordinate the next clean run. Keep `.before-*` backups. Patchers intentionally reject unexpected source/backup combinations; do not bypass those guards or silently overwrite another agent's changes.
+Stop editors, cookers and compilers using this isolated checkout before applying source/configuration patches, installing plugins or changing the Content overlay. Coordinate the next clean run; do not interrupt another operator's active work merely to replay this document. Keep `.before-*` backups. Patchers intentionally reject unexpected source/backup combinations; do not bypass those guards or silently overwrite another agent's changes.
 
 For native commands in the examples, this helper preserves logs and checks the actual exit code without PowerShell 5.1 turning routine native stderr into a terminating `NativeCommandError`:
 
@@ -75,7 +75,7 @@ function Invoke-Checked {
 }
 ```
 
-Exit zero is necessary, never sufficient: review compiler/cook/package diagnostics and the artifact gates below. Preserve the source revision, tool versions, configuration, command lines, logs and hashes in scratch storage for the replay record.
+Exit zero is necessary, never sufficient for these build/cook/package commands: review diagnostics and the artifact gates below. The sole exit-code exception in this recipe is the pinned UnrealPak `-List` branch in step 8; do not use `Invoke-Checked` for that branch. Preserve the source revision, tool versions, configuration, command lines, logs and hashes in scratch storage for the replay record.
 
 ## 3. Build the matching legacy browser target
 
@@ -194,7 +194,7 @@ Existing fallback parents/receipts are not a reason to rerun Apply. The helper i
 
 ## 6. Complete a normal-worker, non-iterative cook
 
-The **currently running** cook uses this Deck command, not `-NoShaderWorker`:
+The completed **Deck** cook used this normal-worker command, not `-NoShaderWorker`; it reported 0 errors and 2,710 warnings in 4,107.55 seconds:
 
 ```powershell
 Invoke-Checked $editor @(
@@ -204,7 +204,7 @@ Invoke-Checked $editor @(
 ) "$scratch\cook-deck.log"
 ```
 
-This documents the current scope; do not start a competing process. After shader version/compiler changes, **omit `-iterate`** so stale cooked shaders cannot survive. Keep normal shader workers enabled. A shader compile still running is not success; `-NoShaderWorker` is not the normal recipe. Do not stage/package while cooking is active.
+This documents the completed Deck scope; Outpost is still outstanding. Do not start a competing process. After shader version/compiler changes, **omit `-iterate`** so stale cooked shaders cannot survive. Keep normal shader workers enabled. A shader compile still running is not success; `-NoShaderWorker` is not the normal recipe. Do not stage/package while cooking is active.
 
 Before a **final rotation-capable** package, explicitly cook all three maps. Normal cooking also gathers the configured default map, but listing all roots makes startup and subsequent server travel coverage explicit:
 
@@ -265,15 +265,46 @@ Require UAT success, fresh stage/package timestamps, recompiled script evidence,
 
 Test and list **every final staged pak**, using matching UnrealPak. The usual stage root is shown below; verify it against this UAT log rather than accidentally listing a previous archive:
 
+**Pinned UE4.15 CL3228288 quirk:** `Engine/Source/Programs/UnrealPak/Private/UnrealPak.cpp:1166–1210` defines `ListFilesInPak` to return `true` after emitting the summary for a valid pak, and `false` for an invalid pak. Line 1727 assigns that bool directly to `Result`, so **`-List` success is exactly 1; zero is failure**. The `-Test` branch at line 1719 instead uses `TestPakFile(...) ? 0 : 1`. This exception applies only to this matching executable's `-List`; never accept arbitrary nonzero codes or change the general command helper. Require a single positive summary, matching entry count and byte totals, no error/fatal diagnostics, and the required nonempty content paths below. The latest 8,328-file count is recorded evidence, not a hardcoded count for future cooks.
+
 ```powershell
+function Read-PinnedPakListing {
+    param([string]$Text, [int]$ExitCode)
+    if ($ExitCode -ne 1) { throw "Pinned UnrealPak -List failed (expected 1, got $ExitCode)" }
+    if ($Text -match '(?im)^.*\bLog\w+:\s*(?:Error|Fatal):|Fatal error:|Assertion failed:|Ensure condition failed:') {
+        throw 'Pak listing contains error/fatal diagnostics'
+    }
+    $summary = [regex]::Matches($Text, '(?m)^.*\bLogPakFile:\s*Display:\s*(\d+) files \((\d+) bytes\), \((\d+) filtered bytes\)\.\s*$')
+    $records = [regex]::Matches($Text, '(?m)^.*\bLogPakFile:\s*Display:\s*"([^"]+)" offset: \d+, size: (\d+) bytes, sha1: [0-9A-Fa-f]{40}\.\s*$')
+    if ($summary.Count -ne 1 -or $records.Count -eq 0) { throw 'Missing/ambiguous pak summary or empty listing' }
+    $count = [int64]$summary[0].Groups[1].Value
+    $bytes = [int64]$summary[0].Groups[2].Value
+    $filteredBytes = [int64]$summary[0].Groups[3].Value
+    [int64]$listedBytes = 0
+    foreach ($record in $records) { $listedBytes += [int64]$record.Groups[2].Value }
+    # No SizeFilter is passed: all records and their bytes must be present.
+    if ($count -ne $records.Count -or $bytes -le 0 -or $bytes -ne $listedBytes -or $filteredBytes -ne $bytes) {
+        throw 'Pak listing count/byte totals do not match its complete summary'
+    }
+    foreach ($record in $records) {
+        if ([int64]$record.Groups[2].Value -gt 0) { $record.Groups[1].Value.Replace('\', '/') }
+    }
+}
 $staged = "$port\UnrealTournament\Saved\StagedBuilds\HTML5"
 $paks = @(Get-ChildItem $staged -Recurse -Filter '*.pak')
 if (!$paks.Count) { throw 'No staged pak; inspect UAT stage path' }
-$listing = ''
+$listedPaths = @()
 for ($i = 0; $i -lt $paks.Count; $i++) {
     Invoke-Checked $unrealPak @($paks[$i].FullName, '-Test') "$scratch\pak-$i-test.log"
-    Invoke-Checked $unrealPak @($paks[$i].FullName, '-List') "$scratch\pak-$i-list.log"
-    $listing += (Get-Content -Raw "$scratch\pak-$i-list.log").Replace('\', '/')
+    $listLog = "$scratch\pak-$i-list.log"
+    $savedErrors = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $unrealPak $paks[$i].FullName '-List' > $listLog 2>&1
+        $listCode = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $savedErrors }
+    Get-Content -LiteralPath $listLog -Tail 5
+    $listedPaths += @(Read-PinnedPakListing (Get-Content -Raw -LiteralPath $listLog) $listCode)
     Get-FileHash -Algorithm SHA256 -LiteralPath $paks[$i].FullName
 }
 $required = @(
@@ -284,11 +315,13 @@ $required = @(
     '/GlobalShaderCache-GLSL_ES2_WEBGL.bin'
 )
 foreach ($entry in $required) {
-    if (!$listing.Contains($entry)) { throw "Required final pak entry missing: $entry" }
+    if (!($listedPaths | Where-Object { $_.EndsWith($entry, [StringComparison]::Ordinal) })) {
+        throw "Required final pak entry missing or empty: $entry"
+    }
 }
 ```
 
-This is a minimum presence gate, not a substitute for inspection. Check the actual listed entry sizes/paths, the configured `/Game/RestrictedAssets/Maps/UT-Entry` package's cooked `/Content/RestrictedAssets/Maps/UT-Entry.umap` path, expected engine/default material dependencies, compatibility packages/parents and errors in each `-Test`/`-List` log. `DevelopmentAssetRegistry.bin` is not a substitute for runtime `AssetRegistry.bin`. If this matching staging implementation deliberately stages a required shader cache loose, stop and account explicitly for that file in both stage and `.data.js` preload metadata; do not silently waive the gate.
+This is a minimum presence gate, not a substitute for inspection. The current Deck package intentionally does **not** pass this final rotation gate because Outpost23 is absent; preserve that failure until the final cook/package includes it. Check the actual listed entry sizes/paths, the configured `/Game/RestrictedAssets/Maps/UT-Entry` package's cooked `/Content/RestrictedAssets/Maps/UT-Entry.umap` path, expected engine/default material dependencies, compatibility packages/parents and errors in each `-Test`/`-List` log. `DevelopmentAssetRegistry.bin` is not a substitute for runtime `AssetRegistry.bin`. If this matching staging implementation deliberately stages a required shader cache loose, stop and account explicitly for that file in both stage and `.data.js` preload metadata; do not silently waive the gate.
 
 Inspect the emitted `.data.js` package metadata: it must load the **same tested pak(s)**, with matching entry names/lengths and byte contents in the corresponding `.data` slices. Record hashes of those slices and compare with the listed pak files when accepting the package. Verify any deliberately loose runtime files likewise. Never infer completeness from a `.data` file's size, an existing AssetRegistry, UAT exit zero, or a previous approximately 185 MB package. A listed map alone also does not prove all its dependencies or material shader maps are usable.
 
@@ -377,3 +410,35 @@ This command starts neither server nor gateway. Use installed Chrome, or install
 Require the actual nine exports, native world readiness and a positive session epoch, successful control calls, and agreement between native viewport, canvas and real WebGL drawing buffer before measuring. Ready must require the Tournament controller, not merely `HasBegunPlay`: UT-Entry can tick while a multiplayer connection is pending. UT-Entry activity is not proof of joining a match or gameplay. FPS/p95 come from native frame advances observed in engine main-loop callbacks, not a synthetic animation loop. The harness narrowly records/exempts three known legacy startup notices; missing material/map errors, Party failures, DebugBreak, aborts, context loss and readiness timeouts remain failures. A zero engine exit after DebugBreak cannot count as a pass.
 
 Archive the report with package/build hashes and all cook/pak/conversion logs. Even a future passing harness run still needs visible Deck/characters/weapons/material review, real input/audio checks, six-bot practice, completed rounds and **Deck → Outpost23 → Deck** travel with UT-Entry available, followed by authoritative multiplayer join/replication/reconnect testing. Do not claim gameplay readiness or replace the public streaming demo on the strength of this recipe, link success, allocator smoke or partial-package startup.
+
+## 11. Native editor-server prerequisite and isolated packet gateway
+
+The separate native test uses `UnrealTournamentEditor Win64 Development` with `-server`; it does not require a new Server target. Refresh TournamentBridge **after** the HTML5 build and before starting a cooker/editor using this tree. Do not run either build concurrently with a cook. For a module-only refresh, use this fork's `-NoHotReload`, not just `-NoHotReloadFromIDE`:
+
+```powershell
+# $port/$project/$ubt/$scratch refer to the isolated paths in step 2.
+$env:TOURNAMENT_UT4_UCRT_VERSION = '10.0.10240.0'
+Push-Location "$port\Engine\Source"
+try {
+    Invoke-Checked $ubt @(
+        'UnrealTournamentEditor', 'Win64', 'Development', "-Project=$project",
+        '-Module', 'TournamentBridge', '-NoHotReload', '-NoUBTMakefiles', '-2015'
+    ) "$scratch\native-tournamentbridge-build.log"
+} finally { Pop-Location }
+```
+
+In this UBT revision, a nonempty module selection can independently request hot reload; `-NoHotReloadFromIDE` only disables the IDE detection route. Module filtering also does not build a missing game-module import library. The observed LNK1181 required `UnrealTournament/Intermediate/Build/Win64/UE4Editor/Development/UE4Editor-UnrealTournament.lib`.
+
+The operator's subsequent native build passed in **3.94 seconds** with `-NoHotReload` after restoring that single audited import library. The original and isolated `UE4Editor-UnrealTournament.dll` were byte-identical (SHA-256 `B606926A26ADFBBACCCC80B33B839DB74003DB3B7033A9B491953DD1E5692DBF`); the matching x64 import library (8,875,938 bytes, SHA-256 `B575C0FBE0F0CD3A4C9E477CA21370008853C5BC5EB5834E9DDC6238C6009E11`) referenced the expected DLL, and all 20,198 imported symbols matched its exports. This evidence applies to that exact pair. If the game DLL/source changes or the pair cannot be established, build the matching game module instead of borrowing another library. Existing launcher defaults select the original installation; always pass the isolated `-SourceRoot` explicitly.
+
+The local diagnostic topology is Mac `127.0.0.1:9080` → SSH → Windows `127.0.0.1:9080` → fixed UDP `127.0.0.1:7797`, with native beacon `7798`. The original `7787/7788` server and rendering clients remain separate. Run the native process and gateway in foreground persistent sessions; quote PowerShell's `'-MULTIHOME=127.0.0.1'` argument to prevent numeric argument splitting. Verify both UDP bindings actually say `127.0.0.1`.
+
+For a scratch copy of `gateway.mjs`, `package.json` and its lockfile, install with `npm.cmd ci --ignore-scripts --no-audit --no-fund`, then run with `GAME_HOST=127.0.0.1`, `GAME_PORT=7797`, `PORT=9080`, and exact `BROWSER_ORIGINS=http://127.0.0.1:8077`. On Mac keep this SSH command foreground:
+
+```sh
+ssh -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 \
+  -o ServerAliveCountMax=3 -o BatchMode=yes \
+  -L 127.0.0.1:9080:127.0.0.1:9080 jacks@192.168.7.209
+```
+
+The WebSocket endpoint is `ws://127.0.0.1:9080/game`, subprotocol `binary`. `/health`, accepted-origin upgrade, wrong-origin rejection and released connection slots verify gateway admission and the tunnel only. A bound native socket and completed Deck load do not establish a browser gameplay handshake, replication, or six-player operation. Preserve native/gateway logs separately from cook logs and complete those gameplay checks before enabling Multiplayer for users.

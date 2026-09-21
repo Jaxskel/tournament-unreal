@@ -22,6 +22,8 @@ if($LASTEXITCODE){throw 'Browser glue patch failed'}
 if($LASTEXITCODE){throw 'Browser logging patch failed'}
 & py -3 "$PSScriptRoot\patch-browser-party.py" $root --apply
 if($LASTEXITCODE){throw 'Browser failed-map callback patch failed'}
+& py -3 "$PSScriptRoot\patch-browser-window.py" $root --apply
+if($LASTEXITCODE){throw 'Browser fixed-resolution window patch failed'}
 $logDir="$root\UnrealTournament\Saved\Logs\BrowserPort"
 New-Item -ItemType Directory -Force $logDir | Out-Null
 $configDir="$root\Engine\Saved\UnrealBuildTool"

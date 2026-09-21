@@ -13,6 +13,7 @@ class TOURNAMENTBRIDGE_API ATournamentDeathmatch : public AUTDMGameMode
 
 public:
     ATournamentDeathmatch(const FObjectInitializer& ObjectInitializer);
+    virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
     virtual void TravelToNextMap_Implementation() override;
     virtual void HandleMatchHasEnded() override;
     virtual float GetTravelDelay() override;

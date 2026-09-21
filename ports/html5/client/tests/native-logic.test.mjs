@@ -239,3 +239,42 @@ int main() {
   const run=spawnSync(executable,[],{ encoding:'utf8',timeout:5000 });
   assert.equal(run.status,0,run.stderr || run.error?.message);
 });
+
+test('actual practice initialization auto-starts only successful standalone worlds', async t => {
+  const compiler=process.env.CXX || 'c++';
+  if (spawnSync(compiler,['--version']).error) { t.skip('C++ compiler unavailable'); return; }
+  const game=await readFile(new URL('TournamentDeathmatch.cpp',plugin),'utf8');
+  const source=String.raw`
+#include <cassert>
+#include <string>
+struct FString: std::string { using std::string::string; using std::string::operator=; bool IsEmpty() const { return empty(); } };
+enum ENetMode { NM_Standalone, NM_Client, NM_ListenServer, NM_DedicatedServer };
+struct Base {
+  int calls=0; bool fail=false, bDelayedStart=true; ENetMode mode=NM_Standalone;
+  void InitGame(const FString&,const FString&,FString& error) { ++calls; if(fail) error="base failure"; }
+  ENetMode GetNetMode() const { return mode; }
+};
+struct ATournamentDeathmatch: Base {
+  using Super=Base;
+  void InitGame(const FString&,const FString&,FString&);
+};
+`+body(game,'void ATournamentDeathmatch::InitGame(')+String.raw`
+int main() {
+  for (auto mode: {NM_Standalone,NM_Client,NM_ListenServer,NM_DedicatedServer}) {
+    for (bool fails: {false,true}) {
+      ATournamentDeathmatch game; game.mode=mode; game.fail=fails; FString error;
+      game.InitGame("Deck","RequireReady=0",error);
+      assert(game.calls==1);
+      assert(error.empty()==!fails);
+      assert(game.bDelayedStart==!(mode==NM_Standalone && !fails));
+    }
+  }
+}
+`;
+  const results=fileURLToPath(new URL('../test-results/',import.meta.url));await mkdir(results,{recursive:true});
+  const directory=await mkdtemp(join(results,'native-practice-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+  const executable=join(directory,'check'+(process.platform==='win32'?'.exe':''));
+  const compile=spawnSync(compiler,['-std=c++11','-x','c++','-o',executable,'-'],{input:source,encoding:'utf8',timeout:30000});
+  assert.equal(compile.status,0,compile.stderr || compile.error?.message);
+  const run=spawnSync(executable,[],{encoding:'utf8',timeout:5000});assert.equal(run.status,0,run.stderr || run.error?.message);
+});

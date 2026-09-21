@@ -5,7 +5,7 @@ import { readFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, extname, sep } from 'node:path';
 import { chromium } from 'playwright';
-import { DEFAULT_ARGUMENTS } from '../core.mjs';
+import { DEFAULT_ARGUMENTS, validateGraphicsLimits } from '../core.mjs';
 import { BINDINGS } from '../bindings.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -69,10 +69,31 @@ before(async () => {
   browser = await chromium.launch({ headless:!process.env.HEADED, ...(process.env.CHROME_CHANNEL ? { channel:process.env.CHROME_CHANNEL } : {}) });
 });
 after(async () => { await browser?.close(); await new Promise(resolve => server?.close(resolve)); });
-async function session(t, scenario='normal') {
+async function session(t, scenario='normal', graphics={}) {
   mode = scenario; requests = [];
   const context = await browser.newContext({ viewport:{ width:1440,height:1000 } });
   t.after(() => context.close());
+  if (graphics !== null) await context.addInitScript(options => {
+    // Lifecycle fixtures draw a labeled 2D canvas; they do not test a GPU/game.
+    // Stub only the runtime's detached preflight canvas, never engine rendering.
+    // The separate real-capability test below opts out of this entire hook.
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function(type, ...args) {
+      if (location.pathname !== '/runtime.html' || this.isConnected || !['webgl','experimental-webgl'].includes(type)) {
+        return original.call(this, type, ...args);
+      }
+      if (options.available === false) return null;
+      return {
+        MAX_TEXTURE_IMAGE_UNITS: 34930, MAX_VERTEX_TEXTURE_IMAGE_UNITS: 35660, MAX_COMBINED_TEXTURE_IMAGE_UNITS: 35661,
+        getParameter(name) { return ({34930:options.fragment ?? 16,35660:options.vertex ?? 8,35661:options.combined ?? 24})[name]; },
+        getExtension(name) {
+          if (name === 'OES_fbo_render_mipmap') return options.mipmap === false ? null : {};
+          if (name === 'WEBGL_lose_context') return {loseContext() {}};
+          return null;
+        },
+      };
+    };
+  }, graphics);
   const page = await context.newPage(); await page.goto(origin);
   return page;
 }
@@ -233,7 +254,7 @@ test('Escape, settings and capture denial cannot strand the menu', async t => {
   await page.locator('#stop').click(); assert.equal(page.frames().length,1);
 });
 
-for (const [scenario, message] of [['no-manifest',/runtime.json: HTTP 404/], ['invalid',/version must be 1/], ['missing',/fixture.data: HTTP 404/], ['throw',/fixture startup exception/], ['stall',/initialization timed out/], ['bad-wasm',/WebAssembly/], ['async-fail',/fixture async failure/]]) {
+for (const [scenario, message] of [['no-manifest',/runtime.json: HTTP 404/], ['invalid',/version must be 1/], ['missing',/fixture.data: HTTP 404/], ['throw',/fixture startup exception/], ['stall',/initialization timed out|Loading took too long/], ['bad-wasm',/WebAssembly/], ['async-fail',/fixture async failure/]]) {
   test(`${scenario}: visible error, clean retry, no stale runtime state`, async t => {
     const page = await session(t,scenario);
     await page.locator('#launch').click(); await waitVisible(page,'#error');
@@ -248,7 +269,7 @@ for (const [scenario, message] of [['no-manifest',/runtime.json: HTTP 404/], ['i
 test('future WASM Module adapter uses actual binary bytes; fixture is not a game build', async t => {
   const page = await session(t,'wasm'); await launch(page);
   assert.equal(await runtime(page).evaluate(() => fixture.wasm),true);
-  assert.match(await page.locator('#description').textContent(),/not yet been validated/);
+  assert.match(await page.locator('#description').textContent(),/Beta · Features may be incomplete/);
 });
 test('converted legacy WASM compiles before engine script, retains mem and waits for async postRun', async t => {
   const page = await session(t,'converted');
@@ -265,18 +286,56 @@ test('converted legacy WASM compiles before engine script, retains mem and waits
   assert.equal(requests.filter(path => path === '/fixture.mem').length,1);
   assert.equal(requests.filter(path => path === '/fixture.wasm').length,1);
 });
-test('unsupported WebGL limits stop before asset loading and explain the GPU requirement', async t => {
-  const page = await session(t);
-  await page.addInitScript(() => {
-    const original = WebGLRenderingContext.prototype.getParameter;
-    WebGLRenderingContext.prototype.getParameter = function(name) {
-      return name === this.MAX_TEXTURE_IMAGE_UNITS ? 8 : original.call(this,name);
-    };
-  });
+for (const [name, graphics, message] of [
+  ['no context', {available:false}, /WebGL is unavailable/],
+  ['fragment limit', {fragment:8}, /Unsupported GPU\/WebGL.*at least 16 fragment, 8 vertex and 24 combined/],
+  ['vertex limit', {vertex:4}, /Unsupported GPU\/WebGL.*at least 16 fragment, 8 vertex and 24 combined/],
+  ['combined limit', {combined:16}, /Unsupported GPU\/WebGL.*at least 16 fragment, 8 vertex and 24 combined/],
+  ['missing cubemap mip extension', {mipmap:false}, /requires WebGL cubemap mip rendering \(OES_fbo_render_mipmap\)/],
+]) {
+test(`fixture preflight ${name}: rejection before assets and clean retry`, async t => {
+  const page = await session(t, 'normal', graphics);
   await page.locator('#launch').click(); await waitVisible(page,'#error');
-  assert.match(await page.locator('#error').textContent(),/Unsupported GPU\/WebGL.*at least 16 fragment, 8 vertex and 24 combined/);
+  assert.match(await page.locator('#error').textContent(),message);
   assert.equal(requests.includes('/fixture.data'),false);
+  assert.equal(requests.includes('/tests/fixtures/engine.js'),false);
+  assert.equal(page.frames().length,1);
   assert.equal(await page.locator('#retry').isVisible(),true);
+  await page.locator('#retry').click(); await waitVisible(page,'#error');
+  assert.match(await page.locator('#error').textContent(),message);
+  assert.equal(page.frames().length,1);
+  assert.equal(requests.includes('/fixture.data'),false);
+});
+}
+
+test('unstubbed browser capability agrees with production preflight; fixture launch is not gameplay', async t => {
+  const page = await session(t, 'normal', null);
+  const capability = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl', {antialias:false}) || canvas.getContext('experimental-webgl');
+    if (!gl) return null;
+    try {
+      return {fragment:gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS), vertex:gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS),
+        combined:gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS), mipmap:!!gl.getExtension('OES_fbo_render_mipmap')};
+    } finally { gl.getExtension('WEBGL_lose_context')?.loseContext(); }
+  });
+  t.diagnostic(JSON.stringify({browser:browser.version(), capability}));
+  let rejection;
+  if (!capability) rejection = /WebGL is unavailable/;
+  else {
+    try { validateGraphicsLimits(capability); } catch { rejection = /Unsupported GPU\/WebGL/; }
+    if (!rejection && !capability.mipmap) rejection = /requires WebGL cubemap mip rendering \(OES_fbo_render_mipmap\)/;
+  }
+  if (rejection) {
+    await page.locator('#launch').click(); await waitVisible(page,'#error');
+    assert.match(await page.locator('#error').textContent(),rejection);
+    assert.equal(requests.includes('/fixture.data'),false);
+    assert.equal(page.frames().length,1);
+  } else {
+    await launch(page);
+    assert.equal(await page.locator('#error').isVisible(),false);
+    assert.equal(await runtime(page).evaluate(() => fixture.packageBytes),131072);
+  }
 });
 test('menu/settings remain scroll-accessible at small viewport sizes', async t => {
   const page = await session(t);
@@ -331,7 +390,7 @@ test('optional C bindings defer saved settings until world Ready and apply live 
 
 test('multiplayer is disabled without operator configuration and Practice keeps six-bot arguments', async t => {
   const page=await session(t);
-  await page.waitForFunction(()=>document.querySelector('#mode-help').textContent.includes('not configured'));
+  await page.waitForFunction(()=>document.querySelector('#mode-help').textContent.includes('Multiplayer unavailable'));
   assert.equal(await page.locator('#multiplayer-option').isDisabled(),true);
   assert.equal(await page.locator('#mode').inputValue(),'practice');
   await launch(page);
@@ -356,7 +415,7 @@ test('multiplayer mode survives reload, clean retry and reconnect; Stop permits 
     assert.equal(actual.websocket,'ws://127.0.0.1:9080/game');
     assert.equal(actual.dirty,undefined);
     assert.equal(await runtime(page).evaluate(()=>fixture.paused),false);
-    assert.match(await page.locator('#status').textContent(),/Connection and gameplay have not been validated/);
+    assert.equal(await page.locator('#status').textContent(),'Tournament Beta · Select Resume to continue.');
   };
   await check();
   await runtime(page).evaluate(()=>{ window.oldRuntimeMarker=true; Module.onAbort('fixture disconnect'); });

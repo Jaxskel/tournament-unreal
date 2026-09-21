@@ -3,7 +3,23 @@ import argparse
 import json
 from pathlib import Path
 
-MARKER = '; Tournament browser platform configuration v1'
+MARKER_PREFIX = '; Tournament browser platform configuration'
+MARKER = MARKER_PREFIX + ' v2'
+# Freeze the exact released v1 block. Never derive an accepted migration source
+# from the current template or overwrite an operator-modified/unknown block.
+LEGACY_BLOCK = '''; Tournament browser platform configuration v1
+; Merge these sections into the isolated project's Config/HTML5/HTML5Engine.ini.
+; The game-engine subclass overrides Engine.GameEngine's inherited driver list.
+[/Script/UnrealTournament.UTGameEngine]
+-NetDriverDefinitions=(DefName="GameNetDriver",DriverClassName="OnlineSubsystemUtils.IpNetDriver",DriverClassNameFallback="OnlineSubsystemUtils.IpNetDriver")
++NetDriverDefinitions=(DefName="GameNetDriver",DriverClassName="/Script/HTML5Networking.WebSocketNetDriver",DriverClassNameFallback="/Script/HTML5Networking.WebSocketNetDriver")
+
+[/Script/Engine.Engine]
+BoneWeightMaterialName=/Engine/EngineMaterials/WorldGridMaterial.WorldGridMaterial
+
+[Engine.StartupPackages]
+-Package=/Engine/EngineDebugMaterials/BoneWeightMaterial
+'''
 
 
 def configure(root):
@@ -17,10 +33,27 @@ def configure(root):
     settings = Path(__file__).with_name('config').joinpath('HTML5Engine.ini').read_text()
     block = MARKER + '\n' + settings
     current = path.read_text(encoding='utf-8-sig') if path.exists() else ''
-    if MARKER in current:
-        if current.count(MARKER) != 1 or not current.endswith(block):
+    if MARKER_PREFIX in current:
+        if current.count(MARKER_PREFIX) != 1:
             raise ValueError('Browser configuration changed; inspect before reapplying')
-        print('Browser configuration already installed')
+        if current.endswith(block):
+            print('Browser configuration v2 already installed')
+            return
+        if not current.endswith(LEGACY_BLOCK):
+            raise ValueError('Unknown or modified browser configuration block; inspect before migrating')
+        # Replace only the exact v1 suffix; preserve the preceding configuration
+        # and the existing original backup, including when no backup was needed.
+        # Python's original Windows write_text emitted CRLF. Accept that exact
+        # block as well as LF, without normalizing the operator's prefix bytes.
+        raw = path.read_bytes()
+        for newline in ('\r\n', '\n'):
+            legacy = LEGACY_BLOCK.replace('\n', newline).encode('utf-8')
+            if raw.endswith(legacy):
+                path.write_bytes(raw[:-len(legacy)] + block.replace('\n', newline).encode('utf-8'))
+                break
+        else:
+            raise ValueError('Modified browser configuration block line endings; inspect before migrating')
+        print('Migrated browser configuration v1 to v2 (arrow material); restage before running')
         return
     # Refuse a competing subclass driver override instead of silently merging it.
     if '[/Script/UnrealTournament.UTGameEngine]' in current and 'NetDriverDefinitions=' in current:

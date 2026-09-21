@@ -6,7 +6,7 @@ try { storage = localStorage; } catch { /* Storage can be disabled. */ }
 let selected = readResolution(storage);
 let selectedMode = readMode(storage);
 let multiplayerAvailable = false;
-let modeHelp = 'Checking multiplayer configuration…';
+let modeHelp = 'Checking multiplayer availability…';
 let manifestCheck = 0;
 const settings = {};
 for (const [key,min,max] of [['volume',0,1],['sensitivity',.005,.5]]) {
@@ -14,7 +14,7 @@ for (const [key,min,max] of [['volume',0,1],['sensitivity',.005,.5]]) {
     const value = storage.getItem('tournament.local-ut4.' + key);
     if (value !== null && Number.isFinite(Number(value))) settings[key] = Math.max(min,Math.min(max,Number(value)));
   } catch { /* Storage unavailable: keep native defaults until the user sets a value. */ }
-  if (settings[key] != null) { $(key).value = settings[key]; $(key+'-value').textContent = settings[key] + ' · saved, pending engine'; }
+  if (settings[key] != null) { $(key).value = settings[key]; $(key+'-value').textContent = settings[key] + ' · saved, waiting to apply'; }
 }
 let activeResolution = null;
 let frame = null;
@@ -42,7 +42,7 @@ document.addEventListener('fullscreenchange', () => {
 function showResolution() {
   $('resolution').value = selected;
   $('resolution-status').textContent = 'Selected: ' + RESOLUTIONS[selected].join(' × ') +
-    (activeResolution ? ' · Current launch: ' + RESOLUTIONS[activeResolution].join(' × ') : '');
+    (activeResolution ? ' · Current: ' + RESOLUTIONS[activeResolution].join(' × ') : '');
 }
 function render() {
   $('shell').classList.toggle('captured', captured);
@@ -53,7 +53,7 @@ function render() {
   $('mode').value = selectedMode;
   $('mode').disabled = phase !== 'idle';
   $('multiplayer-option').disabled = !multiplayerAvailable;
-  $('mode-help').textContent = modeHelp + (phase !== 'idle' ? ' Stop runtime to change mode.' : '');
+  $('mode-help').textContent = modeHelp + (phase !== 'idle' ? ' Exit to menu to change mode.' : '');
   $('reconnect').hidden = !initialized || phase === 'error' || selectedMode !== 'multiplayer';
   $('retry').hidden = phase !== 'error';
   $('resume').hidden = !initialized || phase === 'error';
@@ -62,12 +62,12 @@ function render() {
   $('capture').disabled = !initialized || phase === 'error' || captured;
   $('release').disabled = !captured;
   $('input-status').textContent = captured ? 'Mouse captured · Esc releases / opens menu' : 'Mouse released · Esc opens menu';
-  $('panel-title').textContent = !$('settings-panel').hidden ? 'Settings.' : phase === 'error' ? 'Launch interrupted.' : initialized ? 'Engine menu.' : phase === 'loading' ? 'Loading the experiment.' : 'Enter the arena.';
+  $('panel-title').textContent = !$('settings-panel').hidden ? 'Settings.' : phase === 'error' ? 'Unable to continue.' : initialized ? 'Menu.' : phase === 'loading' ? 'Loading Tournament.' : 'Enter the arena.';
 }
 async function checkMultiplayer() {
   const check = ++manifestCheck;
   multiplayerAvailable = false;
-  modeHelp = 'Checking multiplayer configuration…';
+  modeHelp = 'Checking multiplayer availability…';
   render();
   try {
     const url = new URL('./runtime.json', location.href);
@@ -76,10 +76,10 @@ async function checkMultiplayer() {
     const manifest = validateManifest(await response.json(), url.href);
     if (check !== manifestCheck) return;
     multiplayerAvailable = !!manifest.multiplayerArguments?.length;
-    modeHelp = multiplayerAvailable ? 'Multiplayer uses the configured server. Connection and gameplay are unverified.' : 'Multiplayer unavailable: not configured by the operator. Practice is available.';
+    modeHelp = multiplayerAvailable ? 'Multiplayer Beta.' : 'Multiplayer unavailable. Choose Practice.';
   } catch {
     if (check !== manifestCheck) return;
-    modeHelp = 'Multiplayer unavailable: runtime.json could not be validated. Practice launch can show manifest errors.';
+    modeHelp = 'Multiplayer unavailable. Select Play to check practice availability.';
   }
   render();
 }
@@ -102,7 +102,7 @@ function resetMetrics() {
   $('native-frame').textContent = 'Native frame counter: unavailable';
   $('engine-settings').hidden = true;
   $('volume').disabled = true; $('sensitivity').disabled = true;
-  $('bindings-help').textContent = 'Changes apply on the next launch. Audio and sensitivity controls are unavailable until their native bindings and the game world are ready.';
+  $('bindings-help').textContent = 'Resolution applies next time you play. Volume and sensitivity become available when supported.';
 }
 function destroyRuntime() {
   clearTimeout(bootstrapTimer);
@@ -120,7 +120,7 @@ function fail(message) {
   resetMetrics();
   $('error').hidden = false;
   $('error').textContent = message;
-  $('status').textContent = 'Runtime stopped. Retry creates a fresh engine context.';
+  $('status').textContent = 'Unable to continue. Select Retry to try again.';
   showResolution();
   openMenu();
 }
@@ -132,14 +132,14 @@ function launch() {
   resetMetrics();
   $('error').hidden = true;
   $('settings-panel').hidden = true;
-  $('status').textContent = 'Reading same-origin runtime.json…';
+  $('status').textContent = 'Loading Tournament…';
   $('progress').removeAttribute('value');
-  $('progress-text').textContent = 'Waiting for the runtime manifest';
+  $('progress-text').textContent = 'Preparing your game';
   frame = document.createElement('iframe');
-  frame.title = 'Experimental UT4 engine';
+  frame.title = 'Tournament Beta';
   frame.src = './runtime.html';
   $('viewport').append(frame);
-  bootstrapTimer = setTimeout(() => fail('Runtime frame or manifest did not respond within 30 seconds.'), 30000);
+  bootstrapTimer = setTimeout(() => fail('Loading did not respond within 30 seconds. Please retry.'), 30000);
   showResolution();
   render();
 }
@@ -170,17 +170,17 @@ window.addEventListener('message', event => {
       else $('progress').removeAttribute('value');
       break;
     case 'initializing':
-      $('status').textContent = 'Compiling and initializing the engine…';
+      $('status').textContent = 'Starting Tournament…';
       $('progress').removeAttribute('value');
       // Parent timer survives a blocked frame event loop where browser scheduling allows it.
-      engineTimer = setTimeout(() => fail('Engine initialization timed out. Check package completeness, heap size and browser console; Retry is available.'), detail.timeout);
+      engineTimer = setTimeout(() => fail('Loading took too long. Select Retry to try again.'), detail.timeout);
       break;
-    case 'status': $('status').textContent = detail; break;
+    case 'status': $('status').textContent = 'Loading Tournament…'; break;
     case 'initialized':
       clearTimeout(engineTimer);
       initialized = true;
       phase = 'running';
-      $('status').textContent = 'Engine postRun reached. ' + (selectedMode === 'multiplayer' ? 'Connection and gameplay have not been validated.' : 'Gameplay has not been validated.') + ' Return to the engine, then click to capture your mouse.';
+      $('status').textContent = 'Tournament Beta · Select Resume to continue.';
       command('menu');
       render();
       break;
@@ -205,11 +205,11 @@ window.addEventListener('message', event => {
       $('engine-settings').hidden = !detail.available.volume && !detail.available.sensitivity;
       for (const key of ['volume','sensitivity']) {
         $(key).disabled = !detail.ready || !detail.available[key];
-        if (settings[key] != null) $(key+'-value').textContent = settings[key] + (detail.applied[key] === settings[key] ? ' · applied' : ' · saved, pending engine');
+        if (settings[key] != null) $(key+'-value').textContent = settings[key] + (detail.applied[key] === settings[key] ? ' · applied' : ' · saved, waiting to apply');
       }
       $('bindings-help').textContent = detail.ready
-        ? (detail.available.resolution ? 'Native world ready. Resolution changes apply through the engine binding.' : 'Native world ready. Resolution changes apply on the next launch.') + ' Controls without exported bindings remain unavailable.'
-        : 'Waiting for native world readiness. Saved settings will apply when their bindings and the world are ready; otherwise resolution applies on the next launch.';
+        ? (detail.available.resolution ? 'Resolution changes apply now.' : 'Resolution changes apply next time you play.') + ' Unavailable controls stay disabled.'
+        : 'Loading your game settings. Saved changes will apply when available.';
       if (detail.applied.resolution && detail.actual?.join('x') === RESOLUTIONS[detail.applied.resolution]?.join('x')) { activeResolution = detail.applied.resolution; showResolution(); }
       $('native-frame').textContent = detail.nativeFrame == null ? 'Native frame counter: unavailable' : 'Native GFrameCounter: ' + detail.nativeFrame + ' · not presented-frame FPS';
       break;
@@ -242,7 +242,7 @@ $('mode').addEventListener('change', () => {
 });
 $('stop').addEventListener('click', () => {
   destroyRuntime(); phase = 'idle'; resetMetrics(); showResolution();
-  $('error').hidden = true; $('status').textContent = 'Runtime stopped. Engine not initialized.';
+  $('error').hidden = true; $('status').textContent = 'Tournament Beta · Choose a mode to play.';
   openMenu();
   checkMultiplayer();
 });
@@ -263,7 +263,7 @@ for (const key of ['volume','sensitivity']) {
   $(key).addEventListener('change', () => {
     settings[key] = Number($(key).value);
     try { storage.setItem('tournament.local-ut4.' + key, String(settings[key])); } catch { /* Applies in this page even if persistence is unavailable. */ }
-    $(key+'-value').textContent = settings[key] + ' · pending engine';
+    $(key+'-value').textContent = settings[key] + ' · waiting to apply';
     command('settings', { ...settings, resolution:selected });
   });
 }

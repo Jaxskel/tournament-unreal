@@ -18,6 +18,18 @@ ATournamentDeathmatch::ATournamentDeathmatch(const FObjectInitializer& ObjectIni
     ArenaRotation.Add(TEXT("/Game/RestrictedAssets/Maps/DM-Outpost23"));
 }
 
+void ATournamentDeathmatch::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
+{
+    Super::InitGame(MapName, Options, ErrorMessage);
+    // The browser's Play action already enters practice. The stock standalone
+    // mode otherwise waits for a second ready-up action even with RequireReady=0.
+    // Keep network room readiness and the engine's next-tick startup ordering.
+    if (ErrorMessage.IsEmpty() && GetNetMode() == NM_Standalone)
+    {
+        bDelayedStart = false;
+    }
+}
+
 void ATournamentDeathmatch::TravelToNextMap_Implementation()
 {
     if (!HasAuthority() || !GetWorld())

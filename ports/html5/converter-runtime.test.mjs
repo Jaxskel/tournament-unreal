@@ -131,3 +131,55 @@ test('a suspension that transitions to interrupted can be resumed on the next ca
   assert.equal(await module.resumeBrowserAudio(), 'running');
   assert.equal(calls, 2);
 });
+
+for (const velocityAPI of ['missing', 'non-callable', 'legacy']) {
+test(`spatial source creation and updates with ${velocityAPI} velocity API preserve the audio graph`, async () => {
+  const module = await load();
+  const calls = [];
+  const output = {};
+  const panner = {
+    setPosition(...xyz) { calls.push(['position', ...xyz]); },
+    connect(target) { assert.equal(target, output); calls.push(['panner-connect']); },
+  };
+  if (velocityAPI === 'non-callable') panner.setVelocity = null;
+  if (velocityAPI === 'legacy') panner.setVelocity = function(...xyz) {
+    assert.equal(this, panner); calls.push(['velocity', ...xyz]);
+  };
+  module.fixtureSetAudioContext({fixtureGain: output, createPanner() { return panner; }});
+  const src = module.fixtureCreateSource();
+  src.gain = {
+    disconnect() { calls.push(['gain-disconnect']); },
+    connect(target) { assert.equal(target, panner); calls.push(['gain-connect']); },
+  };
+  const storedVelocity = src.velocity;
+  src.velocity = [4,5,6]; // Relative source: no panner yet.
+  module.fixtureSpatialize(src); // Original failure was here in _alSourcei.
+  src.velocity = [7,8,9]; // The second removed API call must also be safe.
+  assert.equal(src.velocity, storedVelocity);
+  assert.deepEqual(Array.from(storedVelocity), [7,8,9]);
+  assert.equal(src.panner, panner);
+  assert.equal(panner.panningModel, 'equalpower');
+  assert.equal(panner.distanceModel, 'linear');
+  for (const property of ['refDistance', 'maxDistance', 'rolloffFactor']) {
+    assert.equal(panner[property], src[property]);
+  }
+  assert.deepEqual(calls, [
+    ['position', 1,2,3],
+    ...(velocityAPI === 'legacy' ? [['velocity', 4,5,6]] : []),
+    ['panner-connect'], ['gain-disconnect'], ['gain-connect'],
+    ...(velocityAPI === 'legacy' ? [['velocity', 7,8,9]] : []),
+  ]);
+  if (velocityAPI === 'missing') assert.equal('setVelocity' in panner, false, 'no fake method installed');
+});
+}
+
+test('velocity guards do not swallow real panner exceptions', async () => {
+  const module = await load();
+  const failure = Error('actual method failed');
+  const panner = {setPosition() {}, setVelocity() { throw failure; }};
+  module.fixtureSetAudioContext({createPanner() { return panner; }});
+  const src = module.fixtureCreateSource();
+  assert.throws(() => module.fixtureSpatialize(src), error => error === failure);
+  assert.throws(() => { src.velocity = [4,5,6]; }, error => error === failure);
+  assert.deepEqual(Array.from(src.velocity), [4,5,6]);
+});

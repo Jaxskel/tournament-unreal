@@ -202,6 +202,9 @@ async function start(resolution, settings, mode) {
   try {
     send('graphics', validateGraphicsLimits({ fragment: gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS),
       vertex: gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS), combined: gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS) }));
+    if (!gl.getExtension('OES_fbo_render_mipmap')) {
+      throw new Error('This UT4 build requires WebGL cubemap mip rendering (OES_fbo_render_mipmap). This browser/GPU does not expose it; try a supported desktop browser with graphics acceleration enabled.');
+    }
   } finally { gl.getExtension('WEBGL_lose_context')?.loseContext(); }
   const assets = new Map();
   const entries = Object.entries(manifest.files);

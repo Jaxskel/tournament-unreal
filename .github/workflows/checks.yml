@@ -22,6 +22,13 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm test
+      - name: Install Chrome and dependencies for required real WebGL checks
+        run: npx playwright install --with-deps chrome
+      - name: Require real WebGL1 and WebGL2 observer checks in Chrome
+        env:
+          CHROME_CHANNEL: chrome
+          REQUIRE_WEBGL: '1'
+        run: node --test --test-name-pattern='real browser WebGL1/2' tests/verify-webgl.test.mjs
       - run: node verify-runtime.mjs --self-test-args
       - run: node verify-runtime.mjs --self-test-diagnostics
   html5-packet-gateway:
@@ -37,6 +44,8 @@ jobs:
       - run: python3 -B ports/html5/test_patch_browser_glue.py
       - run: python3 -B ports/html5/test_patch_browser_logging.py
       - run: python3 -B ports/html5/test_patch_browser_party.py
+      - run: python3 -B ports/html5/test_patch_browser_window.py
+      - run: python3 -B ports/html5/test_configure_browser_config.py
       - run: python3 -B ports/html5/test_patcher_preflight.py
   event-contract:
     runs-on: ubuntu-latest

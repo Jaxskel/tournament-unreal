@@ -12,6 +12,55 @@ import shutil
 import subprocess
 
 
+def enable_cubemap_mips(text):
+    # The old GL runtime advertises this newer WebGL1 extension without enabling
+    # it. Skylight filtering attaches cubemap mip levels above zero, which the
+    # browser rejects until the extension is enabled on that actual context.
+    marker = 'var automaticallyEnabledExtensions='
+    if marker not in text and 'initExtensions:' not in text:
+        return text  # Non-graphics converter fixtures/programs have no GL runtime.
+    if text.count(marker) != 1:
+        raise ValueError('Unexpected legacy GL extension initialization')
+    start = text.index(marker) + len(marker)
+    end = text.index(';', start)
+    extensions = json.loads(text[start:end])
+    if not isinstance(extensions, list) or not all(isinstance(item, str) for item in extensions):
+        raise ValueError('Unexpected legacy GL extension list')
+    if not {'OES_texture_half_float', 'WEBGL_depth_texture', 'EXT_shader_texture_lod'} <= set(extensions):
+        raise ValueError('Unsupported legacy GL extension profile')
+    if 'OES_fbo_render_mipmap' not in extensions:
+        extensions.append('OES_fbo_render_mipmap')
+    return text[:start] + json.dumps(extensions, separators=(',', ':')) + text[end:]
+
+
+def guard_legacy_audio_velocity(text):
+    # Web Audio removed Doppler/setVelocity; retain source bookkeeping and the
+    # actual panner/gain graph. Do not install fake methods or hide other errors.
+    # https://github.com/emscripten-core/emscripten/issues/4587
+    replacements = (
+        ('if(this.panner)this.panner.setVelocity(val[0],val[1],val[2])',
+         'if(this.panner&&typeof this.panner.setVelocity==="function")this.panner.setVelocity(val[0],val[1],val[2])'),
+        ('panner.setVelocity(src.velocity[0],src.velocity[1],src.velocity[2]);',
+         'if(typeof panner.setVelocity==="function")panner.setVelocity(src.velocity[0],src.velocity[1],src.velocity[2]);'),
+    )
+    if 'setVelocity' not in text:
+        return text
+    remainder = text
+    for original, guarded in replacements:
+        # Remove guarded forms first because they contain the original call.
+        guarded_count = remainder.count(guarded)
+        remainder = remainder.replace(guarded, '')
+        if guarded_count + remainder.count(original) != 1:
+            raise ValueError('Unexpected legacy Web Audio velocity profile')
+        remainder = remainder.replace(original, '')
+    if 'setVelocity' in remainder:
+        raise ValueError('Unrecognized legacy Web Audio velocity site')
+    for original, guarded in replacements:
+        if guarded not in text:
+            text = text.replace(original, guarded)
+    return text
+
+
 def imports(data):
     if data[:8] != b'\0asm\x01\0\0\0':
         raise ValueError('Expected WebAssembly version 1')
@@ -73,7 +122,7 @@ def convert(source, output, binaryen, memory_mib):
     source, output, binaryen = Path(source), Path(output), Path(binaryen)
     if source.resolve() == output.resolve():
         raise ValueError('Preserve the validated original asm.js output')
-    text = source.read_text(encoding='utf-8')
+    text = guard_legacy_audio_velocity(enable_cubemap_mips(source.read_text(encoding='utf-8')))
     start = text.index('// EMSCRIPTEN_START_ASM')
     end = text.index('// EMSCRIPTEN_END_ASM', start)
     body = text[start:end].split('var asm=(', 1)[1].strip()

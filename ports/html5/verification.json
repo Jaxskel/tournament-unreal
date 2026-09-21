@@ -4,7 +4,7 @@
   "liveSiteChanged": false,
   "localGameReady": false,
   "checks": {
-    "legacyHTML5CompileAndLink": "passed; beta controls/glue build exit 0, 507.50 seconds, no unresolved symbol warnings",
+    "legacyHTML5CompileAndLink": "passed; fixed-window and standalone-practice build exit0 in361.64seconds, allnine exports verified, no unresolved symbols",
     "legacyPacketTestsInChrome": "passed",
     "newerLinkerProbe": "passed for packet test only; full engine rejected due C library ABI mismatch",
     "matchingRuntimeWasmConversion": "full module validates; asynchronous Chrome runtime initialization and allocator smoke passed",
@@ -13,7 +13,7 @@
       1920,
       1080
     ],
-    "mapLoaded": false,
+    "mapLoaded": true,
     "fpsMeasured": false,
     "multiplayerGameplayVerified": false,
     "gatewayTests": 42,
@@ -22,9 +22,9 @@
     "legacyAssetPreloader": "passed in Chrome with real matching file_packager fixture; not a cooked map",
     "browserControlExports": "all nine present including SessionEpoch; return not-ready before main; actual allocator and matching preloader passed; in-game behavior unverified",
     "launcherTests": {
-      "passed": 36,
-      "skipped": 1,
-      "scope": "fixtures and actual-body native logic; headed pointer skipped in this run"
+      "passed": 64,
+      "skipped": 3,
+      "scope": "default fixtures/native logic; headed pointer and unavailable bundled WebGL1/2 skipped explicitly. Separate installedChrome strict realWebGL1/2 test passed3/3 withno skips."
     },
     "nativePointerCapture": "headed Chrome launcher fixture passed",
     "actualWebGLContext": "Chrome WebGL1 initialized: 16 fragment texture units, 32 combined; world not ready",
@@ -33,8 +33,8 @@
     "compatPreparationTests": 12,
     "browserPacingBuild": "passed; HTML5 build exit0 after removing the desktop busy-wait only on browser target",
     "converterRegressionTests": {
-      "python": 3,
-      "realWasmJavascript": 14
+      "python": 8,
+      "realWasmJavascript": 18
     },
     "materialReport": "Editor plugin build and read-only asset reporting passed; actual first-person base mesh included in fresh Verify",
     "privateMaterialPreparation": "Windows sparse copy preparation passed; 281 files copied, original source audit passed",
@@ -48,12 +48,12 @@
       "python": 10,
       "javascriptBoundsCases": 37
     },
-    "actualLauncherStartup": "Updated Chrome engine initializes WebGL and correct frame prefixes; partial package reaches missing Deck error past the Party callback, then a secondary SceneView ensure. No world-ready or FPS result.",
+    "actualLauncherStartup": "Actual local WASM Deck match with sixbots advances nativeframes at1920x1080; audio velocity crash fixed. Black3D output remains: boundedreadbacks show valid scene/bloomcolor followed by allzero finalfullresolutionpass. No valid gameplayFPS result. StartupI/O diagnostic unclassified.",
     "patcherPreflightTests": 30,
     "partyCallbackTests": 11,
-    "runtimeHarness": "CLI and 113 diagnostic checks passed; real partial package correctly fails on missing material/map with metrics uninitialized",
+    "runtimeHarness": "Lifecycle deadline and cleanup fixes pass; 22 lifecycle/WebGL checks and 113 diagnostic checks passed.",
     "matchReadiness": "Full HTML5 build passed in 540.22 seconds without unresolved symbols; converted runtime initializes in Chrome with nine exports returning not-ready before main.",
-    "browserPlatformConfiguration": "Pinned idempotent installer preserves existing values and overrides UTGameEngine subclass IP game driver; temporary-directory checks passed; not yet staged",
+    "browserPlatformConfiguration": "Exact v1-to-v2 migration applied in isolated tree; ArrowMaterialName points to cooked debug fallback. Ten config tests pass; verified v2package contains configuration.",
     "partyAndLoggingBuild": "Full HTML5 link passed in 582.80 seconds; subsequent match-readiness build also passed.",
     "crossBrowserRuntimeSmoke": {
       "firefox": "Firefox 146.0.1 passed actual WASM initialization, allocator and matching file-packager fixture; not gameplay.",
@@ -61,10 +61,58 @@
     },
     "browserAudio": "Resume runs synchronously before pointer lock for suspended or interrupted audio and retries the active context on each capture. Generated-adapter and launcher fixtures pass; actual sound and interruption recovery in gameplay remain unverified.",
     "legacyWidePrintProbe": "Original asm.js and converted WASM passed eight direct LocalPrint/wprintf cases, including >1 KiB lines; write sink and TTY bytes matched. Aggregated CDO warning repetition remains unexplained.",
-    "fixedSceneResolution": "Source review: current ES2/ES3.1 view finalization forces effective 100% scene percentage. Gameplay render target and viewport dimensions remain unmeasured."
+    "fixedSceneResolution": "Source review: current ES2/ES3.1 view finalization forces effective 100% scene percentage. Gameplay render target and viewport dimensions remain unmeasured.",
+    "fullDeckCook": {
+      "exitCode": 0,
+      "seconds": 4107.55,
+      "warnings": 2710,
+      "maps": [
+        "DM-DeckTest",
+        "UT-Entry"
+      ],
+      "scope": "Full Deck cook completed; sixty distinct material fallback assets remain. Outpost23 is not cooked yet."
+    },
+    "fullDeckPackage": {
+      "uatExitCode": 0,
+      "pakBytes": 1419313050,
+      "dataBytes": 1424709491,
+      "pakFilesTested": 8328,
+      "pakSha256": "14efb40ad102e51102798a85aaec4f04bc75df5e3ff19cc2502fd7718b0b9e7d",
+      "archiveSha256": "82e2147496712165e3aac5a99b3c4136ab4808c601bf9bf559e833b83cba5962",
+      "integrity": "UnrealPak -Test healthy; complete package slices match staging files; transferred archive hash matches; map, entry, registry, shader cache and HTML5 config listed.",
+      "scope": "v2 configuration package; not a ready release."
+    },
+    "firstLocalWorld": {
+      "ready": 1,
+      "epoch": 1,
+      "frame": 909,
+      "canvas": [
+        828,
+        466
+      ],
+      "scope": "Diagnostic run in Chrome; native pre-game screen, not target-resolution combat."
+    },
+    "cubemapMipRendering": {
+      "minimalChromeCases": 84,
+      "actualEngine": "Private activation on the actual GL context eliminated the incomplete-framebuffer samples; converter whitelist fix added.",
+      "firefoxCapability": true,
+      "playwrightWebKitCapability": true,
+      "scope": "Cross-browser extension availability only; full game remains unverified there."
+    },
+    "browserWindowFix": "18 tests and both actual transformed platform blocks pass; full HTML5 C++ build passed. Native window and canvas measured1920x1080 on first world tick. Full gameplay/resolution-switch verification pending.",
+    "practiceStartup": "Actual InitGame body passes standalone/network/error gating checks; HTML5 build passed. Native standalone next-tick match startup now reaches combat audio initialization; full combat verification pending.",
+    "nativeMultiplayerPlugin": "Win64 Development editor plugin linked successfully in3.94seconds with matching audited original import library and -NoHotReload. Network gameplay not yet verified.",
+    "legacyAudioVelocity": "Both removed PannerNode.setVelocity calls guarded; actual private generated audio-body fixture passes 18 JavaScript and 8 converter tests. Reconverted engine runtime verification in progress.",
+    "blackSceneDiagnostic": {
+      "actualSceneColorNonzero": true,
+      "framebufferComplete": true,
+      "sampledGLErrors": [],
+      "firstBlackPass": "fullresolution half-float pass with constant-color fragmentshader; identification inprogress",
+      "scope": "private diagnostic; nativeHUDrendersbut3Dworldblack. Notplayable."
+    }
   },
   "limitations": [
-    "Full Deck shader cook in progress; map readiness, appearance, and performance remain unverified",
+    "Full Deck package exists, but actual gameplay readiness, appearance and performance remain unverified. Sixty distinct material fallbacks need scoped review; Outpost23 cook is outstanding.",
     "WASM Binaryen optimization -O2 produced invalid i64 code in probe; converter does not run those passes",
     "Targets of 120FPS at1080p and60FPS at1440p are not measured results",
     "Tournament production identity, rewards, delayed spectators and anti-cheat require private staging contracts"
