@@ -171,7 +171,13 @@
       "twoClients": "Stable engine/data fingerprints, both reached readiness; Array.h:633 bounds assertion as B joined before reconnect action. Not a reconnect pass.",
       "transport": "Explicit packageFiles bypasses eager Blob duplication; declared same-origin ArrayBuffer requests retain progress/error checks and synchronous teardown. Enabled on private operator manifest."
     },
-    "remainingMultiplayerCrash": "Array.h:633 bounds assertion during second-client join; matching stable artifact report captured, investigation ongoing."
+    "remainingMultiplayerCrash": "Array.h:633 bounds assertion during second-client join; matching stable artifact report captured, investigation ongoing.",
+    "canvasTileLighting": {
+      "cause": "Actual crash trace enters FRendererModule::DrawTileMesh from a Canvas HUD tile. The temporary mobile view lacks the default directional-light buffer at slot zero; the bound pixel shader reads its light color and direction.",
+      "patch": "Browser-only, feature level below SM4, initialize the typed default buffer at slot zero only if absent. Existing valid buffer and native behavior preserved.",
+      "tests": "Six passed including pinned actual Renderer.cpp body roundtrip, compiled browser/native feature-level and existing-buffer cases, and physical preflight/backup/idempotence. Independently reviewed.",
+      "build": "In progress; no fixed-runtime claim."
+    }
   },
   "limitations": [
     "Private Deck/Outpost package is complete and the 1080p arena now renders locally, but a later null shader uniform-buffer assertion blocks stable gameplay. 65 distinct material fallbacks need scoped review. Reconnect transport, combat, travel and performance remain under verification.",
