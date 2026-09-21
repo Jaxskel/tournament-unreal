@@ -15,4 +15,4 @@ if ($ValidateOnly) { $layout; return }
 Confirm-TournamentLicense $layout $AcceptLicense.IsPresent
 $arenaPath=if($Arena -eq 'Outpost'){'/Game/RestrictedAssets/Maps/DM-Outpost23'}else{'/Game/RestrictedAssets/Maps/WIP/DM-DeckTest'}
 $map=$arenaPath+'?Game=/Script/TournamentBridge.TournamentDeathmatch?Mutator=TournamentBridge.TournamentBridgeMutator?BotFill=7?MaxPlayers=7?LAN=1?RequireReady=0?MaxPlayerWait=3?Difficulty=3?TimeLimit='+$Minutes+'?GoalScore='+$Frags
-Start-TournamentNative $layout @($map,'-server','-nullrhi','-nosound','-unattended','-LAN',"-port=$Port",("-BeaconPort="+($Port+1)),"-MULTIHOME=$ListenAddress") 'server'
+Start-TournamentNative $layout @($map,'-server','-nullrhi','-nosound','-unattended','-LAN','-LogCmds="LogTemp Log"',"-port=$Port",("-BeaconPort="+($Port+1)),"-MULTIHOME=$ListenAddress") 'server'

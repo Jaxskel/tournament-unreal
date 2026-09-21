@@ -121,7 +121,7 @@ export async function createGateway(options = {}) {
       const seat = seats.find(s => !s.lease && s.native && now - s.frameAt < frameFreshMs && s.frame);
       if (!seat) {
         const full = seats.every(s => s.lease);
-        return json(res, full ? 409 : 503, { error: full ? 'Both seats are in use. Try again when a player leaves.' : 'The game is warming up. Try again in a moment.', code: full ? 'full' : 'warming-up' });
+        return json(res, full ? 409 : 503, { error: full ? 'Both seats are in use. Try again when a player leaves.' : 'The arena is reconnecting.', code: full ? 'full' : 'recovering' });
       }
       const token = randomBytes(32).toString('base64url');
       const lease = { token, seat, expiresAt: now + leaseMs, lastActivity: now, inputStale: false, menuOpen: false, ws: null };

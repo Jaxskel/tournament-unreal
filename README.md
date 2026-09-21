@@ -21,7 +21,9 @@ Settings adjusts sensitivity. Disconnect releases a browser seat; Play Again req
 - A full source-built multiplayer match produced 33 authoritative kill events plus a final ranked scoreboard; its 35-record event log passed the event validator.
 - Automatic server rotation from Deck to Outpost was observed, and both browser streams resumed on Outpost after its first asset preparation.
 - A browser disconnected with its native menu open and rejoined with the menu correctly closed. A third simultaneous join returned HTTP 409 with the arena-full message. Native Diagnostics → Reconnect reloaded Deck in approximately 1.34 seconds and resumed the stream.
-- The browser gateway has 24 passing tests covering two-seat isolation, origins, tokens, input validation, interrupted connections, menu state, reconnects, and high-refresh mouse handling. Eight event-validator tests also pass.
+- The browser gateway has 27 passing tests covering two-seat isolation, origins, tokens, input validation, interrupted connections, menu state, reconnects, and high-refresh mouse handling. Eight event-validator tests also pass.
+
+The native supervisor now restarts exited or stalled game processes automatically. Play retries a recovering arena without requiring another click. Warm Play-to-first-frame checks took 0.14–0.30 seconds; native recovery itself takes longer.
 
 Both arena caches have been prepared on the current host. A fresh installation still needs first-run texture and shader preparation; placeholder materials during compilation are not a finished visual result. The stream targets 24 FPS at 960×540; initial live checks saw approximately 21–22 FPS on Deck and lower performance while compiling Outpost. Those numbers are observations, not a 60 FPS or cross-browser performance guarantee. See [runtime verification](docs/multiplayer-verification.md) and [browser transport details](browser/README.md) for limits and further checks.
 

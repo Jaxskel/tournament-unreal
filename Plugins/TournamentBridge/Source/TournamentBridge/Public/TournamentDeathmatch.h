@@ -14,6 +14,8 @@ class TOURNAMENTBRIDGE_API ATournamentDeathmatch : public AUTDMGameMode
 public:
     ATournamentDeathmatch(const FObjectInitializer& ObjectInitializer);
     virtual void TravelToNextMap_Implementation() override;
+    virtual void HandleMatchHasEnded() override;
+    virtual float GetTravelDelay() override;
 
     // Server configuration only; full /Game package names, never URL options.
     UPROPERTY(Config)

@@ -6,6 +6,7 @@ const keys = new Map(Object.entries({ KeyW:'W', KeyA:'A', KeyS:'S', KeyD:'D', Sp
 let socket = null;
 let active = false;
 let joining = false;
+let joinAbort = null;
 let menuMode = false;
 let pendingFrame = null;
 let decoding = false;
@@ -77,6 +78,8 @@ function setActive(value) {
   inputHint();
 }
 function disconnect(message = 'Seat released. You can join again.') {
+  joinAbort?.abort();
+  joinAbort = null;
   // Do not call send()/reset() here: send() itself disconnects on backpressure.
   if (active && socket?.readyState === WebSocket.OPEN && socket.bufferedAmount <= 64 * 1024) socket.send(JSON.stringify({ type: 'reset' }));
   held.clear();
@@ -131,16 +134,36 @@ function decodeImage(blob) {
     img.src = url;
   });
 }
+async function waitForSeat(signal) {
+  const deadline = performance.now() + 90000;
+  while (!signal.aborted) {
+    const response = await fetch('/api/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
+    const result = await response.json();
+    signal.throwIfAborted();
+    if (response.ok) return result;
+    if (response.status !== 503) throw new Error(result.error || 'Could not join. Please try again.');
+    if (performance.now() >= deadline) throw new Error('The game host is offline. Please try again shortly.');
+    $('feedback').textContent = 'Reconnecting the arena… You’ll enter automatically when it’s ready.';
+    await new Promise((resolve, reject) => {
+      const abort = () => { clearTimeout(timer); reject(new DOMException('Cancelled', 'AbortError')); };
+      const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, 1500);
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) abort();
+    });
+  }
+  throw new DOMException('Cancelled', 'AbortError');
+}
 async function join() {
   if (joining || active) return;
   joining = true;
-  $('play').disabled = true;
-  $('feedback').textContent = 'Finding your seat…';
+  const version = ++generation;
+  joinAbort = new AbortController();
+  $('play').disabled = false;
+  $('play').textContent = 'CANCEL';
+  $('feedback').textContent = 'Connecting…';
   try {
-    const response = await fetch('/api/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(8000) });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Could not join. Please try again.');
-    const version = ++generation;
+    const result = await waitForSeat(joinAbort.signal);
+    if (version !== generation) return;
     const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/stream`);
     socket = ws;
     ws.binaryType = 'blob';
@@ -159,6 +182,7 @@ async function join() {
       if (packet.type === 'joined') {
         clearTimeout(joinTimer);
         joining = false;
+        joinAbort = null;
         frames = fps = 0;
         rtt = null;
         lastFrameAt = performance.now();
@@ -193,10 +217,13 @@ async function join() {
       clearTimeout(joinTimer);
       if (socket === ws) disconnect(event.code === 1008 ? 'Session rejected or expired. Please join again.' : 'Connection closed. Join again to reconnect.');
     };
-    ws.onerror = () => { $('feedback').textContent = 'Could not reach the stream. Please try again.'; };
+    ws.onerror = () => { if (socket === ws) $('feedback').textContent = 'Could not reach the stream. Please try again.'; };
   } catch (error) {
+    if (version !== generation) return;
+    joinAbort = null;
     joining = false;
     $('play').disabled = false;
+    $('play').textContent = 'PLAY AGAIN ↗';
     $('feedback').textContent = error.name === 'TimeoutError' ? 'The host took too long to respond. Please try again.' : error.message;
   }
 }
@@ -208,11 +235,11 @@ async function refreshHealth() {
     if (!response.ok) throw new Error();
     const health = await response.json();
     const ready = health.seats.filter(s => s.nativeConnected && s.frameAgeMs !== null && s.frameAgeMs < 10000 && !s.occupied).length;
-    $('availability').textContent = ready ? `${ready} of 2 seats available` : health.seats.every(s => s.occupied) ? 'Arena full · try again shortly' : 'The host is preparing the arena';
+    $('availability').textContent = ready ? `${ready} of 2 seats available` : health.seats.every(s => s.occupied) ? 'Arena full · try again shortly' : 'Arena reconnecting · Play will join when ready';
   } catch { $('availability').textContent = 'Waiting for the host'; }
   finally { healthLoading = false; }
 }
-$('play').addEventListener('click', join);
+$('play').addEventListener('click', () => joining ? disconnect('Connection cancelled.') : join());
 $('disconnect').addEventListener('click', () => disconnect());
 $('capture').addEventListener('click', captureMouse);
 $('menu').addEventListener('click', toggleMenu);

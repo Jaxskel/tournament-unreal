@@ -1,14 +1,17 @@
 #include "TournamentBridgeMutator.h"
 #include "TournamentDeathmatch.h"
 #include "TournamentHUD.h"
+#include "TournamentGameState.h"
 #include "TournamentPlayerController.h"
 #include "Misc/PackageName.h"
+#include "UTRecastNavMesh.h"
 
 ATournamentDeathmatch::ATournamentDeathmatch(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
 {
     bDisableMapVote = true;
     HUDClass = ATournamentHUD::StaticClass();
+    GameStateClass = ATournamentGameState::StaticClass();
     PlayerControllerClass = ATournamentPlayerController::StaticClass();
     BotFillCount = 7;
     ArenaRotation.Add(TEXT("/Game/RestrictedAssets/Maps/WIP/DM-DeckTest"));
@@ -51,4 +54,23 @@ void ATournamentDeathmatch::TravelToNextMap_Implementation()
     {
         UE_LOG(LogTemp, Error, TEXT("Tournament: travel request failed for %s"), *NextMap);
     }
+}
+
+void ATournamentDeathmatch::HandleMatchHasEnded()
+{
+    // Use a short scoreboard interval instead of the stock character ceremony.
+    // Keep the engine session lifecycle and bot learning, and use Tournament's
+    // scoreboard during the result interval instead of spawning that ceremony.
+    AGameMode::HandleMatchHasEnded();
+    AUTRecastNavMesh* NavData = GetUTNavData(GetWorld());
+    if (NavData)
+    {
+        NavData->SaveMapLearningData();
+    }
+    UE_LOG(LogTemp, Log, TEXT("Tournament: round complete; scoreboard then automatic rotation."));
+}
+
+float ATournamentDeathmatch::GetTravelDelay()
+{
+    return 12.0f;
 }

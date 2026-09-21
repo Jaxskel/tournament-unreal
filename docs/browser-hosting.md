@@ -58,3 +58,13 @@ HTTP 8890, frame TCP 9001/9002 and control UDP 9101/9102 bind to loopback only. 
 - Disconnect/blur releases held controls. Native input also has a three-second watchdog. Each seat has exclusive control; a third browser gets an arena-full response.
 
 The initial implementation captures at most 24 frames per second at 960×540, with bounded queues that drop stale frames under backpressure. It does not claim a tested 60 FPS stream or production availability. Transport tests are separate from live gameplay evidence.
+
+## Keeping the arena ready
+
+`start-web-game.ps1` preloads the authoritative server and both GPU seats before browser visitors join. It checks owned processes every two seconds and checks `/api/health` for fresh native frames. An exited process restarts the group after three seconds. A seat with no fresh frames for 120 seconds also triggers recovery (including hung processes). A missing HTTP gateway alone does not trigger repeated native restarts. First-run cache preparation can use `-FrameTimeoutSeconds 600`; warm the assets before sharing the URL.
+
+The supervisor catches failures and retries continuously; Task Scheduler's finite restart count is not the recovery mechanism. Logs are appended directly to `Saved/Logs/Tournament/supervisor.log`, so a wrapper redirect is unnecessary. Each failed run preserves native logs in `recovery-<UTC timestamp>`; only the newest ten recovery directories are retained. `-Once` is available for fail-fast diagnostics. Stop the hosting task and its owned native processes before rebuilding the plugin.
+
+The recovered build crashed during replication of a post-match cosmetic `FavoriteWeapon` class reference. The minidump placed the invalid object at offset `0x648` in the replicated player state, matching `AUTPlayerState::FavoriteWeapon` in its debug symbols. `TournamentGameState` skips generating stock cosmetic weapon highlights and retains server-owned frag standings. `TournamentDeathmatch` keeps the base engine end-of-match lifecycle and bot learning, displays the scoreboard, and rotates after 12 seconds without the character ceremony. Disabling the ceremony alone did not resolve the crash; no engine object-validity checks are bypassed.
+
+The page joins immediately when a fresh seat exists. During a restart it retries HTTP 503 automatically, with Cancel and a 90-second deadline; a full arena still reports capacity immediately. Recovery is not instantaneous: native initialization takes time, so continuous preloading is what makes normal joins fast. This does not provide uptime while the Windows PC is off or offline.

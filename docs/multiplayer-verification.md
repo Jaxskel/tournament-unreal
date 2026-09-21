@@ -32,3 +32,16 @@ The recovered Windows source build ran one authoritative TournamentDeathmatch se
 Remaining production checks: independent Firefox/Safari performance, extended soak testing, a permanent host/domain, audio transport, delayed spectators, Tournament-issued tickets/identity, account restrictions, reward configuration/settlement, and anti-cheat ingestion. A successful demo is not production certification. Current demo seats are shared native players and award no platform money or points.
 
 The preserved Mac shipping client (CL3525360) is separate. The browser demo streams the recovered source build and its Tournament plugin, not that preserved client.
+
+## Recovery verification — 20 September 2026 (EDT)
+
+The previously shared host had stopped after a native server crash, leaving HTTP available but both game sources absent. The old supervisor exited with the failed game. The first attempted mitigation (removing the character ceremony) was insufficient. Windows CDB analysis of the minidump identified the invalid replicated reference at the `AUTPlayerState::FavoriteWeapon` offset. The final build uses `TournamentGameState` to skip cosmetic weapon highlights and retains the frag standings.
+
+Observed with the rebuilt plugin, not just socket fixtures:
+
+- Two completed short rounds rotated Deck → Outpost → Deck without a native restart. Both event logs validated: Deck had 9 records (start, 7 kills, final ranking); Outpost had 6 (start, 4 kills, final ranking).
+- Through the public HTTPS address, four warm Play-to-first-drawn-frame measurements were 296, 246, 138, and 137 ms. This measures initial video display, not input latency; first-ever native startup remains slower.
+- An owned dedicated server was deliberately terminated at 03:15:03 UTC. The supervisor detected the exit and launched a replacement group without a manual task restart. The existing browser retained its seat and resumed frames. A second browser pressed Play during the outage, received the recovery status, and entered automatically without another click. Both then displayed live frames at approximately 19–22 FPS.
+- Native plugin compilation, 27 Node tests, 8 event tests, and PowerShell launcher checks passed. Browser checks showed a rendered game and no reported page errors.
+
+The demo remains dependent on the Windows GPU host staying awake and online. This verification covers short rounds and a forced crash, not an extended unattended uptime guarantee. Recovery takes native initialization time; keeping both seats preloaded enables fast normal joins.
