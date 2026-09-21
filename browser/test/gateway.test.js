@@ -376,3 +376,22 @@ test('video acknowledgements do not refresh the held-input watchdog', async t =>
 test('stream frame rate is validated before binding any listener',async()=>{
   await assert.rejects(createGateway({fps:1000}),/Stream FPS/);
 });
+
+
+test('720p profile matches encoder configuration, client metadata and raw-frame parser',async t=>{
+  let encoderOptions;
+  class Encoder {
+    constructor(_path,publish,_fail,options){encoderOptions=options;this.publish=publish;}
+    push(frame){assert.equal(frame.length,1280*720*4);this.publish({data:Buffer.alloc(20),seq:1,key:true,codec:'avc1.640033'});}
+    close(){}
+  }
+  const f=await fixture(t,{ffmpegPath:process.execPath,Encoder,resolution:'720p'});
+  await f.native(0,frame(Buffer.alloc(1280*720*4)));
+  const joined=await f.ws((await f.join()).body.token);
+  await until(()=>joined.packets.some(p=>p.type==='joined'));
+  const metadata=joined.packets.find(p=>p.type==='joined');
+  assert.equal(metadata.width,1280);assert.equal(metadata.height,720);
+  assert.deepEqual(encoderOptions,{fps:120,resolution:'720p'});
+  assert.equal(f.gateway.status().width,1280);assert.equal(f.gateway.status().height,720);
+  await assert.rejects(createGateway({ffmpegPath:process.execPath,resolution:'4k'}),/profile/);
+});

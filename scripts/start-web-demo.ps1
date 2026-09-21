@@ -7,6 +7,7 @@ param(
     [int]$Frags=30,
     [ValidateRange(-1,15)][int]$GraphicsAdapter=-1,
     [ValidateSet(60,120)][int]$StreamFPS=120,
+    [ValidateSet('540p','720p','1080p')][string]$StreamResolution='720p',
     [string]$FFmpeg
 )
 # Run from a persistent Windows Scheduled Task, not a short-lived SSH child.
@@ -15,6 +16,7 @@ $ErrorActionPreference='Stop'
 if($FFmpeg -and !(Test-Path $FFmpeg -PathType Leaf)) { throw 'FFmpeg executable not found.' }
 $env:FFMPEG_PATH=$FFmpeg
 $env:STREAM_FPS=[string]$StreamFPS
+$env:STREAM_RESOLUTION=$StreamResolution
 $repo=Split-Path $PSScriptRoot -Parent
 $state=Join-Path $SourceRoot 'UnrealTournament\Saved\Tournament\Web'
 New-Item -ItemType Directory -Force $state | Out-Null
@@ -40,7 +42,7 @@ try {
     @{url=$origin;startedAtUtc=[DateTime]::UtcNow.ToString('o');rewards=$false;audio=$false;capacity=2} | ConvertTo-Json | Set-Content "$state\current-demo.local.json"
     Write-Output "Browser demo URL: $origin"
     Write-Output 'Game content may need several minutes to build its initial cache.'
-    & "$PSScriptRoot\start-web-game.ps1" -SourceRoot $SourceRoot -Minutes $Minutes -Frags $Frags -GraphicsAdapter $GraphicsAdapter -HardwareVideo:([bool]$FFmpeg) -StreamFPS $StreamFPS
+    & "$PSScriptRoot\start-web-game.ps1" -SourceRoot $SourceRoot -Minutes $Minutes -Frags $Frags -GraphicsAdapter $GraphicsAdapter -HardwareVideo:([bool]$FFmpeg) -StreamFPS $StreamFPS -StreamResolution $StreamResolution
 } finally {
     if($gateway -and !$gateway.HasExited) { Stop-Process -Id $gateway.Id -ErrorAction SilentlyContinue }
     if($tunnel -and !$tunnel.HasExited) { Stop-Process -Id $tunnel.Id -ErrorAction SilentlyContinue }

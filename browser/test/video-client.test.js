@@ -84,3 +84,13 @@ test('120 Hz decoder accepts a brief network burst without losing prediction',t=
   h.instances[0].decodeQueueSize=13;h.push(13);
   assert.equal(h.instances.length,2);assert.equal(h.instances[0].state,'closed');assert.ok(h.client.sources.size<=16);
 });
+
+
+test('HD decoding uses full native dimensions and rejects unbounded sizes',()=>{
+  for(const [width,height] of [[960,540],[1280,720],[1920,1080]]) {
+    const client=new GameVideoDecoder({fps:120,width,height});
+    assert.equal(client.config('avc1.640033').codedWidth,width);
+    assert.equal(client.config('avc1.640033').codedHeight,height);
+  }
+  assert.throws(()=>new GameVideoDecoder({width:10000,height:10000}));
+});

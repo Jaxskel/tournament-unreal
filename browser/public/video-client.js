@@ -1,7 +1,9 @@
 // H.264 Annex B is decoded by the browser's media decoder, not a JPEG/image loop.
 export class GameVideoDecoder {
-  constructor({draw, send, failure, fps = 60}) {
+  constructor({draw, send, failure, fps = 60, width = 960, height = 540}) {
     if (![60,120].includes(fps)) throw new Error('Invalid stream frame rate');
+    if (![[960,540],[1280,720],[1920,1080]].some(([w,h])=>width===w&&height===h)) throw new Error('Invalid video size');
+    this.width = width; this.height = height;
     this.fps = fps;
     this.maxDecodeQueue = fps === 120 ? 12 : 2;
     this.maxSources = fps === 120 ? 16 : 8;
@@ -20,7 +22,7 @@ export class GameVideoDecoder {
     throw new Error('No supported H.264 decoder');
   }
   config(codec, acceleration = this.acceleration) {
-    return {codec,codedWidth:960,codedHeight:540,optimizeForLatency:true,hardwareAcceleration:acceleration};
+    return {codec,codedWidth:this.width,codedHeight:this.height,optimizeForLatency:true,hardwareAcceleration:acceleration};
   }
   configure(codec) {
     const generation = ++this.generation;

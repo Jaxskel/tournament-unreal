@@ -253,3 +253,15 @@ test('FPS normalizes delayed timer intervals and distinguishes browser cadence',
   assert.match(h.element('metrics').textContent, /120 FPS/);
   assert.match(h.element('metrics').title, /60 Hz browser animation/);
 });
+
+
+test('1080p stream resizes the canvas instead of downsampling into the old 540p buffer',async()=>{
+  const h=harness();const ws=await h.join();
+  ws.onmessage({data:JSON.stringify({type:'joined',seat:1,width:1920,height:1080})});
+  assert.equal(h.element('game').width,1920);assert.equal(h.element('game').height,1080);
+  h.run('setMenu(true)');
+  h.element('game').dispatch('mousedown',{button:0,clientX:480,clientY:270});
+  assert.deepEqual(ws.sent.at(-1),{type:'menu',x:0.5,y:0.5});
+  ws.onmessage({data:JSON.stringify({type:'joined',seat:1,width:99999,height:1080})});
+  assert.equal(ws.readyState,3);assert.match(h.element('feedback').textContent,/resolution/);
+});

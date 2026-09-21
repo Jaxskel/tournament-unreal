@@ -64,7 +64,7 @@ HTTP 8890, frame TCP 9001/9002 and control UDP 9101/9102 bind to loopback only. 
 - Escape/Menu: native Tournament menu. Settings, diagnostics, and reconnect belong to the game; browser fullscreen belongs to the web toolbar.
 - Disconnect/blur releases held controls. Native input also has a three-second watchdog. Each seat has exclusive control; a third browser gets an arena-full response.
 
-The optimized mode targets 120 FPS at 960×540 and approximately 6 Mbit/s per seat. Rendering uses the RTX, capture completion is asynchronous to the game thread, and NVENC replaces CPU JPEG compression. Raw-frame queues, WebSocket acknowledgements, and WebCodecs decode queues are bounded. Keyframes every ten pictures shorten recovery after a dropped prediction. Omitting both video options preserves the old 24 FPS JPEG diagnostic mode. See [measured performance](web-performance.md); transport tests are separate from live gameplay evidence.
+The optimized mode targets 120 FPS at 1280×720 and approximately 12 Mbit/s per seat. Rendering uses the RTX, capture completion is asynchronous to the game thread, and NVENC replaces CPU JPEG compression. Raw-frame queues, WebSocket acknowledgements, and WebCodecs decode queues are bounded. Keyframes every ten pictures shorten recovery after a dropped prediction. Omitting both video options preserves the old 24 FPS JPEG diagnostic mode. See [measured performance](web-performance.md); transport tests are separate from live gameplay evidence.
 
 ## Keeping the arena ready
 
@@ -82,6 +82,19 @@ When updating a Scheduled Task wrapper, verify that its old Node child actually 
 
 `STREAM_FPS=120` is the gateway default and `-StreamFPS 120` is the native launcher default. The combined launcher passes the selected rate to both. To select the lower-bandwidth profile, set both `STREAM_FPS=60` and `-StreamFPS 60`; never change only one. The gateway advertises FPS to the browser so decode timestamps match the selected cadence.
 
-At 120 FPS the clients render with a 144 FPS ceiling, providing capture scheduling headroom; capture and encoder output remain limited to 120. The launcher disables this game's legacy smooth-frame-rate cap. Mouse forwarding is capped at 120 Hz and the authenticated control budget covers simultaneous video receipts and mouse movement. Encoder conversion uses one CPU filter thread and NV12 input to NVENC; at most three pictures may be in flight through the encoder.
+At 120 FPS the clients render with a 240 FPS ceiling, providing capture scheduling headroom; capture and encoder output remain limited to 120. The launcher disables this game's legacy smooth-frame-rate cap. Mouse forwarding is capped at 120 Hz and the authenticated control budget covers simultaneous video receipts and mouse movement. Encoder conversion uses one CPU filter thread and NV12 input to NVENC; at most three pictures may be in flight through the encoder.
 
 A 120 Hz display/browser presentation path is needed to see 120 distinct frames per second. Canvas draw/stream FPS is not a measurement of panel refresh. Higher capture cadence can still reduce frame age on a 60 Hz display. Network pauses cannot be eliminated by an FPS setting.
+
+
+### Resolution and clarity
+
+Pair the gateway `STREAM_RESOLUTION` with native `-StreamResolution`; both default to `720p`. Supported values are `540p`, `720p` and `1080p`. Restart both gateway and native clients after a profile change; reload browser clients. The combined launcher passes both settings automatically. Legacy JPEG mode stays at 540p.
+
+| Profile | Native size | 120 FPS bitrate target | 60 FPS bitrate target |
+| --- | --- | --- | --- |
+| 540p | 960x540 | 6 Mbit/s | 4 Mbit/s |
+| 720p (default) | 1280x720 | 12 Mbit/s | 8 Mbit/s |
+| 1080p | 1920x1080 | 24 Mbit/s | 16 Mbit/s |
+
+These are targets, not measured frame-rate guarantees. On this host, two-seat gameplay measured about 103-109 FPS at 720p; the 1080p test delivered about 50 FPS. Source rendering is 100% scale with motion blur/depth of field disabled, FXAA and 16x anisotropic filtering. H.264 High uses NVENC P3 with zero B-frames and lookahead; the VBV buffer represents about 32 ms of target bitrate. The 720p default preserves more detail than the old 540p profile while avoiding the larger 1080p speed regression. See the latest performance report before changing it.

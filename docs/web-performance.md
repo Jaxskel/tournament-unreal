@@ -1,5 +1,17 @@
 # Browser stream performance — September 21, 2026
 
+## Image clarity follow-up: HD with a measured speed tradeoff
+
+The current host profile is **1280x720, target 120 FPS, 12 Mbit/s H.264 High / NVENC P3**. The old profile was 960x540, 6 Mbit/s Baseline / P1. The new canvas and decoder retain the actual negotiated resolution end to end. The toolbar displays `720p` so source resolution cannot be mistaken for screen size. The native launcher requests 100% render scale, no motion blur or depth of field, FXAA instead of temporal AA, and 16x anisotropic filtering. The render ceiling is 240 FPS to give capture headroom, not a claim that the stream reaches 240 FPS.
+
+At the final settings, a 20-second Windows Edge gameplay run with the other browser seat connected measured **102.7 FPS**, p95 17.8 ms, p99 25.3 ms, maximum 42.5 ms, and no gaps above 50 ms. Menu, recapture, firing, movement and reconnect checks passed with no page errors. The Mac Chromium sample measured **108.8 FPS** across 3,259 draws in 30 seconds, approximately 10.88 Mbit/s, p95 18.3 ms, p99 97.6 ms and maximum 112.8 ms. The Mac still had 18 gaps above 100 ms. This is sharper than the previous profile but not a sustained 120 FPS result or a fix for the Mac network pauses.
+
+We also tested 1920x1080 at 24 Mbit/s with two seats. It decoded at the full resolution and passed control/reconnect checks, but delivered only **50.2 FPS** with the 144 FPS native render ceiling. The native raw feed was similarly slow, locating the limit upstream of browser decode. It is supported as an optional host configuration, not the selected live profile. A subsequent 720p experiment with the 144 ceiling measured 102.0 FPS; raising the ceiling to 240 did not restore sustained 120 FPS in the final gameplay run.
+
+The accepted raw sizes are exactly 960x540x4, 1280x720x4 or 1920x1080x4 BGRA, selected by trusted host configuration. One parser allocation and three encoder pictures bound memory; JPEG and encoded-packet size limits remain 4 MiB. Client metadata, native viewport, parser and encoder must use the same profile. All 53 browser tests, native build and Windows launcher checks passed. Existing account/reward and Epic licensing limitations remain unresolved.
+
+The earlier measurements below used 540p unless otherwise stated.
+
 ## Gameplay and Mac refresh follow-up
 
 Fixed an input scheduling defect that reproducibly sent only 99 mouse updates during 120 evenly spaced animation callbacks. The sender now preserves its deadline with a 0.5 ms tolerance and resets after idle time without catch-up bursts. Regression tests cover 120/119.88 Hz, alternating early/late callbacks, and 360/1000 Hz rate limits. Added the advertised arrow controls through the browser, gateway allowlist and native receiver; Up/Down navigate the menu and Left/Right adjust settings.

@@ -162,7 +162,7 @@ void FTournamentBrowserStream::PumpFrames()
         if (!Frames || !Frames->Connect(*Address)) { CloseFrames(); return; }
         Frames->SetNonBlocking(true);
         int32 BufferSize = 0;
-        Frames->SetSendBufferSize(4 * 1024 * 1024, BufferSize);
+        Frames->SetSendBufferSize(12 * 1024 * 1024, BufferSize);
         UE_LOG(LogTemp, Log, TEXT("Tournament browser: framebuffer gateway connected"));
     }
     if (!Frames) return;
@@ -194,7 +194,7 @@ void FTournamentBrowserStream::PumpFrames()
                 const TArray<uint8>& Encoded = JPEG->GetCompressed(65);
                 Data = Encoded.GetData(); Length = Encoded.Num();
             }
-            if (Length < 4 || Length > 4 * 1024 * 1024) { Capture.Reset(); return; }
+            if (Length < 4 || Length > (bRawFrames ? 1920 * 1080 * 4 : 4 * 1024 * 1024)) { Capture.Reset(); return; }
             Pending.SetNumUninitialized(Length + 4);
             Pending[0] = uint8(uint32(Length) >> 24); Pending[1] = uint8(uint32(Length) >> 16);
             Pending[2] = uint8(uint32(Length) >> 8); Pending[3] = uint8(Length);
@@ -215,7 +215,7 @@ void FTournamentBrowserStream::PumpFrames()
     FViewport* Viewport = GEngine->GameViewport->Viewport;
     const FIntPoint Size = Viewport->GetSizeXY();
     if (Size.X < 1 || Size.Y < 1 || Size.X > 1920 || Size.Y > 1080) return;
-    if (bRawFrames && (Size.X != 960 || Size.Y != 540)) return;
+    if (bRawFrames && !((Size.X == 960 && Size.Y == 540) || (Size.X == 1280 && Size.Y == 720) || (Size.X == 1920 && Size.Y == 1080))) return;
     const FViewportRHIRef RHIViewport = Viewport->GetViewportRHI();
     if (!RHIViewport.IsValid()) return;
     Capture = MakeShareable(new FTournamentCapture(Size));

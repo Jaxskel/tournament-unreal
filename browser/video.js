@@ -1,6 +1,12 @@
 import { spawn } from 'node:child_process';
 
-export const RAW_BYTES = 960 * 540 * 4;
+export function videoProfile(resolution = '720p', fps = 120) {
+  const sizes = {'540p':[960,540,6,4], '720p':[1280,720,12,8], '1080p':[1920,1080,24,16]};
+  if (!Object.hasOwn(sizes, resolution) || ![60,120].includes(fps)) throw new Error('Invalid video profile');
+  const [width,height,fastMbps,normalMbps] = sizes[resolution];
+  return {width,height,rawBytes:width*height*4,bitrateMbps:fps===120?fastMbps:normalMbps};
+}
+export const RAW_BYTES = videoProfile().rawBytes;
 const START = Buffer.from([0, 0, 1]);
 const MAX_UNIT = 4 * 1024 * 1024;
 // NVENC emits one AUD per picture. Keep only the current access unit and handle
@@ -42,18 +48,20 @@ export function videoPacket(data, seq, capturedAt, key) {
   return Buffer.concat([header, data]);
 }
 export class HardwareEncoder {
-  constructor(path, onFrame, onFailure, {fps = 120} = {}) {
+  constructor(path, onFrame, onFailure, {fps = 120, resolution = '720p'} = {}) {
     if (![60,120].includes(fps)) throw new Error('Stream FPS must be 60 or 120');
-    const bitrate = fps === 120 ? '6M' : '4M';
+    const profile = videoProfile(resolution, fps);
+    this.rawBytes = profile.rawBytes;
+    const bitrate = `${profile.bitrateMbps}M`;
     this.closed = false; this.times = []; this.seq = 0; this.codec = null;
     this.dropped = 0; this.error = ''; this.lastInput = 0; this.lastOutput = Date.now();
     this.process = spawn(path, [
       '-hide_banner', '-loglevel', 'error', '-filter_threads', '1', '-threads', '1', '-f', 'rawvideo', '-pixel_format', 'bgra',
-      '-video_size', '960x540', '-framerate', String(fps), '-i', 'pipe:0', '-an',
-      '-c:v', 'h264_nvenc', '-preset', 'p1', '-tune', 'ull', '-zerolatency', '1', '-delay', '0',
-      '-rc', 'cbr', '-b:v', bitrate, '-maxrate', bitrate, '-bufsize', '128k',
+      '-video_size', `${profile.width}x${profile.height}`, '-framerate', String(fps), '-i', 'pipe:0', '-an',
+      '-c:v', 'h264_nvenc', '-preset', 'p3', '-tune', 'ull', '-zerolatency', '1', '-delay', '0',
+      '-rc', 'cbr', '-b:v', bitrate, '-maxrate', bitrate, '-bufsize', `${profile.bitrateMbps * 32}k`,
       '-g', '10', '-bf', '0', '-rc-lookahead', '0', '-aud', '1',
-      '-profile:v', 'baseline', '-pix_fmt', 'nv12', '-fps_mode', 'passthrough',
+      '-profile:v', 'high', '-pix_fmt', 'nv12', '-fps_mode', 'passthrough',
       '-flush_packets', '1', '-f', 'h264', 'pipe:1',
     ], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     const fail = error => { if (!this.closed) { this.close(); onFailure(error); } };
@@ -77,7 +85,7 @@ export class HardwareEncoder {
   }
   push(frame) {
     this.lastInput = Date.now();
-    if (frame.length !== RAW_BYTES) throw new Error('Invalid raw frame size');
+    if (frame.length !== this.rawBytes) throw new Error('Invalid raw frame size');
     // At most three pictures total across the pipe, encoder and AU delimiter.
     // A large write exceeding Node's small high-water mark is not itself a
     // reason to lose the next picture; the explicit in-flight bound controls it.

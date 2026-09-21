@@ -195,6 +195,8 @@ async function join() {
       let packet;
       try { packet = JSON.parse(event.data); } catch { return; }
       if (packet.type === 'joined') {
+        if (![[960,540],[1280,720],[1920,1080]].some(([w,h]) => packet.width===w && packet.height===h)) { disconnect('Invalid stream resolution.'); return; }
+        canvas.width = packet.width; canvas.height = packet.height;
         clearTimeout(joinTimer);
         joining = false;
         joinAbort = null;
@@ -212,7 +214,7 @@ async function join() {
         if (packet.video === 'h264') {
           if (typeof VideoDecoder === 'undefined') { disconnect('This stream needs a browser with H.264 WebCodecs support. Open it in current Chrome or Edge.'); return; }
           videoDecoder = new GameVideoDecoder({
-            send, fps:packet.fps ?? 60,
+            send, fps:packet.fps ?? 60, width:packet.width, height:packet.height,
             draw: frame => {
               if (!active || generation !== version) return;
               ctx.drawImage(frame,0,0,canvas.width,canvas.height);
@@ -369,7 +371,7 @@ setInterval(() => {
   if (!active) return;
   const age = videoDecoder?.frameAge;
   $('metrics').title = `${browserHz} Hz browser animation cadence. FPS counts decoded game frames, not physical screen refresh. RTT is network round-trip time; video age excludes input and screen scanout.`;
-  $('metrics').textContent = `${fps} FPS · ${rtt === null ? '—' : rtt} ms RTT${videoDecoder ? ` · H.264${age === null ? '' : ` · ${Math.round(age)} ms video age`}` : ''}`;
+  $('metrics').textContent = `${canvas.height}p · ${fps} FPS · ${rtt === null ? '—' : rtt} ms RTT${videoDecoder ? ` · H.264${age === null ? '' : ` · ${Math.round(age)} ms video age`}` : ''}`;
   if (performance.now() - lastFrameAt > 3000) {
     $('stream-notice').textContent = 'Reconnecting game video…';
     $('stream-notice').hidden = false;

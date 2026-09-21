@@ -57,10 +57,27 @@ test('120 FPS acknowledgement window preserves the 200 ms bound without unnecess
 
 test('encoder tolerates pipe backpressure but never queues more than three pictures',async()=>{
   const {HardwareEncoder}=await import('../video.js');
-  let writes=0;const encoder={closed:false,times:[],dropped:0,process:{stdin:{write:()=>{writes++;return false;}}}};
+  let writes=0;const encoder={rawBytes:RAW_BYTES,closed:false,times:[],dropped:0,process:{stdin:{write:()=>{writes++;return false;}}}};
   const raw=Buffer.alloc(RAW_BYTES);
   for(let i=0;i<20;i++)HardwareEncoder.prototype.push.call(encoder,raw);
   assert.equal(writes,3);assert.equal(encoder.times.length,3);assert.equal(encoder.dropped,17);
   encoder.times.shift();HardwareEncoder.prototype.push.call(encoder,raw);
   assert.equal(writes,4);assert.equal(encoder.times.length,3);
+});
+
+
+test('HD raw frames accept only the selected bounded profile, without widening JPEG limits',async()=>{
+  const {videoProfile}=await import('../video.js');
+  for(const resolution of ['540p','720p','1080p']) {
+    const {rawBytes,width,height}=videoProfile(resolution);
+    assert.equal(rawBytes,width*height*4);
+    const header=Buffer.alloc(4);header.writeUInt32BE(rawBytes);
+    let length=0;const parser=new FrameParser(frame=>length=frame.length,rawBytes);
+    parser.push(header);parser.push(Buffer.alloc(rawBytes));assert.equal(length,rawBytes);
+    header.writeUInt32BE(rawBytes+4);assert.throws(()=>new FrameParser(()=>{},rawBytes).push(header));
+  }
+  assert.throws(()=>videoProfile('8k'));
+  assert.throws(()=>new FrameParser(()=>{},999999999));
+  const header=Buffer.alloc(4);header.writeUInt32BE(1920*1080*4);
+  assert.throws(()=>new FrameParser(()=>{}).push(header));
 });
