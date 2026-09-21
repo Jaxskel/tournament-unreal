@@ -4,7 +4,7 @@
   "liveSiteChanged": false,
   "localGameReady": false,
   "checks": {
-    "legacyHTML5CompileAndLink": "passed; fixed-window and standalone-practice build exit0 in361.64seconds, allnine exports verified, no unresolved symbols",
+    "legacyHTML5CompileAndLink": "Passed: latest Outline/AsyncIO build exit 0 in 349.83 seconds; all nine exports verified, no unresolved symbols.",
     "legacyPacketTestsInChrome": "passed",
     "newerLinkerProbe": "passed for packet test only; full engine rejected due C library ABI mismatch",
     "matchingRuntimeWasmConversion": "full module validates; asynchronous Chrome runtime initialization and allocator smoke passed",
@@ -20,14 +20,14 @@
     "existingBrowserRegressionTests": 70,
     "eventTests": 8,
     "legacyAssetPreloader": "passed in Chrome with real matching file_packager fixture; not a cooked map",
-    "browserControlExports": "all nine present including SessionEpoch; return not-ready before main; actual allocator and matching preloader passed; in-game behavior unverified",
+    "browserControlExports": "All nine exports present. Actual runtime reached Ready=1, SessionEpoch=1 and Frame=149 at fixed 1920\u00d71080; complete control behavior remains under verification.",
     "launcherTests": {
       "passed": 64,
       "skipped": 3,
       "scope": "default fixtures/native logic; headed pointer and unavailable bundled WebGL1/2 skipped explicitly. Separate installedChrome strict realWebGL1/2 test passed3/3 withno skips."
     },
     "nativePointerCapture": "headed Chrome launcher fixture passed",
-    "actualWebGLContext": "Chrome WebGL1 initialized: 16 fragment texture units, 32 combined; world not ready",
+    "actualWebGLContext": "Chrome WebGL1 initialized on M4 Pro: 16 fragment / 32 combined texture units; actual arena and first-person weapon rendered at 1920\u00d71080 before shader uniform-buffer assertion.",
     "partialPackageProbe": "UAT staged/packaged partial cook successfully; runtime stopped at missing WorldGrid shader map, expected incomplete assets",
     "partialPackageBytes": 185151908,
     "compatPreparationTests": 12,
@@ -48,7 +48,7 @@
       "python": 10,
       "javascriptBoundsCases": 37
     },
-    "actualLauncherStartup": "Actual local WASM Deck match with sixbots advances nativeframes at1920x1080; audio velocity crash fixed. Black3D output remains: boundedreadbacks show valid scene/bloomcolor followed by allzero finalfullresolutionpass. No valid gameplayFPS result. StartupI/O diagnostic unclassified.",
+    "actualLauncherStartup": "ActualvisibleDeckworldatfixed1920x1080. Newrunreachedframe149, thenOpenGLShaders.cpp2858 UniformBuffer assertion; gameNOTstable. NoFPSresultclaimed.",
     "patcherPreflightTests": 30,
     "partyCallbackTests": 11,
     "runtimeHarness": "GlobalstartupdeadlineandownedBrowserServercleanup tested;16lifecyclechecks includingrealserverclosewithdelayedprofilecleanup passed.",
@@ -61,7 +61,7 @@
     },
     "browserAudio": "Resume runs synchronously before pointer lock for suspended or interrupted audio and retries the active context on each capture. Generated-adapter and launcher fixtures pass; actual sound and interruption recovery in gameplay remain unverified.",
     "legacyWidePrintProbe": "Original asm.js and converted WASM passed eight direct LocalPrint/wprintf cases, including >1 KiB lines; write sink and TTY bytes matched. Aggregated CDO warning repetition remains unexplained.",
-    "fixedSceneResolution": "Source review: current ES2/ES3.1 view finalization forces effective 100% scene percentage. Gameplay render target and viewport dimensions remain unmeasured.",
+    "fixedSceneResolution": "Actual native window, canvas and drawing buffer measured 1920\u00d71080; source ES2/ES3.1 view finalization uses 100% scene percentage. Stable 1440p gameplay verification pending.",
     "fullDeckCook": {
       "exitCode": 0,
       "seconds": 4107.55,
@@ -70,7 +70,7 @@
         "DM-DeckTest",
         "UT-Entry"
       ],
-      "scope": "Full Deck cook completed; sixty distinct material fallback assets remain. Outpost23 is not cooked yet."
+      "scope": "Initial full Deck cook completed; sixty distinct material fallbacks. Later rotation cook adds Outpost23; see rotationCook."
     },
     "fullDeckPackage": {
       "uatExitCode": 0,
@@ -102,16 +102,17 @@
     "browserWindowFix": "18 tests and both actual transformed platform blocks pass; full HTML5 C++ build passed. Native window and canvas measured1920x1080 on first world tick. Full gameplay/resolution-switch verification pending.",
     "practiceStartup": "Actual InitGame body passes standalone/network/error gating checks; HTML5 build passed. Native standalone next-tick match startup now reaches combat audio initialization; full combat verification pending.",
     "nativeMultiplayerPlugin": "Win64 Development editor plugin linked successfully in3.94seconds with matching audited original import library and -NoHotReload. Network gameplay not yet verified.",
-    "legacyAudioVelocity": "Both removed PannerNode.setVelocity calls guarded; actual private generated audio-body fixture passes 18 JavaScript and 8 converter tests. Reconverted engine runtime verification in progress.",
+    "legacyAudioVelocity": "Both removed PannerNode.setVelocity calls guarded; 18 actual generated-body JavaScript and 8 converter tests pass. New engine passed that former crash point; audible gameplay remains unverified.",
     "blackSceneDiagnostic": {
       "actualSceneColorNonzero": true,
       "framebufferComplete": true,
       "sampledGLErrors": [],
-      "firstBlackPass": "fullresolution half-float pass with constant-color fragmentshader; identification inprogress",
-      "scope": "private diagnostic; nativeHUDrendersbut3Dworldblack. Notplayable.",
-      "cause": "M_OutlinePP Emissive FeatureLevelSwitch defaults to Constant_0 forES2/ES3.1; onlySM4/SM5 selectscene-color/outlinegraph. Targetedbrowsercamera guardpending.",
+      "firstBlackPass": "Identified as the Outline post-process material: its ES2 branch outputs constant black.",
+      "scope": "Historical diagnostic; targeted browser camera fix subsequently restored actual visible arena. Separate later rendering crash remains.",
+      "cause": "M_OutlinePP Emissive FeatureLevelSwitch defaults to Constant_0 for ES2/ES3.1; only SM4/SM5 select scene-color/outline graph.",
       "showFlagProbe": "ShowFlag.PostProcessMaterial=0 set successfully but image stillblack; no runtimefixclaim.",
-      "targetedSourcePatch": "Applied isolatedWindows camera source: omits exactly twoOutlineMatAddBlendable calls onlyPLATFORM_HTML5_BROWSER; SHA25643dab79c2203cee2813b3babc6e0a4ddb0a57685f4f27250fb1bae63bd686442. Buildpending; no visibilityfixclaim."
+      "targetedSourcePatch": "Isolated camera source omits exactly two OutlineMat AddBlendable calls only for PLATFORM_HTML5_BROWSER. SHA256 43dab79c2203cee2813b3babc6e0a4ddb0a57685f4f27250fb1bae63bd686442; compile and first visible-world verification passed.",
+      "runtimeResult": "Fixed by targetedOutlineguard. Actual1080p-world screenshotshowsarena,first-personweaponandhands; no globalshowflagoverride."
     },
     "rotationCook": {
       "exitCode": 0,
@@ -124,13 +125,13 @@
       ],
       "nonemptyCookedFiles": 7793,
       "nonemptyCookedBytes": 4496716095,
-      "scope": "Iterative secondarena cook complete; package pending.29distinctmaterialcompilefailureassetslogged; visualgate notpassed."
+      "scope": "Iterative second-arena cook complete and packaged. 29 distinct material failures in this log; union with initial cook is 65. Visual gate remains open."
     },
     "multiplayerHandshake": {
       "independentBrowserClients": 2,
       "uniqueNativeIdentities": 2,
       "simultaneousGatewayConnections": 2,
-      "scope": "BothreachedTournamentReady; realbidirectionalWebSocketframes/nativejoinlogs. Worldblacknotvisuallyplayable. ReconnectassetloadfailedERR_FAILED; investigationongoing."
+      "scope": "Both reached TournamentReady with distinct native identities and simultaneous bidirectional packet traffic. This earlier run preceded the Outline fix; full visible combat remains unverified. Reconnect failed because Chromium exhausted Blob storage; direct package transport is under test."
     },
     "startupIOClassification": {
       "queuedCleanupHints": 4464,
@@ -141,9 +142,10 @@
       "observerOverheadMs": 0.5,
       "afterCleanup": 0,
       "nextEmptyTicks": 11,
-      "scope": "Privateinstrumentedmatchingbuild. Noassetreadstarvation; redundantcleanupburstpatchinprogress."
+      "scope": "Private instrumented matching build proved a redundant cleanup burst, with no queued reads. Narrow browser-only single-thread guard now compiled and first runtime checked.",
+      "patchedRuntimeResult": "Previous4464-hintoverflowdiagnosticabsent in firstnewruntime run."
     },
-    "outlineAndAsyncIOBuild": "IsolatedHTML5 buildinprogress; bothsourcepatches passedfocusedtestsandindependentreview. No newbinaryvisibility orframepacing claim.",
+    "outlineAndAsyncIOBuild": "passed349.83seconds; 9exportsverified/no unresolved symbols; convertedmatchingWASM validates",
     "outlinePatchTests": {
       "total": 22,
       "privateActualSource": "passed preprocessing fordefineabsent/0/1; browseromitsonlyOutline/nativepreservesbothinsertions"
@@ -151,10 +153,22 @@
     "asyncIOPatchTests": {
       "total": 6,
       "privateActualSource": "passedcompiledproducerbodyfornative/browserandthreaded/singlethreaded; independenthashcollisiontestpassed"
+    },
+    "remainingRenderCrash": "OpenGLShaders.cpp2858 nullUniformBuffer afterfirstseconds; matchingstack captured and investigationongoing.",
+    "rotationPackage": {
+      "uatExitCode": 0,
+      "seconds": 168.044,
+      "pakBytes": 1820658276,
+      "dataBytes": 1826054717,
+      "pakFilesTested": 9178,
+      "pakSha256": "0c6dd04568180954c017045b7509f0b700ebe9a50dbc3ac55b45933730ee3b9c",
+      "archiveSha256": "4036c83a38330f3a71b9f10bb874a81e5d3b7de6aa8dffb62b276bb1aca57b00",
+      "integrity": "All pak files healthy; complete data slices match stage; required Deck, Entry, Outpost, registry, global cache and configuration listed.",
+      "scope": "Private v3 package, not a release. Browser transfer and travel verification pending."
     }
   },
   "limitations": [
-    "Full Deck package exists, but actual gameplay readiness, appearance and performance remain unverified. Sixty distinct material fallbacks need scoped review; Outpost23 cook is outstanding.",
+    "Private Deck/Outpost package is complete and the 1080p arena now renders locally, but a later null shader uniform-buffer assertion blocks stable gameplay. 65 distinct material fallbacks need scoped review. Reconnect transport, combat, travel and performance remain under verification.",
     "WASM Binaryen optimization -O2 produced invalid i64 code in probe; converter does not run those passes",
     "Targets of 120FPS at1080p and60FPS at1440p are not measured results",
     "Tournament production identity, rewards, delayed spectators and anti-cheat require private staging contracts"
