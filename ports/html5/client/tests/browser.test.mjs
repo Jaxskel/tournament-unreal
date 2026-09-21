@@ -18,6 +18,11 @@ function manifest() {
     memoryInitializer:'fixture.mem', totalMemory:1610612736, websocketUrl:'ws://127.0.0.1:9080/game', initializationTimeoutMs:1500 };
   if (mode === 'invalid') value.version = 9;
   if (mode === 'multiplayer') value.multiplayerArguments = ['127.0.0.1:7787','-ResX=800','-Fullscreen'];
+  if (mode.startsWith('package-')) {
+    value.packageFiles = ['fixture.data'];
+    value.multiplayerArguments = ['127.0.0.1:7787'];
+    if (mode === 'package-missing') value.files['fixture.data'] = 'missing.data';
+  }
   if (mode === 'missing') value.files['fixture.data'] = 'missing.data';
   if (mode === 'throw' || mode === 'stall') value.files['engine.js'] = 'fault.js';
   if (mode === 'wasm') {
@@ -48,10 +53,12 @@ before(async () => {
       res.end(JSON.stringify(manifest())); return;
     }
     if (path === '/fixture.data') {
+      if (mode === 'package-html') { res.setHeader('Content-Type','text/html'); res.end('<html>Not a package</html>'); return; }
+      if (mode === 'package-empty') { res.end(); return; }
       res.setHeader('Content-Type','application/octet-stream'); res.setHeader('Content-Length','131072');
       res.write(Buffer.alloc(32768, 70));
       let remaining = 3;
-      const interval = setInterval(() => { res.write(Buffer.alloc(32768, 70)); if (!--remaining) { clearInterval(interval); res.end(); } }, 80);
+      const interval = setInterval(() => { res.write(Buffer.alloc(32768, 70)); if (!--remaining) { clearInterval(interval); res.end(); } }, mode === 'package-slow' ? 1000 : 80);
       res.on('close', () => clearInterval(interval)); return;
     }
     if (path === '/fixture.mem') { res.end('FIXTURE MEMORY'); return; }
@@ -219,6 +226,22 @@ test('failed-map diagnostic survives secondary renderer ensures', async t => {
   await waitVisible(page, '#error');
   assert.match(await page.locator('#error').textContent(), /Failed to enter DM-DeckTest: missing package/);
   assert.doesNotMatch(await page.locator('#error').textContent(), /CVS.bTimesSet/);
+});
+
+test('native expression assertion survives a bare Error and supersedes stale startup travel text', async t => {
+  const page = await session(t);
+  await launch(page);
+  await runtime(page).evaluate(() => {
+    Module.print('LogLoad:Error: Failed to enter UT-Entry');
+    Module.print("Expression 'UniformBuffer' failed in Runtime/OpenGLDrv/Private/OpenGLShaders.cpp:2858! " + 'x'.repeat(4000));
+    window.dispatchEvent(new ErrorEvent('error', { error: new Error() }));
+  });
+  await waitVisible(page, '#error');
+  const message = await page.locator('#error').textContent();
+  assert.match(message, /Expression 'UniformBuffer' failed in Runtime\/OpenGLDrv\/Private\/OpenGLShaders.cpp:2858!/);
+  assert.doesNotMatch(message, /Failed to enter UT-Entry/);
+  assert.ok(message.length <= 1801, 'native diagnostic remains bounded at 1800 characters');
+  assert.equal(page.frames().length, 1);
 });
 
 test('Escape, settings and capture denial cannot strand the menu', async t => {
@@ -442,4 +465,67 @@ test('removed multiplayer configuration fails clean reconnect without fallback o
   mode='multiplayer';
   await page.locator('#retry').click(); await waitVisible(page,'#resume');
   assert.equal((await runtime(page).evaluate(()=>Module.arguments))[0],'127.0.0.1:7787');
+});
+
+test('mounted packages release Blob URLs; reconnect disposes the old runtime synchronously', async t => {
+  const page=await session(t,'multiplayer');
+  await page.context().addInitScript(()=>{
+    if(window===top)return;
+    window.assetUrls=new Set();
+    const create=URL.createObjectURL, revoke=URL.revokeObjectURL;
+    URL.createObjectURL=function(blob){const url=create.call(this,blob);assetUrls.add(url);return url;};
+    URL.revokeObjectURL=function(url){assetUrls.delete(url);return revoke.call(this,url);};
+  });
+  await page.waitForFunction(()=>!document.querySelector('#multiplayer-option').disabled);
+  await page.locator('#mode').selectOption('multiplayer');await launch(page);
+  assert.deepEqual(await runtime(page).evaluate(()=>({urls:assetUrls.size,bytes:fixture.packageBytes})),{urls:0,bytes:131072});
+  await page.evaluate(()=>{window.disposalEvidence=[];});
+  await runtime(page).evaluate(()=>{
+    const original=window.disposeUT4Runtime;
+    window.disposeUT4Runtime=()=>{
+      original();original();
+      parent.disposalEvidence.push({connected:frameElement.isConnected,paused:fixture.paused,urls:assetUrls.size});
+    };
+  });
+  await page.locator('#reconnect').click();await waitVisible(page,'#resume');
+  assert.deepEqual(await page.evaluate(()=>disposalEvidence),[{connected:true,paused:true,urls:0}]);
+  assert.equal(await runtime(page).evaluate(()=>fixture.packageBytes),131072);
+  assert.equal(await runtime(page).evaluate(()=>assetUrls.size),0);
+});
+
+test('explicit packages use one direct ArrayBuffer request, progress, and reconnect without package Blobs', async t => {
+  const page=await session(t,'package-direct');
+  await page.context().addInitScript(()=>{
+    if(window===top)return;
+    window.blobSizes=[];
+    const create=URL.createObjectURL;
+    URL.createObjectURL=function(blob){blobSizes.push(blob.size);return create.call(this,blob);};
+  });
+  await page.waitForFunction(()=>!document.querySelector('#multiplayer-option').disabled);
+  await page.locator('#mode').selectOption('multiplayer');await page.locator('#launch').click();
+  await page.waitForFunction(()=>document.querySelector('#progress-text').textContent.includes('fixture.data')&&document.querySelector('#progress').hasAttribute('value'));
+  await waitVisible(page,'#resume');
+  const check=async()=>{
+    const result=await runtime(page).evaluate(()=>({url:Module.locateFile('fixture.data'),bytes:fixture.packageBytes,blobSizes}));
+    assert.equal(result.url,origin+'/fixture.data');assert.equal(result.bytes,131072);
+    assert.equal(result.blobSizes.includes(131072),false,'the mounted package never becomes a Blob URL');
+  };
+  await check();assert.equal(requests.filter(p=>p==='/fixture.data').length,1);
+  await page.locator('#reconnect').click();await waitVisible(page,'#resume');await check();
+  assert.equal(requests.filter(p=>p==='/fixture.data').length,2,'one package download per runtime');
+});
+for(const [scenario,message] of [['package-missing',/fixture.data: HTTP 404/],['package-html',/server returned HTML/],['package-empty',/empty or invalid package ArrayBuffer/]]) {
+  test('direct package failure remains visible: '+scenario,async t=>{
+    const page=await session(t,scenario);await page.locator('#launch').click();await waitVisible(page,'#error');
+    assert.match(await page.locator('#error').textContent(),message);
+    assert.equal(page.frames().length,1);
+  });
+}
+test('Stop aborts an in-flight direct package and a fresh launch still succeeds',async t=>{
+  const page=await session(t,'package-slow');await page.locator('#launch').click();
+  await page.waitForFunction(()=>document.querySelector('#progress-text').textContent.includes('fixture.data')&&document.querySelector('#progress').value>0);
+  await page.locator('#stop').click();assert.equal(page.frames().length,1);
+  assert.equal(await page.locator('#error').isVisible(),false);
+  mode='package-direct';await launch(page);
+  assert.equal(await runtime(page).evaluate(()=>fixture.packageBytes),131072);
 });

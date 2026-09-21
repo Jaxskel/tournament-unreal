@@ -22,9 +22,9 @@
     "legacyAssetPreloader": "passed in Chrome with real matching file_packager fixture; not a cooked map",
     "browserControlExports": "All nine exports present. Actual runtime reached Ready=1, SessionEpoch=1 and Frame=149 at fixed 1920\u00d71080; complete control behavior remains under verification.",
     "launcherTests": {
-      "passed": 64,
-      "skipped": 3,
-      "scope": "default fixtures/native logic; headed pointer and unavailable bundled WebGL1/2 skipped explicitly. Separate installedChrome strict realWebGL1/2 test passed3/3 withno skips."
+      "passed": 80,
+      "skipped": 1,
+      "scope": "Latest full installed-Chrome fixture suite; headed-only check skipped. Three subsequent focused assertion-diagnostic tests passed. Full game assertions remain fatal."
     },
     "nativePointerCapture": "headed Chrome launcher fixture passed",
     "actualWebGLContext": "Chrome WebGL1 initialized on M4 Pro: 16 fragment / 32 combined texture units; actual arena and first-person weapon rendered at 1920\u00d71080 before shader uniform-buffer assertion.",
@@ -164,8 +164,14 @@
       "pakSha256": "0c6dd04568180954c017045b7509f0b700ebe9a50dbc3ac55b45933730ee3b9c",
       "archiveSha256": "4036c83a38330f3a71b9f10bb874a81e5d3b7de6aa8dffb62b276bb1aca57b00",
       "integrity": "All pak files healthy; complete data slices match stage; required Deck, Entry, Outpost, registry, global cache and configuration listed.",
-      "scope": "Private v3 package, not a release. Browser transfer and travel verification pending."
-    }
+      "scope": "Private v3 data and matching loader now served; Mac full archive hash verified. Browser map travel remains unverified."
+    },
+    "reconnect": {
+      "singleClient": "Actual direct-package reconnect reached native readiness again without forced GC.",
+      "twoClients": "Stable engine/data fingerprints, both reached readiness; Array.h:633 bounds assertion as B joined before reconnect action. Not a reconnect pass.",
+      "transport": "Explicit packageFiles bypasses eager Blob duplication; declared same-origin ArrayBuffer requests retain progress/error checks and synchronous teardown. Enabled on private operator manifest."
+    },
+    "remainingMultiplayerCrash": "Array.h:633 bounds assertion during second-client join; matching stable artifact report captured, investigation ongoing."
   },
   "limitations": [
     "Private Deck/Outpost package is complete and the 1080p arena now renders locally, but a later null shader uniform-buffer assertion blocks stable gameplay. 65 distinct material fallbacks need scoped review. Reconnect transport, combat, travel and performance remain under verification.",

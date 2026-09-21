@@ -98,3 +98,14 @@ test('late exports use exact signatures; input release waits for native readines
     cwrap(name,result,args) { assert.equal(result,'number'); assert.deepEqual(args,BINDINGS[name]); return module['_'+name]; } });
   bridge.poll({}); bridge.poll({}); assert.equal(released,1);
 });
+
+test('disposed bindings release module and wrappers and cannot call the old engine', () => {
+  let calls=0;
+  const module={_TournamentBrowserReady:()=>{calls++;return 1;},cwrap(name){return this['_'+name];}};
+  const bridge=new EngineBindings(module,Object.keys(BINDINGS));
+  bridge.poll({});assert.equal(calls,1);
+  bridge.dispose();bridge.dispose();
+  assert.equal(bridge.module,null);assert.deepEqual(bridge.functions,{});
+  assert.equal(bridge.poll({}).ready,false);bridge.release();
+  assert.equal(calls,1);
+});

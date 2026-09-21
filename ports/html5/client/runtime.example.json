@@ -4,6 +4,7 @@
   "engine": "TournamentBrowser.js",
   "supportScripts": ["Utility.js"],
   "dataScripts": ["UnrealTournament.data.js"],
+  "packageFiles": ["UnrealTournament.data"],
   "files": {
     "Utility.js": "./engine/Utility.js",
     "UnrealTournament.data.js": "./engine/UnrealTournament.data.js",

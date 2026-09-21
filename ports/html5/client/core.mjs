@@ -73,6 +73,15 @@ export function validateManifest(raw, manifestURL) {
   if (raw.format === 'wasm' && !wasmBinary && !wasmModule) fail('wasm requires wasmModule (converted legacy) or wasmBinary.');
   if (wasmBinary && wasmModule) fail('choose either wasmModule or wasmBinary.');
   if (raw.format === 'asmjs' && (wasmBinary || wasmModule)) fail('asmjs must not specify WASM assets.');
+  const packageFiles = raw.packageFiles === undefined ? [] : raw.packageFiles;
+  if (!Array.isArray(packageFiles) || new Set(packageFiles).size !== packageFiles.length) fail('packageFiles must be an array of unique file names.');
+  const bootstrapURLs = new Set([...scripts, memoryInitializer, wasmBinary, wasmModule].filter(Boolean).map(name => files[name]));
+  for (const name of packageFiles) {
+    requireFile(name);
+    if (bootstrapURLs.has(files[name])) fail('packageFiles cannot name scripts, memory initializers or WASM assets (including URL aliases).');
+  }
+  if (packageFiles.length && !dataScripts.length) fail('packageFiles requires a data script to consume the package.');
+  if (new Set(packageFiles.map(name => files[name])).size !== packageFiles.length) fail('packageFiles URLs must be unique.');
   const argumentList = (value, name) => {
     if (!Array.isArray(value) || !value.every(arg => typeof arg === 'string' && !arg.includes('\0'))) fail(name + ' must be an array of strings without NUL characters.');
     return [...value];
@@ -91,7 +100,7 @@ export function validateManifest(raw, manifestURL) {
   if (!Number.isInteger(initializationTimeoutMs) || initializationTimeoutMs < 1000 || initializationTimeoutMs > 900000) fail('initializationTimeoutMs must be 1000–900000.');
   const bindings = raw.bindings ?? [];
   if (!Array.isArray(bindings) || !bindings.every(name => Object.hasOwn(BINDINGS, name)) || new Set(bindings).size !== bindings.length) fail('bindings must contain unique, supported TournamentBrowser export names.');
-  return { files, engine, supportScripts, dataScripts, memoryInitializer, wasmBinary, wasmModule,
+  return { files, engine, supportScripts, dataScripts, packageFiles:[...packageFiles], memoryInitializer, wasmBinary, wasmModule,
     format: raw.format, arguments: args, multiplayerArguments, totalMemory, websocketUrl: websocket.href, initializationTimeoutMs, bindings };
 }
 

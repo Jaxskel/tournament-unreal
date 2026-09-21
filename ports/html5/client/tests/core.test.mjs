@@ -95,3 +95,14 @@ test('mode persistence accepts only the two modes and tolerates unavailable stor
   assert.equal(readMode({ getItem:()=>{ throw Error('disabled'); } }),'practice');
   assert.equal(readMode(undefined),'practice');
 });
+
+test('direct package list is explicit, unique and cannot alias bootstrap assets', () => {
+  const raw={...manifest(),dataScripts:['pack.js'],files:{'game.js':'game.js','pack.js':'pack.js','archive':'payload.bin','alias':'game.js','memory':'game.mem','wasm':'game.wasm'},memoryInitializer:'memory'};
+  assert.deepEqual(validateManifest(raw,url).packageFiles,[]);
+  assert.deepEqual(validateManifest({...raw,packageFiles:['archive']},url).packageFiles,['archive']);
+  for(const packageFiles of [null,'archive',{},[null],['unknown'],['archive','archive'],['game.js'],['pack.js'],['memory'],['alias']]) {
+    assert.throws(()=>validateManifest({...raw,packageFiles},url),/runtime.json/);
+  }
+  assert.throws(()=>validateManifest({...raw,dataScripts:[],packageFiles:['archive']},url),/data script/);
+  for(const wasmKey of ['wasmModule','wasmBinary']) assert.throws(()=>validateManifest({...raw,format:'wasm',[wasmKey]:'wasm',packageFiles:['wasm']},url),/WASM/);
+});

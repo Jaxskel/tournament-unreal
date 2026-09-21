@@ -22,7 +22,7 @@ export class EngineBindings {
     this.epoch = null;
   }
   discover() {
-    if (typeof this.module.cwrap !== 'function') return;
+    if (typeof this.module?.cwrap !== 'function') return;
     for (const name of this.names) {
       // Old cwrap can abort on a missing export. Never probe it speculatively.
       if (!this.functions[name] && !this.disabled.has(name) && typeof this.module['_' + name] === 'function') {
@@ -38,6 +38,16 @@ export class EngineBindings {
   release() {
     this.pendingRelease = true;
     if (this.ready && this.call('TournamentBrowserReleaseInput') === 1) this.pendingRelease = false;
+  }
+  dispose() {
+    this.module = null;
+    this.names = [];
+    this.functions = {};
+    this.applied = {};
+    this.disabled.clear();
+    this.pendingRelease = false;
+    this.ready = false;
+    this.epoch = null;
   }
   poll(settings, inMenu = false) {
     this.discover();

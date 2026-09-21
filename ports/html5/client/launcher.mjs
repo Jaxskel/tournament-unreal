@@ -108,6 +108,8 @@ function destroyRuntime() {
   clearTimeout(bootstrapTimer);
   clearTimeout(engineTimer);
   command('release');
+  try { frame?.contentWindow?.disposeUT4Runtime?.(); }
+  catch { /* Even a failed runtime must not prevent removal of its iframe. */ }
   frame?.remove();
   frame = null;
   initialized = false;

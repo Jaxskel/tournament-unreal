@@ -4,7 +4,10 @@ import { EngineBindings } from './bindings.mjs';
 const canvas = document.getElementById('canvas');
 const metrics = new FrameMetrics();
 const blobs = new Map();
+const assets = new Map();
 const requests = new Set();
+let disposed = false;
+let restorePackageXHR = () => {};
 let started = false;
 let failed = false;
 let initialized = false;
@@ -20,10 +23,36 @@ let reportTimer;
 let lastResolution = '';
 let engineDiagnostic = '';
 const pressedKeys = new Map();
-const send = (type, detail) => parent.postMessage({ channel: 'ut4-runtime', type, detail }, location.origin);
+const send = (type, detail) => { if (!disposed) parent.postMessage({ channel: 'ut4-runtime', type, detail }, location.origin); };
+
+function releaseAssetUrls() {
+  for (const value of blobs.values()) URL.revokeObjectURL(value);
+  blobs.clear();
+  assets.clear();
+}
+function dispose() {
+  if (disposed) return;
+  disposed = true;
+  clearInterval(reportTimer);
+  ++audioCaptureAttempt;
+  try { bridge?.release(); } catch { /* Teardown must still release downloads. */ }
+  try { window.Module?.pauseMainLoop?.(); } catch { /* The parent removes this document next. */ }
+  for (const request of requests) request.abort();
+  requests.clear();
+  restorePackageXHR();
+  releaseAssetUrls();
+  bridge?.dispose();
+  bridge = null;
+  bridgeReport = null;
+  pressedKeys.clear();
+  release();
+}
+// Removing an iframe need not promptly collect its realm. Release browser-owned
+// Blob resources synchronously before the parent starts another large download.
+window.disposeUT4Runtime = dispose;
 
 function fail(error) {
-  if (failed) return;
+  if (failed || disposed) return;
   failed = true;
   clearInterval(reportTimer);
   for (const request of requests) request.abort();
@@ -36,7 +65,8 @@ function enginePrint(level, parts) {
   const line = parts.map(String).join(' ');
   // Legacy DebugBreak throws a bare Error. Retain its preceding native cause
   // so the menu shows the useful failure rather than an opaque WASM stack.
-  if (/LogLoad:\s*Error:/i.test(line) || (!engineDiagnostic && /Fatal error:|Ensure condition failed:|Assertion failed:|LogOutputDevice:Error:/.test(line))) {
+  const expressionAssertion = /\bExpression '[^'\r\n]{1,256}' failed in [^\r\n]{1,1024}:\d+!/.test(line);
+  if (expressionAssertion || /LogLoad:\s*Error:/i.test(line) || (!engineDiagnostic && /Fatal error:|Ensure condition failed:|Assertion failed:|LogOutputDevice:Error:/.test(line))) {
     engineDiagnostic = line.slice(0, 1800);
   }
   console[level]('[UT4]', ...parts);
@@ -113,18 +143,79 @@ window.addEventListener('blur', () => {
 });
 window.addEventListener('error', event => fail(event.error ?? event.message ?? 'Runtime script failed.'));
 window.addEventListener('unhandledrejection', event => fail(event.reason ?? 'Runtime promise rejected.'));
-window.addEventListener('pagehide', () => {
-  clearInterval(reportTimer);
-  for (const request of requests) request.abort();
-  for (const value of blobs.values()) URL.revokeObjectURL(value);
-});
+window.addEventListener('pagehide', dispose);
+
+function observePackageDownloads(packages) {
+  const OriginalXHR = window.XMLHttpRequest;
+  class PackageXHR extends OriginalXHR {
+    open(method, url, ...options) {
+      super.open(method, url, ...options);
+      const name = packages.get(String(url));
+      if (!name) return;
+      const xhr = this;
+      let watchdog;
+      const cleanup = () => {
+        clearTimeout(watchdog);
+        requests.delete(xhr);
+        for (const [type, handler] of handlers) xhr.removeEventListener(type, handler);
+      };
+      const reject = (event, message) => {
+        event?.stopImmediatePropagation();
+        cleanup();
+        fail(new Error(name + ': ' + message));
+      };
+      const arm = () => {
+        clearTimeout(watchdog);
+        watchdog = setTimeout(() => {
+          reject(null, 'no download progress for 60 seconds.');
+          xhr.abort();
+        }, 60000);
+      };
+      const handlers = [
+        ['progress', event => {
+          arm();
+          send('progress', { loaded:event.loaded, total:event.lengthComputable ? event.total : 0,
+            label:`${name} · ${(event.loaded / 1048576).toFixed(1)} MiB received` });
+        }],
+        ['load', event => {
+          if (xhr.status !== 200) return reject(event, `HTTP ${xhr.status}; check runtime.json and asset hosting.`);
+          if (new URL(xhr.responseURL).origin !== location.origin) return reject(event, 'cross-origin redirect rejected.');
+          if (/text\/html/i.test(xhr.getResponseHeader('Content-Type') ?? '')) return reject(event, 'server returned HTML instead of an engine asset.');
+          if (xhr.responseType !== 'arraybuffer' || !xhr.response?.byteLength) return reject(event, 'empty or invalid package ArrayBuffer.');
+          // The packager's own load handler now mounts this same buffer.
+          cleanup();
+        }],
+        ['error', event => reject(event, 'network request failed.')],
+        ['abort', event => { cleanup(); if (!disposed && !failed) reject(event, 'download cancelled.'); }]
+      ];
+      for (const [type, handler] of handlers) xhr.addEventListener(type, handler);
+      requests.add(xhr);
+      send('progress', { loaded:0, total:0, label:`${name} · requesting package…` });
+      arm();
+    }
+  }
+  window.XMLHttpRequest = PackageXHR;
+  restorePackageXHR = () => {
+    if (window.XMLHttpRequest === PackageXHR) window.XMLHttpRequest = OriginalXHR;
+  };
+}
 
 function download(url, name, index, count) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     requests.add(xhr);
     let watchdog;
-    const done = callback => value => { clearTimeout(watchdog); requests.delete(xhr); callback(value); };
+    let settled = false;
+    const done = callback => value => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      requests.delete(xhr);
+      xhr.onload = xhr.onerror = xhr.onabort = xhr.onprogress = null;
+      // Drop the completed response reference as soon as its Blob is handed on.
+      xhr.abort();
+      callback(value);
+    };
     const bad = done(reject);
     const arm = () => {
       clearTimeout(watchdog);
@@ -184,7 +275,7 @@ function pollBindings() {
   send('bindings', bridgeReport);
 }
 async function start(resolution, settings, mode) {
-  if (started) return;
+  if (started || disposed) return;
   started = true;
   requested = RESOLUTIONS[resolutionKey(resolution)];
   updateSettings({ resolution, ...settings });
@@ -206,25 +297,31 @@ async function start(resolution, settings, mode) {
       throw new Error('This UT4 build requires WebGL cubemap mip rendering (OES_fbo_render_mipmap). This browser/GPU does not expose it; try a supported desktop browser with graphics acceleration enabled.');
     }
   } finally { gl.getExtension('WEBGL_lose_context')?.loseContext(); }
-  const assets = new Map();
-  const entries = Object.entries(manifest.files);
+  const scripts = [...manifest.supportScripts, ...manifest.dataScripts, manifest.engine];
+  // The legacy packager already fetches .data as ArrayBuffer and mounts slices
+  // without a heap copy. Give it the declared same-origin URL directly: an eager
+  // Blob download followed by another XHR needlessly consumes browser Blob quota.
+  const packages = new Map(manifest.packageFiles.map(name => [name, manifest.files[name]]));
+  const entries = Object.entries(manifest.files).filter(([name]) => !packages.has(name));
   for (let i = 0; i < entries.length; i++) {
-    if (failed) return;
+    if (failed || disposed) return;
     const [name, url] = entries[i];
     assets.set(name, await download(url, name, i + 1, entries.length));
   }
-  if (failed) return;
-  const scripts = [...manifest.supportScripts, ...manifest.dataScripts, manifest.engine];
+  if (failed || disposed) return;
   for (const [name, blob] of assets) {
     blobs.set(name, URL.createObjectURL(new Blob([blob], { type: scripts.includes(name) ? 'text/javascript' : name === manifest.wasmBinary ? 'application/wasm' : 'application/octet-stream' })));
   }
   const locateFile = name => {
+    if (packages.has(name)) return packages.get(name);
+    if ([...packages.values()].includes(name)) return name;
     if (blobs.has(name)) return blobs.get(name);
     // Some packagers pass the already-resolved URL, others the emitted basename.
     for (const [key, url] of Object.entries(manifest.files)) if (name === url) return blobs.get(key);
     if ([...blobs.values()].includes(name)) return name;
     throw new Error('Runtime requested undeclared asset: ' + name + '. Add its exact emitted name to runtime.json files.');
   };
+  observePackageDownloads(new Map([...packages].map(([name, url]) => [url, name])));
   const module = window.Module = {
     canvas,
     arguments: args,
@@ -236,7 +333,11 @@ async function start(resolution, settings, mode) {
     preInit: [() => { [canvas.width, canvas.height] = requested; }],
     preRun: [() => { send('status', 'Preparing engine filesystem and startup arguments…'); resolutionReport(); }],
     postRun: [() => {
-      if (failed) return;
+      if (failed || disposed) return;
+      // All startup run dependencies have completed. The mounted filesystem owns
+      // its package bytes; retaining the download Blob adds another large copy
+      // against the browser's Blob quota throughout play and reconnect.
+      releaseAssetUrls();
       initialized = true; resolutionReport(); send('initialized');
     }],
     preMainLoop: () => { metrics.begin(performance.now()); },
@@ -262,11 +363,12 @@ async function start(resolution, settings, mode) {
     send('progress', { loaded: 0, total: 0, label: 'Downloads complete · compiling converted WASM asynchronously' });
     module.wasmModule = await WebAssembly.compile(await assets.get(manifest.wasmModule).arrayBuffer());
   }
+  if (failed || disposed) return;
   assets.clear();
   send('progress', { loaded: 0, total: 0, label: 'Downloads complete · compiling and mounting engine assets' });
   reportTimer = setInterval(() => { pollBindings(); send('metrics', metrics.snapshot(performance.now())); resolutionReport(); }, 500);
   for (const name of scripts) {
-    if (failed) return;
+    if (failed || disposed) return;
     await new Promise((resolve, reject) => {
       const script = document.createElement('script');
       script.src = blobs.get(name);
@@ -282,6 +384,7 @@ async function start(resolution, settings, mode) {
   }
 }
 window.addEventListener('message', event => {
+  if (disposed) return;
   if (event.source !== parent || event.origin !== location.origin || event.data?.channel !== 'ut4-launcher') return;
   switch (event.data.type) {
     case 'start': start(event.data.resolution, event.data.settings, event.data.mode).catch(fail); break;
