@@ -94,3 +94,23 @@ test('HD decoding uses full native dimensions and rejects unbounded sizes',()=>{
   }
   assert.throws(()=>new GameVideoDecoder({width:10000,height:10000}));
 });
+
+test('presentation keeps only the newest decoded frame and releases every GPU frame',async()=>{
+  const {LatestFramePresenter}=await import('../public/video-client.js');
+  let now=0;const closed=[],drawn=[];
+  const p=new LatestFramePresenter({now:()=>now,draw:f=>drawn.push(f.id)});
+  const frame=id=>({clone:()=>({id,close:()=>closed.push(id)})});
+  for(let id=1;id<=12;id++)p.submit(frame(id),20);
+  assert.equal(p.replaced,11);assert.equal(closed.length,11);assert.deepEqual(drawn,[]);
+  now=8;p.present();assert.deepEqual(drawn,[12]);assert.equal(closed.length,12);assert.equal(p.age,28);
+  assert.equal(p.present(),false);
+  now=108;p.submit(frame(13));p.present();assert.equal(p.stalls,1);assert.equal(p.p95,100);
+  p.submit(frame(14));p.clear();assert.equal(closed.length,14);assert.equal(p.pending,null);assert.equal(p.lastPresentedAt,null);
+});
+
+test('presentation releases the retained frame even if rendering fails',async()=>{
+  const {LatestFramePresenter}=await import('../public/video-client.js');let closed=0;
+  const p=new LatestFramePresenter({draw:()=>{throw new Error('draw failed')},now:()=>0});
+  p.submit({clone:()=>({close:()=>closed++})});assert.throws(()=>p.present(),/draw failed/);
+  assert.equal(closed,1);assert.equal(p.pending,null);
+});

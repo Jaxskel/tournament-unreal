@@ -1,4 +1,4 @@
-import { GameVideoDecoder } from './video-client.js';
+import { GameVideoDecoder, LatestFramePresenter } from './video-client.js';
 const $ = id => document.getElementById(id);
 // Set only by the deployment build, never by URL parameters or browser storage.
 const configuredOrigin = document.querySelector?.('meta[name="tournament-gateway"]')?.content || '';
@@ -49,13 +49,16 @@ function createDecoder(packet, version) {
   if (!validSize(packet.width,packet.height) || ![60,120].includes(packet.fps ?? 60)) { disconnect('Invalid stream resolution or frame rate.'); return false; }
   const offset = videoDecoder?.serverOffset ?? null;
   videoDecoder?.close();
+  presenter.clear();
+  decodedFrames=0;
   canvas.width = packet.width; canvas.height = packet.height;
   const decoder = new GameVideoDecoder({
     send, fps:packet.fps ?? 60, width:packet.width, height:packet.height,
     draw: frame => {
       if (!active || generation !== version || videoDecoder !== decoder) return;
-      ctx.drawImage(frame,0,0,canvas.width,canvas.height);
-      frames++; lastFrameAt=performance.now(); $('stream-notice').hidden=true;
+      decodedFrames++;
+      presenter.submit(frame,decoder.frameAge);
+      lastFrameAt=performance.now(); $('stream-notice').hidden=true;
     },
     failure: (_error, fatal) => {
       if (videoDecoder !== decoder) return;
@@ -75,6 +78,19 @@ let decoding = false;
 let generation = 0;
 let frames = 0;
 let fps = 0;
+let decodedFrames = 0;
+let streamFps = 0;
+let browserHz = 0;
+const presenter = new LatestFramePresenter({draw: frame => {
+  ctx.drawImage(frame,0,0,canvas.width,canvas.height);
+  frames++;
+}});
+window.tournamentDiagnostics = () => ({
+  displayedFps:fps,streamFps,browserHz,resolution:canvas.height,
+  rttMs:rtt,videoAgeMs:presenter.age,p95FrameGapMs:presenter.p95,
+  stallsOver50ms:presenter.stalls,coalescedFrames:presenter.replaced,
+  decoderDropped:videoDecoder?.dropped ?? 0,transport:'WebSocket/TCP',
+});
 let rtt = null;
 let lastFrameAt = 0;
 let dx = 0;
@@ -139,6 +155,7 @@ async function captureMouse() {
 function setActive(value) {
   active = value;
   document.body.classList.toggle('playing', value);
+  $('performance-hud').hidden = !value;
   for (const id of ['capture', 'menu', 'disconnect']) $(id).disabled = !value;
   if (!value) $('resolution').disabled = false;
   $('landing').hidden = value;
@@ -160,6 +177,7 @@ function disconnect(message = 'Seat released. You can join again.') {
   releaseMouse();
   videoDecoder?.close();
   videoDecoder = null;
+  presenter.clear();
   generation++;
   pendingPings.clear();
   pendingFrame = null;
@@ -267,7 +285,8 @@ async function join() {
         clearTimeout(joinTimer);
         joining = false;
         joinAbort = null;
-        frames = fps = 0;
+        frames = fps = decodedFrames = streamFps = 0;
+        presenter.clear();
         rtt = null;
         minRtt = Infinity;
         lastFrameAt = performance.now();
@@ -293,7 +312,7 @@ async function join() {
         if (!validSize(packet.width,packet.height) || ![60,120].includes(packet.fps)) { disconnect('Invalid stream resolution or frame rate.'); return; }
         if (videoDecoder.width !== packet.width || videoDecoder.height !== packet.height || videoDecoder.fps !== packet.fps) {
           if (!createDecoder(packet,version)) return;
-          frames = 0; metricsAt = performance.now();
+          frames = decodedFrames = 0; metricsAt = performance.now();
         }
         updateResolutionHelp();
         const decoder = videoDecoder;
@@ -438,19 +457,26 @@ function animate() {
     send({ type: 'mouse', dx: clamp(dx), dy: clamp(dy) });
     dx = dy = 0;
   }
+  if (active) presenter.present();
   requestAnimationFrame(animate);
 }
 setInterval(() => {
   const elapsed = Math.max(1, performance.now() - metricsAt);
   fps = Math.round(frames * 1000 / elapsed);
-  const browserHz = Math.round(animationFrames * 1000 / elapsed);
-  frames = animationFrames = 0;
+  browserHz = Math.round(animationFrames * 1000 / elapsed);
+  streamFps = Math.round(decodedFrames * 1000 / elapsed);
+  frames = decodedFrames = animationFrames = 0;
   metricsAt = performance.now();
   if (!active) return;
   updateResolutionHelp();
-  const age = videoDecoder?.frameAge;
-  $('metrics').title = `${browserHz} Hz browser animation cadence. FPS counts decoded game frames, not physical screen refresh. RTT is network round-trip time; video age excludes input and screen scanout.`;
+  const age = videoDecoder ? presenter.age : null;
+  $('metrics').title = `${browserHz} Hz browser animation cadence. FPS counts refresh-aligned canvas presentations; stream FPS counts decoded pictures. Neither measures physical panel scanout. RTT is network round-trip time; video age excludes input and screen scanout.`;
   $('metrics').textContent = `${canvas.height}p · ${fps} FPS · ${rtt === null ? '—' : rtt} ms RTT${videoDecoder ? ` · H.264${age === null ? '' : ` · ${Math.round(age)} ms video age`}` : ''}`;
+  $('performance-fps').textContent = `${fps} FPS`;
+  $('performance-ping').textContent = `${rtt === null ? '—' : rtt} ms ping`;
+  const gap=presenter.p95;
+  $('performance-detail').textContent = `${canvas.height}p · ${streamFps} stream FPS · ${gap===null?'—':Math.round(gap)} ms p95`;
+  $('performance-hud').title = `${browserHz} Hz browser callbacks. ${presenter.stalls} frame gaps over 50 ms; ${presenter.replaced} superseded pictures skipped. Ping is network RTT, not input latency. Resolution stays fixed.`;
   if (performance.now() - lastFrameAt > 3000) {
     $('stream-notice').textContent = 'Reconnecting game video…';
     $('stream-notice').hidden = false;

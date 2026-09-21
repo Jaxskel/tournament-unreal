@@ -1,5 +1,28 @@
 # Browser stream performance — September 21, 2026
 
+## Refresh-aligned FPS and bounded presentation
+
+The always-visible gameplay panel now separates presented FPS from decoded stream FPS, and reports network RTT and p95 presentation gap. One pending decoded frame is retained; newer pictures replace it until the next animation callback. Mouse input is sent before presentation. Resolution remains user-selected and fixed.
+
+A sequential 12-second A/B on the Mac, at 1440p through the public gateway, instrumented canvas draws, browser refresh callbacks receiving a new picture, gateway timestamps, and network arrivals. Headless Chrome ran at 60 Hz; these numbers do not measure a 120 Hz physical panel.
+
+| Measurement | Previous direct drawing | Latest-frame presenter |
+| --- | ---: | ---: |
+| Canvas draws/sec | 120.3 | 50.0 |
+| Browser refreshes with a new picture/sec | 49.7 | 50.0 |
+| Decoded transport arrivals/sec | 119.8 | 120.0 |
+| Native/gateway source cadence/sec | 119.8 | 120.0 |
+| New-picture refresh gap, p99 | 99.9 ms | 100.0 ms |
+| New-picture refresh gaps above 50 ms | 23 | 23 |
+| Source timestamp maximum gap | 30 ms | 16 ms |
+
+The change eliminates about 58% of canvas draws in this sample without reducing distinct refreshes. It does **not** establish lower network latency or fix the recurrent delivery stalls. Earlier 118–120 FPS figures below counted draws inside bursts and must not be read as visibly distinct refreshes. A lower new counter is a correction to what is measured, not evidence that native encoding slowed down.
+
+Production verification passed at 1080p and 1440p: HUD visible while aiming, centered uncropped image across four viewport sizes and fullscreen, Escape/settings controls, normalized menu clicks, saved resolution and reconnect. Two isolated browser contexts also joined simultaneously at 1440p with separate streams and no page errors. Their short headless 60 Hz samples averaged 45.0 and 44.0 presentation FPS; these functional checks do not establish a smooth 120 FPS experience.
+
+70 browser/transport tests cover the presenter ownership bound, superseded-frame cleanup, presentation failures and persistent in-game HUD in addition to existing controls and transport tests. The [architecture document](browser-architecture.md) distinguishes current streaming, a proposed WebRTC transport, and a separate local-rendering browser client. WebRTC and local Unreal browser rendering are not deployed.
+
+
 ## Direct GPU encoding: 1080p and 1440p at approximately 120 FPS
 
 ![1440p gameplay on the final GPU encoder](../evidence/gpu-1440p.png)

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
+import {LatestFramePresenter} from '../public/video-client.js';
 
 const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf8').then(text => text.replace(/^import .*;\n/, ''));
 function harness(joinResponses = [], storage = new Map(), gateway = '') {
@@ -44,6 +45,7 @@ function harness(joinResponses = [], storage = new Map(), gateway = '') {
     document, window, WebSocket:Socket, Blob, ArrayBuffer, URL,
     localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},
     VideoDecoder:class {},
+    LatestFramePresenter:class extends LatestFramePresenter {constructor(options){super({...options,now:()=>time});}},
     GameVideoDecoder:class {
       constructor(options){Object.assign(this,options);}
       configureSupported(codec){this.codec=codec;return Promise.resolve();}
@@ -356,4 +358,15 @@ test('Escape cancels a pending mouse capture even when the browser grants it aft
   assert.equal(h.document.pointerLockElement,null);
   assert.equal(h.nativeMenu(),true);
   assert.equal(h.document.body.classList.contains('aiming'),false);
+});
+
+test('performance counter stays visible while aiming and distinguishes stream rate from presentations',async()=>{
+  const h=harness();await h.join();await h.run('captureMouse()');
+  assert.equal(h.element('performance-hud').hidden,false);
+  h.run('frames=60; decodedFrames=120; animationFrames=120');h.advance(1000);
+  h.intervals.find(t=>t.ms===1000).fn();
+  assert.equal(h.element('performance-fps').textContent,'60 FPS');
+  assert.match(h.element('performance-detail').textContent,/120 stream FPS/);
+  assert.equal(h.window.tournamentDiagnostics().displayedFps,60);
+  h.run('disconnect()');assert.equal(h.element('performance-hud').hidden,true);
 });

@@ -87,3 +87,36 @@ export class GameVideoDecoder {
   }
   close() { this.closed = true; if (this.decoder && this.decoder.state !== 'closed') this.decoder.close(); this.sources.clear(); }
 }
+
+
+// One retained decoded frame, presented on the browser's refresh callback.
+// Bursty delivery replaces old pictures instead of drawing a catch-up burst.
+export class LatestFramePresenter {
+  constructor({draw, now = () => performance.now()}) {
+    this.draw=draw;this.now=now;this.pending=null;this.replaced=0;
+    this.gaps=[];this.lastPresentedAt=null;this.stalls=0;this.age=null;
+  }
+  submit(frame, age=null) {
+    const copy=frame.clone();
+    if(this.pending){this.pending.frame.close();this.replaced++;}
+    this.pending={frame:copy,at:this.now(),age};
+  }
+  present() {
+    const pending=this.pending;if(!pending)return false;
+    this.pending=null;
+    try {
+      const now=this.now();
+      this.age=pending.age===null?null:pending.age+Math.max(0,now-pending.at);
+      this.draw(pending.frame);
+      if(this.lastPresentedAt!==null){
+        const gap=now-this.lastPresentedAt;this.gaps.push(gap);
+        if(this.gaps.length>240)this.gaps.shift();
+        if(gap>50)this.stalls++;
+      }
+      this.lastPresentedAt=now;
+      return true;
+    }finally{pending.frame.close();}
+  }
+  get p95(){const sorted=[...this.gaps].sort((a,b)=>a-b);return sorted.length?sorted[Math.floor((sorted.length-1)*.95)]:null;}
+  clear(){if(this.pending)this.pending.frame.close();this.pending=null;this.age=null;this.gaps=[];this.lastPresentedAt=null;this.stalls=0;this.replaced=0;}
+}

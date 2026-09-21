@@ -75,3 +75,10 @@ body.playing.aiming .toolbar { visibility:hidden; pointer-events:none; }
 body.playing .capture-hint,
 .stream-shell:fullscreen .capture-hint { bottom:100px; }
 @media(max-width:760px) { body.playing .toolbar,.stream-shell:fullscreen .toolbar { left:6px; right:6px; padding:8px; } body.playing .capture-hint { bottom:145px; } }
+
+.performance-hud { position:absolute; z-index:3; left:16px; bottom:88px; pointer-events:none; padding:7px 10px; border:1px solid #e4b76644; border-radius:4px; background:#100e0bd9; color:#f4eadb; font:11px ui-monospace,SFMono-Regular,monospace; font-variant-numeric:tabular-nums; }
+.performance-hud > div { display:flex; gap:16px; align-items:baseline; }
+.performance-hud strong { color:#e4b766; font-size:16px; }
+.performance-hud small { display:block; margin-top:4px; color:#c9bda9; font-size:10px; }
+body.aiming .performance-hud { bottom:max(12px,env(safe-area-inset-bottom)); }
+@media(max-width:760px) { .performance-hud { bottom:145px; } }
