@@ -54,6 +54,12 @@ export async function createGateway(options = {}) {
   if (video && !nativeVideo) await access(options.ffmpegPath);
   const publicOrigin = options.publicOrigin ? normalizeOrigin(options.publicOrigin) : null;
   const extraOrigins = (options.extraOrigins ?? []).map(normalizeOrigin);
+  // Trusted website origins may use this gateway cross-origin; never wildcards.
+  const frontendOrigins = new Set((options.frontendOrigins ?? []).map(value => {
+    const url = normalizeOrigin(value);
+    if (url.protocol !== 'https:') throw new Error('Frontend origins must use HTTPS');
+    return url.origin;
+  }));
   const leaseMs = options.leaseMs ?? 10_000;
   const idleMs = options.idleMs ?? 90_000;
   const inputTimeoutMs = options.inputTimeoutMs ?? 3000;
@@ -142,9 +148,10 @@ export async function createGateway(options = {}) {
     };
   }
   const allowedHost = req => typeof req.headers.host === 'string' && hosts.has(req.headers.host);
-  const sameOrigin = req => {
-    if (!allowedHost(req) || !origins.has(req.headers.origin)) return false;
-    return new URL(req.headers.origin).host === req.headers.host;
+  const allowedBrowser = req => {
+    if (!allowedHost(req)) return false;
+    if (frontendOrigins.has(req.headers.origin)) return true;
+    return origins.has(req.headers.origin) && new URL(req.headers.origin).host === req.headers.host;
   };
   const server = http.createServer({ maxHeaderSize: 8192, requestTimeout: 10_000, headersTimeout: 10_000 }, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -153,9 +160,21 @@ export async function createGateway(options = {}) {
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), fullscreen=(self)');
     if (!allowedHost(req)) return json(res, 403, { error: 'Unrecognized host' });
+    if (frontendOrigins.has(req.headers.origin)) {
+      res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+      res.setHeader('Vary', 'Origin');
+    }
+    if (req.method === 'OPTIONS') {
+      const headers = (req.headers['access-control-request-headers'] || '').toLowerCase().split(',').map(h => h.trim()).filter(Boolean);
+      if (req.url !== '/api/join' || !allowedBrowser(req) || req.headers['access-control-request-method'] !== 'POST'
+          || headers.some(h => h !== 'content-type')) return json(res, 403, {error:'Preflight rejected'});
+      res.setHeader('Access-Control-Allow-Methods', 'POST');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.writeHead(204); return res.end();
+    }
     if (req.method === 'GET' && req.url === '/api/health') return json(res, 200, status());
     if (req.method === 'POST' && req.url === '/api/join') {
-      if (!sameOrigin(req)) return json(res, 403, { error: 'Same-origin request required' });
+      if (!allowedBrowser(req)) return json(res, 403, { error: 'Trusted browser origin required' });
       try { await emptyJson(req); } catch { return json(res, 400, { error: 'Expected an empty JSON object (max 1024 bytes)' }); }
       const now = Date.now();
       for (const lease of leases.values()) if (!lease.ws && now > lease.expiresAt) release(lease);
@@ -181,7 +200,7 @@ export async function createGateway(options = {}) {
   server.on('clientError', (_error, socket) => socket.destroy());
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1024, perMessageDeflate: false, closeTimeout: 1000 });
   server.on('upgrade', (req, socket, head) => {
-    if (req.url !== '/stream' || !sameOrigin(req) || sockets.size >= 8) {
+    if (req.url !== '/stream' || !allowedBrowser(req) || sockets.size >= 8) {
       socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
       return;
     }
@@ -376,6 +395,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   };
   try {
     const gateway = await createGateway({
+      frontendOrigins: process.env.FRONTEND_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean),
       nativeVideo: process.env.NATIVE_GPU_VIDEO === '1', ffmpegPath: process.env.FFMPEG_PATH, fps: Number(process.env.STREAM_FPS ?? 120), resolution: process.env.STREAM_RESOLUTION,
       port: portFromEnv('PORT', 8890), publicOrigin: process.env.PUBLIC_ORIGIN,
       extraOrigins: process.env.EXTRA_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean),

@@ -2,15 +2,15 @@
 
 Real Unreal Tournament 4, streamed into a desktop browser with a Tournament game menu. Two independent native players join one authoritative deathmatch server, with bots and automatic arena rotation. The browser controls its own game instance; it cannot control the Windows desktop.
 
-**[Open the live development demo](https://wallpaper-supposed-cure-tokyo.trycloudflare.com/)** · [Host/build instructions](docs/browser-hosting.md)
+**[Open the live development demo](https://tournament-unreal.vercel.app/)** · [Host/build instructions](docs/browser-hosting.md) · [Vercel deployment](deploy/vercel/README.md)
 
-This is a free demo, with **no audio stream or platform rewards**. The Windows GPU host must remain awake and online. The temporary play address changes if its tunnel restarts. Two browser seats are available; another browser sees an arena-full message. No Unreal game download is required in the browser.
+This is a free demo, with **no audio stream or platform rewards**. The Windows GPU host must remain awake and online. The Vercel website address is stable; its game connection still uses a temporary tunnel that needs a configuration update if restarted. Two browser seats are available; another browser sees an arena-full message. No Unreal game download is required in the browser.
 
-![Two-player Unreal browser demo](evidence/browser-gameplay.png)
+![Centered Unreal browser gameplay](evidence/centered-gameplay.png)
 
 ## Play with Dad
 
-Open the demo link in two separate browsers/computers and choose **Play Now**. Click **Capture mouse** to aim. WASD moves, left-click fires, right-click uses alternate fire, Space jumps, 1–9 selects weapons, and Tab shows scores. **Escape releases the mouse and opens the Tournament menu.** Use the browser toolbar for fullscreen. Fire to respawn; the menu also offers Play/Respawn when applicable.
+Open the demo link in two separate browsers/computers and choose **Play Now**. Click **Capture mouse** to aim. WASD moves, left-click fires, right-click uses alternate fire, Space jumps, 1–9 selects weapons, and Tab shows scores. **Escape releases the mouse and opens the Tournament menu.** Play fills the browser window with a centered, uncropped game image. The toolbar hides while aiming; Escape reveals it. Fullscreen removes the remaining browser chrome. Fire to respawn; the menu also offers Play/Respawn when applicable.
 
 Settings adjusts sensitivity. Disconnect releases a browser seat; Play Again requests a free seat. The host keeps the native players connected between browser sessions, so these are shared demo seats rather than authenticated Tournament accounts. The server fills seven total player slots with bots: six bots with one native human client, five with two.
 
@@ -21,7 +21,7 @@ Settings adjusts sensitivity. Disconnect releases a browser seat; Play Again req
 - A full source-built multiplayer match produced 33 authoritative kill events plus a final ranked scoreboard; its 35-record event log passed the event validator.
 - Automatic server rotation from Deck to Outpost was observed, and both browser streams resumed on Outpost after its first asset preparation.
 - A browser disconnected with its native menu open and rejoined with the menu correctly closed. A third simultaneous join returned HTTP 409 with the arena-full message. Native Diagnostics → Reconnect reloaded Deck in approximately 1.34 seconds and resumed the stream.
-- The browser gateway has 63 passing tests covering two-seat isolation, origins, tokens, input validation, interrupted connections, menu state, reconnects, and high-refresh mouse handling. Eight event-validator tests also pass.
+- The browser gateway has 67 passing tests covering two-seat isolation, origins, tokens, input validation, interrupted connections, menu state, reconnects, and high-refresh mouse handling. Eight event-validator tests also pass.
 
 The native supervisor now restarts exited or stalled game processes automatically. Play retries a recovering arena without requiring another click. Warm Play-to-first-frame checks took 0.14–0.30 seconds; native recovery itself takes longer.
 

@@ -103,3 +103,8 @@ Players choose **720p, 1080p or 1440p** from the Resolution selector below the g
 | 1440p | 2560x1440 | 40 Mbit/s | 28 Mbit/s |
 
 These are targets, not measured frame-rate guarantees. The earlier CPU-readback path delivered about 50 FPS at 1080p and 29 FPS at 1440p; direct GPU measurements are recorded in the performance report. Source rendering is 100% scale with motion blur/depth of field disabled, FXAA and 16x anisotropic filtering. H.264 High uses NVENC P3 with zero B-frames and lookahead; the VBV buffer represents about 32 ms of target bitrate. 720p remains the initial default; players can explicitly select and retain 1080p or 1440p. See the latest performance report before changing it.
+
+
+## Vercel-hosted browser client
+
+The main shareable site is https://tournament-unreal.vercel.app. Vercel serves the frontend; the browser connects directly to the Windows GPU gateway through its existing tunnel. Set `FRONTEND_ORIGINS=https://tournament-unreal.vercel.app` on the gateway to admit that exact website origin. Native/game ports remain private, video is not proxied through Vercel, and the original tunnel frontend remains available. See [build/deploy steps and hostname changes](../deploy/vercel/README.md). This is not a migration of the GPU game host into Vercel.

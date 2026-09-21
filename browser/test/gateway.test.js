@@ -478,3 +478,28 @@ test('direct GPU video bypasses raw encoders, preserves seat isolation and chang
  await until(()=>!f.gateway.status().seats[0].nativeConnected);
  assert.equal(f.gateway.status().seats[1].nativeConnected,true);
 });
+
+
+test('only explicit HTTPS frontend origins can use cross-origin health, joins and WebSockets',async t=>{
+  const frontend='https://arena.example';
+  const f=await fixture(t,{frontendOrigins:[frontend]});await f.native(0);
+  const health=await fetch(f.origin+'/api/health',{headers:{Origin:frontend}});
+  assert.equal(health.headers.get('access-control-allow-origin'),frontend);
+  assert.equal(health.headers.get('access-control-allow-credentials'),null);
+  const preflight=await fetch(f.origin+'/api/join',{method:'OPTIONS',headers:{Origin:frontend,'Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type'}});
+  assert.equal(preflight.status,204);
+  assert.equal(preflight.headers.get('access-control-allow-origin'),frontend);
+  for(const origin of ['https://evil.example','https://arena.example.evil.example','null']){
+    const res=await fetch(f.origin+'/api/join',{method:'OPTIONS',headers:{Origin:origin,'Access-Control-Request-Method':'POST'}});
+    assert.equal(res.status,403);assert.equal(res.headers.get('access-control-allow-origin'),null);
+    assert.equal((await f.join('{}',origin)).status,403);
+  }
+  const badHeader=await fetch(f.origin+'/api/join',{method:'OPTIONS',headers:{Origin:frontend,'Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'authorization'}});
+  assert.equal(badHeader.status,403);
+  const joined=await f.join('{}',frontend);assert.equal(joined.status,201);
+  const ws=new WebSocket(f.origin.replace('http:','ws:')+'/stream',{origin:frontend});t.after(()=>ws.terminate());
+  await once(ws,'open');const message=once(ws,'message');ws.send(JSON.stringify({type:'auth',token:joined.body.token}));
+  assert.equal(JSON.parse((await message)[0]).type,'joined');
+  const rejected=new WebSocket(f.origin.replace('http:','ws:')+'/stream',{origin:'https://evil.example'});
+  await once(rejected,'error');
+});

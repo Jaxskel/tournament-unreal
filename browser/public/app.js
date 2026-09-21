@@ -1,5 +1,18 @@
 import { GameVideoDecoder } from './video-client.js';
 const $ = id => document.getElementById(id);
+// Set only by the deployment build, never by URL parameters or browser storage.
+const configuredOrigin = document.querySelector?.('meta[name="tournament-gateway"]')?.content || '';
+let gatewayOrigin = '';
+if (configuredOrigin) {
+  const url = new URL(configuredOrigin);
+  if (url.protocol !== 'https:' || url.origin !== configuredOrigin || url.username || url.password) throw new Error('Invalid game gateway origin');
+  gatewayOrigin = url.origin;
+}
+const gatewayURL = path => `${gatewayOrigin}${path}`;
+const streamURL = gatewayOrigin
+  ? `${gatewayOrigin.replace(/^https:/, 'wss:')}/stream`
+  : `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/stream`;
+
 const canvas = $('game');
 const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
 const held = new Set();
@@ -67,6 +80,8 @@ let lastFrameAt = 0;
 let dx = 0;
 let dy = 0;
 let exitingLock = false;
+let capturePending = false;
+let captureCancelled = false;
 let lastEscapeAt = -Infinity;
 let nextMouseAt = 0;
 let animationFrames = 0;
@@ -91,6 +106,7 @@ function releaseMouse() {
   if (locked()) { exitingLock = true; document.exitPointerLock(); }
 }
 function inputHint() {
+  document.body.classList.toggle('aiming', active && locked());
   $('capture-hint').hidden = !active || locked() || menuMode;
   $('menu').textContent = menuMode ? 'Close menu' : 'Menu';
   $('input-help').textContent = menuMode
@@ -108,17 +124,21 @@ function setMenu(open) {
 }
 function toggleMenu() { setMenu(!menuMode); }
 async function captureMouse() {
-  if (!active) return;
+  if (!active || capturePending) return;
+  capturePending = true;
+  captureCancelled = false;
   canvas.focus({ preventScroll: true });
   try {
     if (!canvas.requestPointerLock) throw new Error('Pointer lock unavailable');
     await canvas.requestPointerLock();
+    if (captureCancelled || !active) releaseMouse();
   } catch {
     $('input-help').textContent = 'Mouse capture was denied. Click Capture mouse again; use a desktop browser with pointer lock support.';
-  }
+  } finally { capturePending = false; }
 }
 function setActive(value) {
   active = value;
+  document.body.classList.toggle('playing', value);
   for (const id of ['capture', 'menu', 'disconnect']) $(id).disabled = !value;
   if (!value) $('resolution').disabled = false;
   $('landing').hidden = value;
@@ -192,7 +212,7 @@ function decodeImage(blob) {
 async function waitForSeat(signal) {
   const deadline = performance.now() + 90000;
   while (!signal.aborted) {
-    const response = await fetch('/api/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
+    const response = await fetch(gatewayURL('/api/join'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
     const result = await response.json();
     signal.throwIfAborted();
     if (response.ok) return result;
@@ -219,7 +239,7 @@ async function join() {
   try {
     const result = await waitForSeat(joinAbort.signal);
     if (version !== generation) return;
-    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/stream`);
+    const ws = new WebSocket(streamURL);
     socket = ws;
     ws.binaryType = 'arraybuffer';
     const joinTimer = setTimeout(() => { if (socket === ws && !active) disconnect('Connection timed out. Please try again.'); }, 8000);
@@ -318,7 +338,7 @@ async function refreshHealth() {
   if (healthLoading) return;
   healthLoading = true;
   try {
-    const response = await fetch('/api/health', { signal: AbortSignal.timeout(4000) });
+    const response = await fetch(gatewayURL('/api/health'), { signal: AbortSignal.timeout(4000) });
     if (!response.ok) throw new Error();
     const health = await response.json();
     const ready = health.seats.filter(s => s.nativeConnected && s.frameAgeMs !== null && s.frameAgeMs < 10000 && !s.occupied).length;
@@ -373,7 +393,11 @@ window.addEventListener('keydown', event => {
   if (!active) return;
   if (event.code === 'Escape') {
     event.preventDefault();
-    if (!event.repeat && (locked() || performance.now() - lastEscapeAt > 200)) { lastEscapeAt = performance.now(); toggleMenu(); }
+    if (!event.repeat && (capturePending || locked() || performance.now() - lastEscapeAt > 200)) {
+      captureCancelled = true;
+      lastEscapeAt = performance.now();
+      if (capturePending || locked()) setMenu(true); else toggleMenu();
+    }
     return;
   }
   if (!locked() && !(menuMode && document.activeElement === canvas)) return;
@@ -387,7 +411,10 @@ window.addEventListener('keyup', event => {
   if (key && held.delete(key)) { event.preventDefault(); send({ type: 'key', key, down: false }); }
 });
 document.addEventListener('pointerlockchange', () => {
-  if (locked()) { exitingLock = false; lastEscapeAt = -Infinity; setMenu(false); }
+  if (locked()) {
+    if (captureCancelled || !active) { releaseMouse(); inputHint(); return; }
+    exitingLock = false; lastEscapeAt = -Infinity; setMenu(false);
+  }
   else {
     reset();
     if (active && !exitingLock && !menuMode && !document.hidden && document.hasFocus()) { lastEscapeAt = performance.now(); setMenu(true); }

@@ -59,3 +59,19 @@ footer { border-top:1px solid #34291b; padding:22px 0 28px; display:flex; justif
 .resolution-label { display:flex; align-items:center; gap:7px; font-size:10px; color:var(--muted); }
 .actions select { font:inherit; background:#2b2116; color:var(--text); border:1px solid var(--line); padding:7px; border-radius:2px; cursor:pointer; }
 .actions select:disabled { opacity:.4; }
+
+
+/* Playing uses the entire viewport; toolbar overlays never shift the aim centre. */
+body.playing { overflow:hidden; }
+body.playing .stream-shell,
+.stream-shell:fullscreen { position:fixed; inset:0; width:100%; height:100dvh; border:0; z-index:10; background:#000; }
+body.playing .stage,
+.stream-shell:fullscreen .stage { position:absolute; inset:0; width:100%; height:100%; min-height:0; max-height:none; background:#000; }
+body.playing canvas,
+.stream-shell:fullscreen canvas { width:100%; height:100%; object-fit:contain; object-position:50% 50%; }
+body.playing .toolbar,
+.stream-shell:fullscreen .toolbar { position:absolute; left:12px; right:12px; bottom:max(12px,env(safe-area-inset-bottom)); z-index:2; min-height:48px; border:1px solid var(--line); background:#21190feb; border-radius:4px; }
+body.playing.aiming .toolbar { visibility:hidden; pointer-events:none; }
+body.playing .capture-hint,
+.stream-shell:fullscreen .capture-hint { bottom:100px; }
+@media(max-width:760px) { body.playing .toolbar,.stream-shell:fullscreen .toolbar { left:6px; right:6px; padding:8px; } body.playing .capture-hint { bottom:145px; } }

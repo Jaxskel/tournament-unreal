@@ -4,8 +4,9 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
 const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf8').then(text => text.replace(/^import .*;\n/, ''));
-function harness(joinResponses = [], storage = new Map()) {
+function harness(joinResponses = [], storage = new Map(), gateway = '') {
   let joinRequests = 0;
+  const requestedURLs = [];
   const timers = [];
   let time = 0;
   let frame = null;
@@ -17,12 +18,14 @@ function harness(joinResponses = [], storage = new Map()) {
     addEventListener(name, fn) { this.handlers.set(name, fn); },
     dispatch(name, value = {}) { return this.handlers.get(name)?.({preventDefault() {}, ...value}); },
   });
-  const document = {...events(), hidden:false, pointerLockElement:null, activeElement:null, hasFocus:() => true};
+  const classes=new Set();
+  const document = {body:{classList:{toggle(name,on){if(on)classes.add(name);else classes.delete(name);},contains:name=>classes.has(name)}},...events(), hidden:false, pointerLockElement:null, activeElement:null, hasFocus:() => true};
+  document.querySelector = () => gateway ? {content:gateway} : null;
   const window = {...events()};
   class Socket {
     static OPEN = 1;
     static instances = [];
-    constructor() { this.readyState = 1; this.bufferedAmount = 0; this.sent = []; Socket.instances.push(this); }
+    constructor(url) { this.url=url; this.readyState = 1; this.bufferedAmount = 0; this.sent = []; Socket.instances.push(this); }
     send(raw) { const p = JSON.parse(raw); this.sent.push(p); if (p.type === 'menu-state') nativeMenu = p.open; }
     close() { this.readyState = 3; }
   }
@@ -38,7 +41,7 @@ function harness(joinResponses = [], storage = new Map()) {
   };
   document.exitPointerLock = () => { document.pointerLockElement = null; document.dispatch('pointerlockchange'); };
   const context = vm.createContext({
-    document, window, WebSocket:Socket, Blob, ArrayBuffer,
+    document, window, WebSocket:Socket, Blob, ArrayBuffer, URL,
     localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},
     VideoDecoder:class {},
     GameVideoDecoder:class {
@@ -52,7 +55,8 @@ function harness(joinResponses = [], storage = new Map()) {
     DOMException, AbortController,
     location:{protocol:'http:',host:'test'}, AbortSignal,
     fetch:async url => {
-      if (url === '/api/join') {
+      requestedURLs.push(url);
+      if (url.endsWith('/api/join')) {
         joinRequests++;
         const response = joinResponses.shift() ?? {status:201, body:{token:'fixture'}};
         return {ok:response.status < 300,status:response.status,json:async () => response.body};
@@ -70,7 +74,7 @@ function harness(joinResponses = [], storage = new Map()) {
     return socket;
   }
   return {
-    run, join, document, window, intervals, timers,
+    run, join, document, window, intervals, timers, requestedURLs,
     joinRequests:() => joinRequests,
     sockets:Socket.instances,
     element:id => document.getElementById(id),
@@ -317,4 +321,39 @@ test('Escape also releases a new lock before its asynchronous change event arriv
   // The browser exposes the new lock before it dispatches pointerlockchange.
   h.window.dispatch('keydown',{code:'Escape',repeat:false});
   assert.equal(h.document.pointerLockElement,null);assert.equal(h.nativeMenu(),true);
+});
+
+
+test('hosted frontend routes join, health and video directly to its build-configured HTTPS gateway',async()=>{
+  const h=harness([],new Map(),'https://game.example');
+  const ws=await h.join();
+  assert.equal(ws.url,'wss://game.example/stream');
+  assert.ok(h.requestedURLs.includes('https://game.example/api/join'));
+  assert.ok(h.requestedURLs.includes('https://game.example/api/health'));
+  assert.throws(()=>harness([],new Map(),'http://game.example'));
+  assert.throws(()=>harness([],new Map(),'https://game.example/path'));
+  assert.throws(()=>harness([],new Map(),'https://user:pass@game.example'));
+});
+
+
+test('play fills the viewport, aiming hides chrome, Escape restores controls and disconnect exits play mode',async()=>{
+  const h=harness();await h.join();
+  assert.equal(h.document.body.classList.contains('playing'),true);
+  await h.run('captureMouse()');assert.equal(h.document.body.classList.contains('aiming'),true);
+  h.window.dispatch('keydown',{code:'Escape',repeat:false});
+  assert.equal(h.document.body.classList.contains('aiming'),false);
+  assert.equal(h.document.body.classList.contains('playing'),true);
+  h.run('disconnect()');assert.equal(h.document.body.classList.contains('playing'),false);
+});
+
+
+test('Escape cancels a pending mouse capture even when the browser grants it afterward',async()=>{
+  const h=harness();await h.join();h.run('setMenu(true)');
+  let grant;h.element('game').requestPointerLock=()=>new Promise(resolve=>{grant=()=>{h.document.pointerLockElement=h.element('game');h.document.dispatch('pointerlockchange');resolve()}});
+  const pending=h.run('captureMouse()');
+  h.window.dispatch('keydown',{code:'Escape',repeat:false});
+  grant();await pending;
+  assert.equal(h.document.pointerLockElement,null);
+  assert.equal(h.nativeMenu(),true);
+  assert.equal(h.document.body.classList.contains('aiming'),false);
 });
