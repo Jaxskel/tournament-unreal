@@ -13,12 +13,12 @@ Status recorded on 2026-09-21, using [verification.json](verification.json), the
 | Matching legacy build | The latest fixed-window and standalone-practice wrapper build passed in **361.64 seconds** with all nine exports and no unresolved symbols. It includes configuration, logging, Party, pacing and browser window fixes. A fresh clean-checkout replay remains required. |
 | Shader profile | Original patch changes only WebGL fragment samplers to 16 and shader version 61 → 62. Both editor and ShaderCompileWorker shader-format DLL rebuilds are required; patch application alone is insufficient. |
 | Private compatibility assets | Copy-on-write preparation, Apply with rendering, fresh-process Verify, and original/sibling hash audit passed for **18 textured weapon surfaces plus 3 Robot repairs**. This supersedes older untested wording in the compatibility README. Browser appearance is unverified. |
-| Current cook | Full non-iterative **Deck** cook through normal shader workers passed: **0 errors, 2,710 warnings, 4,107.55 seconds**. Review the warnings; cook completion does not validate browser appearance or gameplay. Outpost has not yet been cooked/packaged. |
-| Packaging | UAT packaging exited **0**. The compressed pak is **1,419,313,050 bytes** and `.data` is **1,424,709,491 bytes** (v2 Arrow-material configuration). Matching UnrealPak `-Test` passed with exit **0** for **8,328 files**; `-List` listed those files successfully with the pinned success exit **1**. Deck, UT-Entry, runtime AssetRegistry and WebGL shader cache presence are confirmed. Outpost remains missing; this is not a final rotation-capable or gameplay-validated package. |
+| Current cook | Operator reports the explicit **Deck + UT-Entry + Outpost23** iterative cook finished **2026-09-21 20:48:25 UTC**, exit **0**, **885.79 seconds**, **0 errors / 1,904 warnings**. Required map/registry/cache presence passed; **7,793 nonempty files / 4,496,716,095 bytes**. Material/shader fallback warnings still block clean readiness. No package of this expanded cook has been produced. |
+| Packaging | UAT packaging exited **0**. The compressed pak is **1,419,313,050 bytes** and `.data` is **1,424,709,491 bytes** (v2 Arrow-material configuration). Matching UnrealPak `-Test` passed with exit **0** for **8,328 files**; `-List` listed those files successfully with the pinned success exit **1**. Deck, UT-Entry, runtime AssetRegistry and WebGL shader cache presence are confirmed. Outpost is absent from this older Deck package; the successful expanded cook has not been packaged. This is not a final rotation-capable or gameplay-validated package. |
 | Converted WASM | Matching-runtime conversion validates and has initialized in Chrome with 1.5 GiB, including allocator smoke. **Firefox 146 and Playwright WebKit 26** also passed actual runtime initialization, allocator and matching file-packager preloader smoke. The preloader used fixture data; these results prove neither gameplay nor actual Safari behavior. The allocator probe used `noInitialRun=true`; it proves neither a world nor FPS. |
 | Actual launcher probe | Chrome runs the actual WASM world and six-bot match locally, with native window/canvas/backing buffer at 1920×1080. Removed Web Audio velocity calls and cubemap mip activation have been corrected. A one-time startup I/O queue diagnostic remains under investigation. **The 3D scene turns black in a final image pass despite valid earlier scene-color pixels; the HUD alone is visible. No valid gameplay FPS result.** |
-| Latest readiness correction | The **540.22-second** build includes the `ATournamentPlayerController` requirement in `TournamentBrowserReady()` and TournamentDeathmatch's explicit controller class. The reconverted Chrome runtime exposes all nine controls and returns not-ready before main. A ticking UT-Entry world with a generic controller must not pass readiness; actual match readiness remains unverified. |
-| Final rotation / networking | Deck and UT-Entry package presence is confirmed; Outpost23 coverage is still outstanding. Complete browser gameplay, actual multiplayer handshake, rotation, reconnect and performance remain unverified. Native/streaming success does not validate this port. |
+| Latest readiness correction | The **540.22-second** build includes the `ATournamentPlayerController` requirement in `TournamentBrowserReady()` and TournamentDeathmatch's explicit controller class. The reconverted Chrome runtime exposes all nine controls and returns not-ready before main. A ticking UT-Entry world with a generic controller must not pass readiness. Subsequent actual practice and two-client multiplayer probes reached Tournament match readiness; this does not validate rendering or completed gameplay. |
+| Final rotation / networking | Two independent Chrome contexts joined the isolated native 7797 server with distinct identities and simultaneous bidirectional traffic. **UI Reconnect failed during the replacement `.data` download**, before another socket opened. Outpost23 is now cooked but not packaged. Complete browser gameplay, rotation, successful reconnect and performance remain unverified. |
 
 ## 2. Prepare an isolated checkout and tools
 
@@ -192,7 +192,7 @@ if ($LASTEXITCODE) { throw 'Original/sibling hash audit failed' }
 
 Existing fallback parents/receipts are not a reason to rerun Apply. The helper intentionally refuses conflicting or reused preparation; use the explicit recovery/shadow-project procedure in [compat/README.md](compat/README.md), preserving the old private outputs. Require successful saves, fresh Verify and hash audit before cooking. These prove package structure and isolation, not final shader appearance or gameplay material overrides.
 
-## 6. Complete a normal-worker, non-iterative cook
+## 6. Cook with normal shader workers and verify required maps
 
 The completed **Deck** cook used this normal-worker command, not `-NoShaderWorker`; it reported 0 errors and 2,710 warnings in 4,107.55 seconds:
 
@@ -204,7 +204,7 @@ Invoke-Checked $editor @(
 ) "$scratch\cook-deck.log"
 ```
 
-This documents the completed Deck scope; Outpost is still outstanding. Do not start a competing process. After shader version/compiler changes, **omit `-iterate`** so stale cooked shaders cannot survive. Keep normal shader workers enabled. A shader compile still running is not success; `-NoShaderWorker` is not the normal recipe. Do not stage/package while cooking is active.
+This command documents the initial non-iterative Deck cook; the later expanded iterative result is recorded below. Do not start a competing process. After shader version/compiler changes, **omit `-iterate`** so stale cooked shaders cannot survive. Keep normal shader workers enabled. A shader compile still running is not success; `-NoShaderWorker` is not the normal recipe. Do not stage/package while cooking is active.
 
 Before a **final rotation-capable** package, explicitly cook all three maps. Normal cooking also gathers the configured default map, but listing all roots makes startup and subsequent server travel coverage explicit:
 
@@ -216,6 +216,18 @@ Invoke-Checked $editor @(
     '-unattended', '-nop4', '-stdout'
 ) "$scratch\cook-final.log"
 ```
+
+The operator subsequently ran those explicit three roots with **`-iterate`** against the existing cook, finishing at **20:48:25 UTC on 2026-09-21**: exit 0, 885.79 seconds, 0 errors and 1,904 warnings. No cooker or ShaderCompileWorker remained afterward. This cached follow-up is not evidence of a new clean cook after a compiler/shader change. Reported required output sizes were:
+
+| Cooked output | Bytes |
+| --- | ---: |
+| DM-DeckTest | 11,939,768 |
+| UT-Entry | 24,983 |
+| DM-Outpost23 | 47,322,296 |
+| AssetRegistry.bin | 4,912,182 |
+| WebGL global shader cache | 325,705 |
+
+Total: **7,793 nonempty cooked files, 4,496,716,095 bytes**. Operator evidence is in `F:\TournamentUT4\work\html5-cook-rotation-iterate-1.log` and `F:\TournamentUT4\work\html5-cook-rotation-iterate-1-result.json`. Required-presence checks passed; material/shader fallback warnings still block clean readiness. **No packaging followed this cook**; existing Deck package results and byte counts must not be attributed to these expanded outputs.
 
 Require unambiguous resolution of those exact package paths in the matching source Content. The configured entry package is `/Game/RestrictedAssets/Maps/UT-Entry` (with a hyphen). Preserve the resolved paths in the artifact inventory; do not substitute a different entry map just to pass a name check.
 
@@ -442,3 +454,8 @@ ssh -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 \
 ```
 
 The WebSocket endpoint is `ws://127.0.0.1:9080/game`, subprotocol `binary`. `/health`, accepted-origin upgrade, wrong-origin rejection and released connection slots verify gateway admission and the tunnel only. A bound native socket and completed Deck load do not establish a browser gameplay handshake, replication, or six-player operation. Preserve native/gateway logs separately from cook logs and complete those gameplay checks before enabling Multiplayer for users.
+
+
+Actual two-client checkpoint, 2026-09-21 20:41–20:43 UTC: independent Chrome contexts loaded sequentially using the unchanged localhost:8077 multiplayer manifest. Both reached native Tournament match readiness, while the server logged distinct identities `emscripten-00024` and `emscripten-00029` and different full stats IDs. Gateway health observed two simultaneous connections. A sent/received 1,163/1,872 WebSocket frames; B sent/received 323/641. Both directions carried framed game traffic; these counts are not necessarily UDP-packet counts.
+
+Clicking the launcher's **Reconnect** closed A's original socket, then failed downloading `UnrealTournament.data` with `net::ERR_FAILED`; no replacement socket opened. The endpoint returned HTTP 200 afterward, but the failure cause remains unresolved. Both owned test contexts/browser were closed and gateway admission returned to zero. This is a handshake pass and a reconnect failure, with no rendering/FPS claim. Retained diagnostics include the initial UT-Entry travel error followed by successful map load, invalid reflection-capture data, async I/O queue overflow, and a native legacy replay-service failure. Private evidence remains under the workspace's `work/ut4-html5/mp-handshake-C9AkO6/` (`report.json`, `summary.md`, `native-join-evidence.log`, screenshots); the original bounded probe is `work/ut4-html5/probe-multiplayer.cjs`.

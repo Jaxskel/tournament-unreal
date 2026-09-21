@@ -51,7 +51,7 @@
     "actualLauncherStartup": "Actual local WASM Deck match with sixbots advances nativeframes at1920x1080; audio velocity crash fixed. Black3D output remains: boundedreadbacks show valid scene/bloomcolor followed by allzero finalfullresolutionpass. No valid gameplayFPS result. StartupI/O diagnostic unclassified.",
     "patcherPreflightTests": 30,
     "partyCallbackTests": 11,
-    "runtimeHarness": "Lifecycle deadline and cleanup fixes pass; 22 lifecycle/WebGL checks and 113 diagnostic checks passed.",
+    "runtimeHarness": "GlobalstartupdeadlineandownedBrowserServercleanup tested;16lifecyclechecks includingrealserverclosewithdelayedprofilecleanup passed.",
     "matchReadiness": "Full HTML5 build passed in 540.22 seconds without unresolved symbols; converted runtime initializes in Chrome with nine exports returning not-ready before main.",
     "browserPlatformConfiguration": "Exact v1-to-v2 migration applied in isolated tree; ArrowMaterialName points to cooked debug fallback. Ten config tests pass; verified v2package contains configuration.",
     "partyAndLoggingBuild": "Full HTML5 link passed in 582.80 seconds; subsequent match-readiness build also passed.",
@@ -108,7 +108,49 @@
       "framebufferComplete": true,
       "sampledGLErrors": [],
       "firstBlackPass": "fullresolution half-float pass with constant-color fragmentshader; identification inprogress",
-      "scope": "private diagnostic; nativeHUDrendersbut3Dworldblack. Notplayable."
+      "scope": "private diagnostic; nativeHUDrendersbut3Dworldblack. Notplayable.",
+      "cause": "M_OutlinePP Emissive FeatureLevelSwitch defaults to Constant_0 forES2/ES3.1; onlySM4/SM5 selectscene-color/outlinegraph. Targetedbrowsercamera guardpending.",
+      "showFlagProbe": "ShowFlag.PostProcessMaterial=0 set successfully but image stillblack; no runtimefixclaim.",
+      "targetedSourcePatch": "Applied isolatedWindows camera source: omits exactly twoOutlineMatAddBlendable calls onlyPLATFORM_HTML5_BROWSER; SHA25643dab79c2203cee2813b3babc6e0a4ddb0a57685f4f27250fb1bae63bd686442. Buildpending; no visibilityfixclaim."
+    },
+    "rotationCook": {
+      "exitCode": 0,
+      "seconds": 885.79,
+      "warnings": 1904,
+      "maps": [
+        "DM-DeckTest",
+        "UT-Entry",
+        "DM-Outpost23"
+      ],
+      "nonemptyCookedFiles": 7793,
+      "nonemptyCookedBytes": 4496716095,
+      "scope": "Iterative secondarena cook complete; package pending.29distinctmaterialcompilefailureassetslogged; visualgate notpassed."
+    },
+    "multiplayerHandshake": {
+      "independentBrowserClients": 2,
+      "uniqueNativeIdentities": 2,
+      "simultaneousGatewayConnections": 2,
+      "scope": "BothreachedTournamentReady; realbidirectionalWebSocketframes/nativejoinlogs. Worldblacknotvisuallyplayable. ReconnectassetloadfailedERR_FAILED; investigationongoing."
+    },
+    "startupIOClassification": {
+      "queuedCleanupHints": 4464,
+      "queuedReads": 0,
+      "cachedHandles": 0,
+      "busyReads": 0,
+      "firstTickMs": 77.3,
+      "observerOverheadMs": 0.5,
+      "afterCleanup": 0,
+      "nextEmptyTicks": 11,
+      "scope": "Privateinstrumentedmatchingbuild. Noassetreadstarvation; redundantcleanupburstpatchinprogress."
+    },
+    "outlineAndAsyncIOBuild": "IsolatedHTML5 buildinprogress; bothsourcepatches passedfocusedtestsandindependentreview. No newbinaryvisibility orframepacing claim.",
+    "outlinePatchTests": {
+      "total": 22,
+      "privateActualSource": "passed preprocessing fordefineabsent/0/1; browseromitsonlyOutline/nativepreservesbothinsertions"
+    },
+    "asyncIOPatchTests": {
+      "total": 6,
+      "privateActualSource": "passedcompiledproducerbodyfornative/browserandthreaded/singlethreaded; independenthashcollisiontestpassed"
     }
   },
   "limitations": [

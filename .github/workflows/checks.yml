@@ -45,6 +45,8 @@ jobs:
       - run: python3 -B ports/html5/test_patch_browser_logging.py
       - run: python3 -B ports/html5/test_patch_browser_party.py
       - run: python3 -B ports/html5/test_patch_browser_window.py
+      - run: python3 -B ports/html5/test_patch_browser_outline.py
+      - run: python3 -B ports/html5/test_patch_browser_asyncio.py
       - run: python3 -B ports/html5/test_configure_browser_config.py
       - run: python3 -B ports/html5/test_patcher_preflight.py
   event-contract:
