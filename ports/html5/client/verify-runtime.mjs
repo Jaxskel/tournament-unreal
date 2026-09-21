@@ -22,6 +22,7 @@ Optional:
   --warmup-seconds N             0..120 (default 5)
   --ready-timeout-seconds N      World readiness deadline, 10..1800 (default 300)
   --stall-seconds N              Native tick inactivity limit, 2..120 (default 15)
+  --webgl-sample-seconds N       Optional draw/target evidence before timing, 0..5 (default 0/off)
   --channel chrome|chromium      Default chrome; chromium uses Playwright's installed browser
   --headed                      Default headless; results record this choice
   --validate-only               Validate CLI/paths only: no browser, network or artifacts
@@ -35,7 +36,7 @@ function inside(path, root) {
 }
 export function parseArgs(argv) {
   const flags = new Set(['headed', 'validate-only']);
-  const names = new Set(['url','manifest-url','out-dir','resolution','mode','seconds','warmup-seconds','ready-timeout-seconds','stall-seconds','channel',...flags]);
+  const names = new Set(['url','manifest-url','out-dir','resolution','mode','seconds','warmup-seconds','ready-timeout-seconds','stall-seconds','webgl-sample-seconds','channel',...flags]);
   const values = {};
   for (let i=0; i<argv.length; i++) {
     const key=argv[i].startsWith('--') ? argv[i].slice(2) : '';
@@ -73,6 +74,7 @@ export function parseArgs(argv) {
     mode:choice('mode','practice',['practice','multiplayer']),channel:choice('channel','chrome',['chrome','chromium']),
     seconds:number('seconds',30,5,600),warmupSeconds:number('warmup-seconds',5,0,120),
     readyTimeoutSeconds:number('ready-timeout-seconds',300,10,1800),stallSeconds:number('stall-seconds',15,2,120),
+    webglSampleSeconds:number('webgl-sample-seconds',0,0,5),
     headed:!!values.headed,validateOnly:!!values['validate-only'] };
 }
 
@@ -94,15 +96,142 @@ export function isFailureDiagnostic(type, text) {
 }
 
 // Installed before page code; observes the real canvas context without creating one.
-function installProbe() {
+export function installProbe({ webglSample=false }={}) {
   if (window === top) return;
   const original=HTMLCanvasElement.prototype.getContext;
   window.__ut4Verify={ gl:null, samples:[], issues:[], measuring:false, completedCallbacks:0 };
   HTMLCanvasElement.prototype.getContext=function(...args) {
     const context=Reflect.apply(original,this,args);
-    if (this.id==='canvas' && ['webgl','webgl2','experimental-webgl'].includes(args[0]) && context) window.__ut4Verify.gl=context;
+    if (this.id==='canvas' && ['webgl','webgl2','experimental-webgl'].includes(args[0]) && context) {
+      const probe=window.__ut4Verify;
+      probe.gl=context;
+      if (webglSample && !probe.webgl) probe.webgl=observe(context);
+    }
     return context;
   };
+
+  function observe(gl) {
+    // WebGL 1 cannot query a texture's dimensions. Observe allocation calls from
+    // context creation; retain metadata weakly, never retain image/texture data.
+    const textures=new WeakMap(), renderbuffers=new WeakMap(), ids=new WeakMap();
+    const restores=[], errors=[];
+    let nextId=1, active=false, start=0, deadline=0, draws=0, omitted=0, capped=false;
+    const groups=new Map();
+    const limit=10000, groupLimit=128;
+    const issue=error=>{ if (errors.length<8) errors.push(String(error.message ?? error)); };
+    const id=object=>{ if (!ids.has(object)) ids.set(object,nextId++); return ids.get(object); };
+    const wrap=(object,name,after)=>{
+      if (typeof object[name]!=='function') return;
+      const own=Object.getOwnPropertyDescriptor(object,name), original=object[name];
+      const wrapped=function(...args) {
+        const result=Reflect.apply(original,this,args);
+        try { after(args); } catch (error) { issue(error); }
+        return result;
+      };
+      try {
+        Object.defineProperty(object,name,{configurable:true,writable:true,value:wrapped});
+        restores.push(()=>{ if (object[name]===wrapped) { if (own) Object.defineProperty(object,name,own); else delete object[name]; } });
+      } catch (error) { issue(error); }
+    };
+    const texture=(target,level,width,height)=>{
+      const cube=target>=gl.TEXTURE_CUBE_MAP_POSITIVE_X && target<=gl.TEXTURE_CUBE_MAP_NEGATIVE_Z;
+      const binding=target===gl.TEXTURE_2D?gl.TEXTURE_BINDING_2D:cube?gl.TEXTURE_BINDING_CUBE_MAP:null;
+      if (binding===null || !Number.isInteger(level) || level<0 || level>31) return;
+      const object=gl.getParameter(binding);
+      if (!object) return;
+      let levels=textures.get(object); if (!levels) textures.set(object,levels=new Map());
+      levels.set(target+':'+level,Number.isInteger(width) && width>=0 && Number.isInteger(height) && height>=0?[width,height]:null);
+    };
+    wrap(gl,'texImage2D',args=>{
+      const source=args[5];
+      texture(args[0],args[1],args.length>=9?args[3]:source?.videoWidth ?? source?.naturalWidth ?? source?.width,
+        args.length>=9?args[4]:source?.videoHeight ?? source?.naturalHeight ?? source?.height);
+    });
+    wrap(gl,'compressedTexImage2D',a=>texture(a[0],a[1],a[3],a[4]));
+    wrap(gl,'copyTexImage2D',a=>texture(a[0],a[1],a[5],a[6]));
+    wrap(gl,'texStorage2D',a=>{
+      for (let level=0;level<Math.min(a[1],32);level++) {
+        const faces=a[0]===gl.TEXTURE_CUBE_MAP?Array.from({length:6},(_,i)=>gl.TEXTURE_CUBE_MAP_POSITIVE_X+i):[a[0]];
+        for (const face of faces) texture(face,level,Math.max(1,Math.floor(a[3]/2**level)),Math.max(1,Math.floor(a[4]/2**level)));
+      }
+    });
+    wrap(gl,'renderbufferStorage',a=>{
+      const object=gl.getParameter(gl.RENDERBUFFER_BINDING);
+      if (object) renderbuffers.set(object,{size:[a[2],a[3]],samples:0});
+    });
+    wrap(gl,'renderbufferStorageMultisample',a=>{
+      const object=gl.getParameter(gl.RENDERBUFFER_BINDING);
+      if (object) renderbuffers.set(object,{size:[a[3],a[4]],samples:a[1]});
+    });
+    const attachment=(target,point)=>{
+      const type=gl.getFramebufferAttachmentParameter(target,point,gl.FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
+      if (type===gl.NONE) return null;
+      const object=gl.getFramebufferAttachmentParameter(target,point,gl.FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
+      if (!object) return {kind:'unknown',size:null};
+      if (type===gl.RENDERBUFFER) return {kind:'renderbuffer',id:id(object),size:null,...renderbuffers.get(object)};
+      if (type!==gl.TEXTURE) return {kind:'unknown',size:null};
+      const level=gl.getFramebufferAttachmentParameter(target,point,gl.FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL);
+      const face=gl.getFramebufferAttachmentParameter(target,point,gl.FRAMEBUFFER_ATTACHMENT_TEXTURE_CUBE_MAP_FACE) || gl.TEXTURE_2D;
+      return {kind:'texture',id:id(object),level,face,size:textures.get(object)?.get(face+':'+level) ?? null};
+    };
+    const record=()=>{
+      if (!active || performance.now()>deadline) return;
+      if (draws>=limit) { capped=true; return; }
+      if (gl.isContextLost()) return;
+      draws++;
+      const framebuffer=gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING ?? gl.FRAMEBUFFER_BINDING);
+      const target=gl.DRAW_FRAMEBUFFER ?? gl.FRAMEBUFFER;
+      const entry={framebuffer:framebuffer?'offscreen':'default',framebufferId:framebuffer?id(framebuffer):0,
+        viewport:Array.from(gl.getParameter(gl.VIEWPORT)),drawingBuffer:[gl.drawingBufferWidth,gl.drawingBufferHeight],
+        color0:framebuffer?attachment(target,gl.COLOR_ATTACHMENT0):null,
+        depth:framebuffer?attachment(target,gl.DEPTH_ATTACHMENT):null,
+        stencil:framebuffer?attachment(target,gl.STENCIL_ATTACHMENT):null};
+      const key=JSON.stringify(entry), existing=groups.get(key);
+      if (existing) existing.drawCalls++;
+      else if (groups.size<groupLimit) groups.set(key,{...entry,drawCalls:1});
+      else omitted++;
+    };
+    for (const name of ['drawArrays','drawElements','drawArraysInstanced','drawElementsInstanced','drawRangeElements']) wrap(gl,name,record);
+    // UE4's WebGL 1 instanced draws can use the extension rather than core methods.
+    const extensions=new WeakSet();
+    const originalExtension=gl.getExtension, ownExtension=Object.getOwnPropertyDescriptor(gl,'getExtension');
+    const getExtension=function(...args) {
+      const result=Reflect.apply(originalExtension,this,args);
+      if (result && args[0]==='ANGLE_instanced_arrays' && !extensions.has(result)) {
+        extensions.add(result);
+        for (const name of ['drawArraysInstancedANGLE','drawElementsInstancedANGLE']) wrap(result,name,record);
+      }
+      return result;
+    };
+    try {
+      Object.defineProperty(gl,'getExtension',{configurable:true,writable:true,value:getExtension});
+      restores.push(()=>{ if (gl.getExtension===getExtension) { if (ownExtension) Object.defineProperty(gl,'getExtension',ownExtension); else delete gl.getExtension; } });
+    } catch (error) { issue(error); }
+    return {
+      begin(seconds) { start=performance.now(); deadline=start+seconds*1000; active=true; },
+      finish() {
+        active=false;
+        for (const restore of restores.reverse()) restore();
+        return {status:gl.isContextLost()?'context-lost':draws?'observed':'no-draws',
+          requestedSeconds:(deadline-start)/1000,observedDrawCalls:draws,drawCap:limit,drawCapReached:capped,
+          omittedDrawCalls:omitted,groupLimit,groups:Array.from(groups.values()),issues:errors};
+      }
+    };
+  }
+}
+
+export function beginWebGLSample({seconds,expected}) {
+  const p=window.__ut4Verify;
+  if (!p?.webgl || p.api.TournamentBrowserReady()!==1) throw Error('WebGL sample requires the actual ready game context.');
+  p.webglStart={epoch:p.api.TournamentBrowserSessionEpoch(),nativeFrame:p.api.TournamentBrowserFrame(),expected};
+  p.webgl.begin(seconds);
+}
+export function finishWebGLSample() {
+  const p=window.__ut4Verify, report=p.webgl.finish();
+  return {...report,...p.webglStart,finalNativeFrame:p.api.TournamentBrowserFrame(),
+    worldUnchanged:p.api.TournamentBrowserReady()===1 && p.api.TournamentBrowserSessionEpoch()===p.webglStart.epoch,
+    source:'Actual WebGL draw calls after game readiness; viewport and bound framebuffer attachment metadata',
+    limitations:'Viewport is the configured rasterization extent, not proof of scene resolution. Color0/depth/stencil only; allocation dimensions are observed requests, not queried texture storage. Smaller shadow/postprocess targets are expected. A full-size default framebuffer can contain an upscaled scene. Unknown attachments remain null. No scene-pass identification, GPU timing, presented FPS or gameplay proof. Sampling is separate from tick timing.'};
 }
 
 // Executes only in the real runtime iframe. No global UE_JSlib dependency.
@@ -210,7 +339,7 @@ async function verifyResolution(config,resolution,directory,report) {
     browser=await chromium.connect(server.wsEndpoint(),{timeout:15000});
     browser.on('disconnected',()=>fail('Browser disconnected before verification finished.'));
     const context=await op(browser.newContext({ viewport:{width:1440,height:1000},deviceScaleFactor:1 }),'Browser context');
-    await op(context.addInitScript(installProbe),'Canvas observer installation');
+    await op(context.addInitScript(installProbe,{webglSample:config.webglSampleSeconds>0}),'Canvas observer installation');
     page=await op(context.newPage(),'Browser page');
     page.on('crash',()=>fail('Browser page crashed.'));
     page.on('pageerror',error=>fail('Page/engine error: '+error.message));
@@ -283,6 +412,12 @@ async function verifyResolution(config,resolution,directory,report) {
       assertState(await op(frame.evaluate(snapshot,Object.keys(BINDINGS)),'Fixed framebuffer check'));
     }
     await screenshot('world');
+    if (config.webglSampleSeconds>0) {
+      await op(frame.evaluate(beginWebGLSample,{seconds:config.webglSampleSeconds,expected:[width,height]}),'Begin WebGL evidence sample');
+      await op(delay(config.webglSampleSeconds*1000+50),'WebGL evidence interval');
+      result.webgl=await op(frame.evaluate(finishWebGLSample),'Read WebGL draw evidence');
+      if (!result.webgl.worldUnchanged) throw Error('World changed during WebGL sample.');
+    }
     const warmupEnd=Date.now()+config.warmupSeconds*1000;
     while (Date.now()<warmupEnd) {
       assertState(await op(frame.evaluate(snapshot,Object.keys(BINDINGS)),'Warmup health'));
