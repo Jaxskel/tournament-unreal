@@ -82,6 +82,70 @@ function bounded(promise, ms, label) {
   let timer;
   return Promise.race([promise,new Promise((_,reject)=>{ timer=setTimeout(()=>reject(Error(label)),ms); })]).finally(()=>clearTimeout(timer));
 }
+export function remainingStartupMs(deadline, now=Date.now()) {
+  const remaining=deadline-now;
+  if (!Number.isFinite(remaining) || remaining<=0) throw Error('World readiness timeout; global startup deadline exhausted.');
+  return remaining;
+}
+
+export async function startupOperation(operation,label,deadline,failed,now=Date.now) {
+  const remaining=remainingStartupMs(deadline,now());
+  // A synchronous engine load can block both iframe and parent for >15 seconds.
+  // Spend only the remaining shared startup budget, including Playwright waits.
+  // Put the fatal race inside bounded so a fatal also cancels its timeout timer.
+  const value=await bounded(Promise.race([operation(remaining),failed]),remaining,
+    label+' timed out at the global startup deadline');
+  remainingStartupMs(deadline,now());
+  return value;
+}
+
+const browserServerClosures=new WeakMap();
+export function trackBrowserServer(server) {
+  if (!browserServerClosures.has(server)) {
+    const state={closed:false};
+    browserServerClosures.set(server,state);
+    // Playwright emits this after ChildProcess 'close' and starts shutting down
+    // its WebSocket server, before awaiting temporary-profile directory removal.
+    server.once('close',()=>{state.closed=true;});
+  }
+  return server;
+}
+
+export async function cleanupVerification(server,result,primaryError,{closeMs=10000,killMs=5000,browser}={}) {
+  if (!server) return;
+  trackBrowserServer(server);
+  const owned=server.process();
+  const closed=()=>browserServerClosures.get(server).closed && owned
+    && (typeof owned.exitCode==='number' || typeof owned.signalCode==='string');
+  const completedShutdown=async error=>{
+    if (!closed() || !/^Browser (close|kill) timed out$/.test(String(error?.message))) return false;
+    // A connected Browser.close() disconnects this client, not an unrelated
+    // browser. The BrowserServer already owns process/WebSocket shutdown.
+    if (browser) await bounded(browser.close(),killMs,'Browser client disconnect timed out');
+    result.cleanupWarning='Owned browser closed; Playwright temporary-directory cleanup remains pending: '+error.message;
+    return true;
+  };
+  try { await bounded(Promise.resolve().then(()=>server.close()),closeMs,'Browser close timed out'); }
+  catch (closeError) {
+    try { if (await completedShutdown(closeError)) return; } catch (disconnectError) { closeError=disconnectError; }
+    try { await bounded(Promise.resolve().then(()=>server.kill()),killMs,'Browser kill timed out'); }
+    catch (killError) {
+      try { if (await completedShutdown(killError)) return; } catch (disconnectError) { killError=disconnectError; }
+      let message='Browser cleanup failed: '+String(closeError?.message ?? closeError)+'; '+String(killError?.message ?? killError);
+      try {
+        // This ChildProcess belongs to our launchServer call. Never look up or
+        // kill a browser by executable name, remote endpoint, or a reused PID.
+        if (owned && owned.exitCode===null && owned.signalCode===null) {
+          message+=owned.kill('SIGKILL') ? '; SIGKILL requested for owned browser' : '; owned browser SIGKILL was not sent';
+        }
+      } catch (forceError) { message+='; force kill: '+String(forceError?.message ?? forceError); }
+      result.cleanupError=message;
+      result.status='failed';
+      // Throwing from finally would otherwise replace the actual engine error.
+      if (!primaryError) { result.error=message; throw Error(message); }
+    }
+  }
+}
 const delay = ms => new Promise(resolve=>setTimeout(resolve,ms));
 const fatalPattern = /DebugBreak|\bfatal(?: error)?\b|Assertion failed|Ensure condition failed|\bcheckf? failed|\babort(?:ed|ing|\()|\bRuntimeError\b|memory access out of bounds|out of memory|\bLog\w*:\s*Error:/i;
 export function isFailureDiagnostic(type, text) {
@@ -312,7 +376,7 @@ async function verifyResolution(config,resolution,directory,report) {
   const { chromium }=await import('playwright');
   const result={ resolution,status:'running',metrics:{state:'uninitialized'},events:[],droppedEvents:0 };
   report.runs.push(result);
-  let server,browser,page,cleaning=false,fatal;
+  let server,browser,page,cleaning=false,fatal,primaryError;
   let rejectFatal;
   const failed=new Promise((_,reject)=>{ rejectFatal=reject; }); failed.catch(()=>{});
   const record=(kind,text)=>{
@@ -335,7 +399,7 @@ async function verifyResolution(config,resolution,directory,report) {
     (result.screenshots ??=[]).push(path);
   };
   try {
-    server=await chromium.launchServer({ headless:!config.headed,...(config.channel==='chrome'?{channel:'chrome'}:{}),timeout:30000 });
+    server=trackBrowserServer(await chromium.launchServer({ headless:!config.headed,...(config.channel==='chrome'?{channel:'chrome'}:{}),timeout:30000 }));
     browser=await chromium.connect(server.wsEndpoint(),{timeout:15000});
     browser.on('disconnected',()=>fail('Browser disconnected before verification finished.'));
     const context=await op(browser.newContext({ viewport:{width:1440,height:1000},deviceScaleFactor:1 }),'Browser context');
@@ -382,21 +446,22 @@ async function verifyResolution(config,resolution,directory,report) {
     }),'Verification settings');
     await op(page.reload({waitUntil:'domcontentloaded'}),'Reload saved settings');
     const deadline=Date.now()+config.readyTimeoutSeconds*1000;
-    await op(page.locator('#launch').click(),'Launch');
+    const startup=(operation,label)=>startupOperation(operation,label,deadline,failed);
+    await startup(timeout=>page.locator('#launch').click({timeout}),'Launch');
     let frame,state;
     while (Date.now()<deadline) {
       if (fatal) throw fatal;
-      const error=await op(page.locator('#error').textContent(),'Launcher status read');
+      const error=await startup(timeout=>page.locator('#error').textContent({timeout}),'Launcher status read');
       if (error?.trim()) throw Error('Launcher error: '+error);
       frame=page.frames().find(item=>item.url()===new URL('./runtime.html',config.url).href);
       // Never call C exports while the async runtime is still initializing.
-      if (frame && await op(page.locator('#resume').isVisible(),'postRun readiness')) {
-        state=await op(frame.evaluate(snapshot,Object.keys(BINDINGS)),'World/control read',Math.min(15000,Math.max(1,deadline-Date.now())));
+      if (frame && await startup(()=>page.locator('#resume').isVisible(),'postRun readiness')) {
+        state=await startup(()=>frame.evaluate(snapshot,Object.keys(BINDINGS)),'World/control read');
         result.lastReadiness=state;
         if (state.missing?.length) throw Error('Missing native control exports after postRun: '+state.missing.join(', '));
         if (state.ready) break;
       }
-      await op(delay(250),'Readiness poll');
+      await startup(remaining=>delay(Math.min(250,remaining)),'Readiness poll');
     }
     if (!state?.ready || !frame) throw Error('World readiness timeout; postRun/exit code alone is not success. Last state: '+JSON.stringify(state));
     assertState(state); result.worldReady=state;
@@ -440,22 +505,13 @@ async function verifyResolution(config,resolution,directory,report) {
     if (fatal) throw fatal;
     result.status='passed';
   } catch (error) {
+    primaryError=error;
     result.status='failed'; result.error=error.message;
     if (page) try { await screenshot('failure'); } catch (captureError) { result.screenshotError=captureError.message; }
     throw error;
   } finally {
     cleaning=true;
-    if (server) {
-      try { await bounded(server.close(),10000,'Browser close timed out'); }
-      catch {
-        await bounded(server.kill(),5000,'Browser kill timed out').catch(error=>{
-          result.cleanupError=error.message;
-          server.process().kill('SIGKILL'); // Only the browser process this invocation created.
-          result.status='failed';
-          throw error;
-        });
-      }
-    }
+    await cleanupVerification(server,result,primaryError,{browser});
   }
 }
 
