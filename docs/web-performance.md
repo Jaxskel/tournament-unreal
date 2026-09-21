@@ -32,6 +32,8 @@ Toolbar RTT was commonly 17–30 ms. “Video age” estimates gateway raw recei
 - Native plugin compiled with the restored MSVC v140 toolchain; both rendered clients identify the RTX 5090.
 - Two independent Chromium browser sessions joined simultaneously, displayed distinct views, captured the mouse, moved, fired, died and respawned. Both ran near 60 FPS while connected.
 - Deck completed and rotated automatically to Outpost with the optimized native capture path. Both streams resumed on Outpost.
+- Deliberately terminated both owned FFmpeg encoders. The gateway recycled them, both native feeds resumed, and both browsers retained their seats and returned to live video without restarting the game server.
+- Reloaded the user’s Codex in-app browser and verified the actual live game canvas with H.264 and a toolbar reading around 60 FPS. This is a functional check, not a separate frame-pacing benchmark.
 - Forty gateway/frontend/codec tests cover packet framing, independent seats, token/origin/input validation, missing pongs, menu state, disconnect/rejoin, encoder restart, stale acknowledgements, prediction loss, decoder resource cleanup, obsolete callbacks and unsupported hardware fallback. Eight authoritative-event tests and Windows launcher checks also pass.
 
 ## Reproduce and interpret
