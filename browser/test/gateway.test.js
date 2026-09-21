@@ -371,3 +371,7 @@ test('video acknowledgements do not refresh the held-input watchdog', async t =>
   await until(()=>wa.packets.some(p=>p.type==='input-state'&&p.state==='suspended'));
   assert.ok(f.received[0].some(p=>p.type==='reset'));assert.equal(wa.socket.readyState,1);
 });
+
+test('stream frame rate is validated before binding any listener',async()=>{
+  await assert.rejects(createGateway({fps:1000}),/Stream FPS/);
+});

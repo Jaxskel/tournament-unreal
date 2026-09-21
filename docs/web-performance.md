@@ -1,6 +1,25 @@
 # Browser stream performance — September 21, 2026
 
-## Changes deployed
+## 120 FPS follow-up
+
+The public host now defaults to 120 FPS. With a Mac Chromium seat and Windows Edge 153 seat connected simultaneously, the final warmed tests measured:
+
+| Browser | Sample | Canvas draw FPS | p50 gap | p95 gap | p99 gap | Maximum gap |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Windows Edge, wired host, software decoder | 20 seconds / 2,391 frames | 119.6 | 7.9 ms | 16.4 ms | 20.9 ms | 35.8 ms |
+| Mac Chromium, Wi-Fi | 30 seconds / 3,546 frames | 118.5 | 6.7 ms | 17.7 ms | 97.1 ms | 120.4 ms |
+
+The wired run had zero gaps over 50 ms, no page errors, and passed movement/fire, menu and disconnect/rejoin checks. Mac binary video bandwidth was 5.93 Mbit/s; its toolbar read 120 FPS / 18 ms RTT at the end. The Mac still had 22 gaps over 100 ms in that sample, consistent with the network-path issue diagnosed below. These numbers measure actual canvas draws, not panel scanout; no zero-latency or stutter-free Wi-Fi claim is made.
+
+The first 120 FPS attempt delivered only about 113 FPS. The final changes give capture scheduling headroom by rendering at a 144 FPS ceiling while limiting capture/encoding to 120, disable the old engine smooth-frame-rate cap, use single-threaded NV12 conversion, and stop treating Node's ordinary large-write backpressure signal as an automatic frame drop. The explicit three-picture encoder bound remains. Health now reports raw and encoded FPS separately; both native streams reached about 120 FPS.
+
+120 FPS uses 8.33 ms decoder timestamps and a 6 Mbit/s encoder target. Network credit is 24 pictures at 120 FPS, preserving the same 200 ms time bound as 12 at 60 FPS. A short burst of predicted pictures may decode without repeatedly resetting the codec; the 120 FPS decoder is bounded to 12 queued decode requests before reset and 16 source timestamps. Mouse forwarding is capped at 120 Hz and the message budget allows receipts and input together. Neither the gateway nor the browser can award platform rewards.
+
+All 45 browser/transport tests, eight event-contract tests, and Windows launcher checks pass. The native plugin was rebuilt with MSVC v140. Select both `STREAM_FPS=60` and native `-StreamFPS 60` to use the lower-bandwidth profile. The main live URL is unchanged.
+
+The sections below preserve the earlier 60 FPS baseline measurements for comparison.
+
+## Earlier 60 FPS changes deployed
 
 - Select the RTX 5090 explicitly. The old UE4.15 adapter heuristic chose the AMD integrated GPU; NVIDIA utilization was effectively zero before the change. Both native client logs now identify the RTX adapter. With both streams running, the RTX showed roughly 12% GPU utilization and 1% encoder utilization.
 - Render and capture at up to 60 Hz. Remove the per-frame game-thread render flush and CPU JPEG compression from the optimized path. Keep one capture in flight and send completed frames immediately.

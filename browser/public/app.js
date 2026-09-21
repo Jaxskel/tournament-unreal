@@ -26,7 +26,7 @@ let lastMouseSentAt = -Infinity;
 let lastPongAt = 0;
 const pendingPings = new Map();
 const INPUT_TIMEOUT_MS = 3000;
-const MOUSE_INTERVAL_MS = 1000 / 60;
+const MOUSE_INTERVAL_MS = 1000 / 120;
 let healthLoading = false;
 const locked = () => document.pointerLockElement === canvas;
 function send(message) {
@@ -207,7 +207,7 @@ async function join() {
         if (packet.video === 'h264') {
           if (typeof VideoDecoder === 'undefined') { disconnect('This stream needs a browser with H.264 WebCodecs support. Open it in current Chrome or Edge.'); return; }
           videoDecoder = new GameVideoDecoder({
-            send,
+            send, fps:packet.fps ?? 60,
             draw: frame => {
               if (!active || generation !== version) return;
               ctx.drawImage(frame,0,0,canvas.width,canvas.height);

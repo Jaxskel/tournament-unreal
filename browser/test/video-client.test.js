@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GameVideoDecoder } from '../public/video-client.js';
 import { videoPacket } from '../video.js';
-function harness(t) {
+function harness(t, fps = 60) {
   const instances=[],sent=[],drawn=[],errors=[];
   class Decoder {
     constructor(callbacks){this.callbacks=callbacks;this.state='unconfigured';this.decodeQueueSize=0;this.chunks=[];instances.push(this);}
@@ -14,7 +14,7 @@ function harness(t) {
   t.after(()=>{globalThis.VideoDecoder=oldDecoder;globalThis.EncodedVideoChunk=oldChunk;});
   globalThis.VideoDecoder=Decoder;
   globalThis.EncodedVideoChunk=class {constructor(init){Object.assign(this,init);}};
-  const client=new GameVideoDecoder({send:m=>sent.push(m),draw:frame=>drawn.push(frame),failure:(error,fatal)=>errors.push({error,fatal})});
+  const client=new GameVideoDecoder({fps,send:m=>sent.push(m),draw:frame=>drawn.push(frame),failure:(error,fatal)=>errors.push({error,fatal})});
   client.configure('avc1.42c020');
   const push=(seq,key=false)=>{const b=videoPacket(Buffer.from([0,0,1,0x65]),seq,Date.now(),key);client.push(b.buffer.slice(b.byteOffset,b.byteOffset+b.length));};
   return {client,instances,sent,drawn,errors,push};
@@ -31,7 +31,7 @@ test('decoder overload resets immediately and closes decoded frames',t=>{
   const h=harness(t);h.push(1,true);h.instances[0].decodeQueueSize=3;h.push(2);
   assert.equal(h.instances[0].state,'closed');assert.equal(h.instances.length,2);
   assert.equal(h.instances[1].chunks.length,0);h.push(3,true);
-  let closed=0;const frame={timestamp:3*16667,close:()=>closed++};
+  let closed=0;const frame={timestamp:Math.round(3e6/60),close:()=>closed++};
   h.instances[1].callbacks.output(frame);
   assert.equal(h.drawn.length,1);assert.equal(closed,1);assert.equal(h.client.sources.size,0);
   assert.ok(h.sent.some(m=>m.type==='video-reset'));
@@ -69,4 +69,18 @@ test('unsupported codecs and abandoned capability checks cannot create an endles
   let complete;globalThis.VideoDecoder.isConfigSupported=()=>new Promise(resolve=>{complete=resolve;});
   const pending=h.client.configureSupported('avc1.42c020');h.client.close();complete({supported:true});await pending;
   assert.equal(h.instances.length,1);assert.equal(h.client.closed,true);
+});
+
+test('120 FPS stream uses 8.33 ms timestamps without changing the 60 FPS fallback',t=>{
+  const h=harness(t);h.client.fps=120;h.push(1,true);h.push(2);h.push(3);
+  assert.deepEqual(h.instances[0].chunks.map(c=>c.timestamp),[8333,16667,25000]);
+  assert.throws(()=>new GameVideoDecoder({fps:1000}),/Invalid stream/);
+});
+
+test('120 Hz decoder accepts a brief network burst without losing prediction',t=>{
+  const h=harness(t,120);h.push(1,true);
+  for(let i=2;i<=12;i++){h.instances[0].decodeQueueSize=i-1;h.push(i);}
+  assert.equal(h.instances.length,1);assert.equal(h.instances[0].chunks.length,12);
+  h.instances[0].decodeQueueSize=13;h.push(13);
+  assert.equal(h.instances.length,2);assert.equal(h.instances[0].state,'closed');assert.ok(h.client.sources.size<=16);
 });

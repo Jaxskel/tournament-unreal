@@ -45,3 +45,22 @@ test('video header preserves sequence, source clock, key flag, and Annex B paylo
   assert.equal(packet.readUInt32BE(4),123);assert.equal(packet.readDoubleBE(8),12345678.5);
   assert.deepEqual(packet.subarray(16),idr);
 });
+
+test('120 FPS acknowledgement window preserves the 200 ms bound without unnecessary half-rate drops',()=>{
+  const sent=[];const ws={readyState:1,bufferedAmount:0,send:x=>sent.push(x)};
+  const window=new VideoWindow(120);const frame=(seq,key=false)=>({seq,key,data:Buffer.from([seq])});
+  for(let i=1;i<=24;i++)assert.equal(window.send(ws,frame(i,i===1),(i-1)*1000/120),true);
+  assert.equal(window.send(ws,frame(25),200),false);assert.equal(window.pending.length,24);
+  assert.equal(window.ack(24),true);assert.equal(window.send(ws,frame(26),210),false);
+  assert.equal(window.send(ws,frame(27,true),220),true);assert.equal(window.pending.length,1);
+});
+
+test('encoder tolerates pipe backpressure but never queues more than three pictures',async()=>{
+  const {HardwareEncoder}=await import('../video.js');
+  let writes=0;const encoder={closed:false,times:[],dropped:0,process:{stdin:{write:()=>{writes++;return false;}}}};
+  const raw=Buffer.alloc(RAW_BYTES);
+  for(let i=0;i<20;i++)HardwareEncoder.prototype.push.call(encoder,raw);
+  assert.equal(writes,3);assert.equal(encoder.times.length,3);assert.equal(encoder.dropped,17);
+  encoder.times.shift();HardwareEncoder.prototype.push.call(encoder,raw);
+  assert.equal(writes,4);assert.equal(encoder.times.length,3);
+});

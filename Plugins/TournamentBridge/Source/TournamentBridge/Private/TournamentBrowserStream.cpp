@@ -26,8 +26,10 @@ struct FTournamentCapture
 
 FTournamentBrowserStream::FTournamentBrowserStream(int32 InFramePort, int32 InInputPort)
     : Frames(nullptr), Input(nullptr), FramePort(InFramePort), InputPort(InInputPort), Sent(0),
-      LastConnect(-10), LastCapture(0), bRawFrames(FParse::Param(FCommandLine::Get(), TEXT("TournamentRawFrames"))), LastInput(0), LastReconnect(0)
+      LastConnect(-10), LastCapture(0), bRawFrames(FParse::Param(FCommandLine::Get(), TEXT("TournamentRawFrames"))), CaptureFPS(120), LastInput(0), LastReconnect(0)
 {
+    FParse::Value(FCommandLine::Get(), TEXT("TournamentStreamFPS="), CaptureFPS);
+    CaptureFPS = FMath::Clamp(CaptureFPS, 60, 120);
     // This destination comes only from the host's validated launcher, never
     // from browser messages. The controller can be destroyed during travel.
     FParse::Value(FCommandLine::Get(), TEXT("TournamentServer="), ServerDestination);
@@ -206,7 +208,7 @@ void FTournamentBrowserStream::PumpFrames()
         Capture.Reset();
     }
     if (Capture.IsValid() || Pending.Num() || !GEngine || !GEngine->GameViewport || !GEngine->GameViewport->Viewport) return;
-    const double Interval = bRawFrames ? 1.0 / 60.0 : 1.0 / 24.0;
+    const double Interval = bRawFrames ? 1.0 / double(CaptureFPS) : 1.0 / 24.0;
     // Keep the sampling phase, allowing tiny timer jitter without skipping a frame.
     if (Now + 0.001 < LastCapture) return;
     LastCapture = FMath::Max(LastCapture + Interval, Now);

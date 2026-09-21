@@ -40,7 +40,7 @@ $env:FFMPEG_PATH = 'F:\TournamentUT4\work\ffmpeg\ffmpeg-9.0.2-essentials_build\b
 npm start
 
 # Terminal 2: supervisor owns a server plus two offscreen clients.
-./scripts/start-web-game.ps1 -GraphicsAdapter 1 -HardwareVideo
+./scripts/start-web-game.ps1 -GraphicsAdapter 1 -HardwareVideo -StreamFPS 120
 ```
 
 For a quick public demo, install `cloudflared` from Cloudflare's official release and run the combined supervisor instead:
@@ -57,14 +57,14 @@ HTTP 8890, frame TCP 9001/9002 and control UDP 9101/9102 bind to loopback only. 
 
 ## Diagnose
 
-- `/api/health`: seat availability, native connection, latest-frame age, rolling encoded FPS, raw/video drops, and outstanding acknowledgements. No frames means the page cannot admit a player.
+- `/api/health`: seat availability, native connection, latest-frame age, rolling encoded FPS, raw FPS, raw/video drops, and outstanding acknowledgements. No frames means the page cannot admit a player.
 - Native `Saved/Logs/Tournament/client-BrowserOne.log`, `client-BrowserTwo.log`, and `server.log`: asset preparation, join errors, crashes.
 - `Saved/Tournament/Web/gateway-error.log` and tunnel log: browser/transport startup failures.
 - Browser toolbar: decoded frame rate, WebSocket RTT, H.264 mode, and estimated video age. Age starts at raw receipt in the gateway and excludes native capture; neither metric is input-to-photon latency.
 - Escape/Menu: native Tournament menu. Settings, diagnostics, and reconnect belong to the game; browser fullscreen belongs to the web toolbar.
 - Disconnect/blur releases held controls. Native input also has a three-second watchdog. Each seat has exclusive control; a third browser gets an arena-full response.
 
-The optimized mode targets 60 FPS at 960×540 and approximately 4 Mbit/s per seat. Rendering uses the RTX, capture completion is asynchronous to the game thread, and NVENC replaces CPU JPEG compression. Raw-frame queues, WebSocket acknowledgements, and WebCodecs decode queues are bounded. Keyframes every ten pictures shorten recovery after a dropped prediction. Omitting both video options preserves the old 24 FPS JPEG diagnostic mode. See [measured performance](web-performance.md); transport tests are separate from live gameplay evidence.
+The optimized mode targets 120 FPS at 960×540 and approximately 6 Mbit/s per seat. Rendering uses the RTX, capture completion is asynchronous to the game thread, and NVENC replaces CPU JPEG compression. Raw-frame queues, WebSocket acknowledgements, and WebCodecs decode queues are bounded. Keyframes every ten pictures shorten recovery after a dropped prediction. Omitting both video options preserves the old 24 FPS JPEG diagnostic mode. See [measured performance](web-performance.md); transport tests are separate from live gameplay evidence.
 
 ## Keeping the arena ready
 
@@ -77,3 +77,11 @@ The recovered build crashed during replication of a post-match cosmetic `Favorit
 The page joins immediately when a fresh seat exists. During a restart it retries HTTP 503 automatically, with Cancel and a 90-second deadline; a full arena still reports capacity immediately. Recovery is not instantaneous: native initialization takes time, so continuous preloading is what makes normal joins fast. This does not provide uptime while the Windows PC is off or offline.
 
 When updating a Scheduled Task wrapper, verify that its old Node child actually exited before starting the replacement. Stopping the wrapper alone can leave `node server.js` alive with old code; verify process creation time and the new health fields after deployment. Stop only the gateway and its owned encoders, and preserve the tunnel process to retain the shared URL.
+
+## 120 FPS configuration
+
+`STREAM_FPS=120` is the gateway default and `-StreamFPS 120` is the native launcher default. The combined launcher passes the selected rate to both. To select the lower-bandwidth profile, set both `STREAM_FPS=60` and `-StreamFPS 60`; never change only one. The gateway advertises FPS to the browser so decode timestamps match the selected cadence.
+
+At 120 FPS the clients render with a 144 FPS ceiling, providing capture scheduling headroom; capture and encoder output remain limited to 120. The launcher disables this game's legacy smooth-frame-rate cap. Mouse forwarding is capped at 120 Hz and the authenticated control budget covers simultaneous video receipts and mouse movement. Encoder conversion uses one CPU filter thread and NV12 input to NVENC; at most three pictures may be in flight through the encoder.
+
+A 120 Hz display/browser presentation path is needed to see 120 distinct frames per second. Canvas draw/stream FPS is not a measurement of panel refresh. Higher capture cadence can still reduce frame age on a 60 Hz display. Network pauses cannot be eliminated by an FPS setting.

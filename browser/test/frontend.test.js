@@ -118,7 +118,7 @@ test('Escape plus pointer-lock release sends one open request', async () => {
   assert.deepEqual(ws.sent.filter(p => p.type === 'menu-state'), [{type:'menu-state',open:true}]);
 });
 
-test('360 Hz and 1000 Hz display loops cap mouse packets at 60/sec and preserve accumulated deltas', async () => {
+test('360 Hz and 1000 Hz display loops cap mouse packets at 120/sec and preserve accumulated deltas', async () => {
   for (const hz of [360,1000]) {
     const h = harness(); const ws = await h.join();
     await h.run('captureMouse()'); ws.sent.length = 0;
@@ -127,7 +127,7 @@ test('360 Hz and 1000 Hz display loops cap mouse packets at 60/sec and preserve 
       h.tickFrame(); h.advance(1000/hz);
     }
     const packets = ws.sent.filter(p => p.type === 'mouse');
-    assert.ok(packets.length <= 60 && packets.length >= 45, `${hz}Hz produced ${packets.length} packets`);
+    assert.ok(packets.length <= 120 && packets.length >= 90, `${hz}Hz produced ${packets.length} packets`);
     const forwarded = packets.reduce((sum,p) => sum + p.dx, 0);
     assert.ok(hz - forwarded < hz / 40);
     assert.ok(packets.every(p => p.dx === -p.dy && p.dx <= 300));

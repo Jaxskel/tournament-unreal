@@ -22,6 +22,7 @@ private:
     double LastConnect;
     double LastCapture;
     bool bRawFrames;
+    int32 CaptureFPS;
     TSharedPtr<FTournamentCapture, ESPMode::ThreadSafe> Capture;
     double LastInput;
     double LastReconnect;

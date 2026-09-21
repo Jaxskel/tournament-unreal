@@ -1,6 +1,10 @@
 // H.264 Annex B is decoded by the browser's media decoder, not a JPEG/image loop.
 export class GameVideoDecoder {
-  constructor({draw, send, failure}) {
+  constructor({draw, send, failure, fps = 60}) {
+    if (![60,120].includes(fps)) throw new Error('Invalid stream frame rate');
+    this.fps = fps;
+    this.maxDecodeQueue = fps === 120 ? 12 : 2;
+    this.maxSources = fps === 120 ? 16 : 8;
     this.draw = draw; this.send = send; this.failure = failure;
     this.decoder = null; this.waitKey = true; this.seq = 0; this.codec = null;
     this.sources = new Map(); this.frameAge = null; this.serverOffset = null;
@@ -56,23 +60,24 @@ export class GameVideoDecoder {
     if (!Number.isFinite(sourceAt)) throw new Error('Invalid capture time');
     this.bytes += data.length;
     // Receipt acknowledgements bound the network queue. Decoder pressure has a
-    // separate three-picture limit so hidden/slow tabs cannot accumulate video.
+    // separate bounded queue; 120 Hz allows a short packet burst to decode
+    // without treating normal network batching as a broken codec.
     this.send({type:'video-ack',seq});
     const key = !!data[2];
     if (seq !== this.seq + 1) this.waitKey = true;
     this.seq = seq;
     if (!this.decoder || this.closed) return;
-    if (this.decoder.state === 'closed' || this.decoder.decodeQueueSize > 2) {
+    if (this.decoder.state === 'closed' || this.decoder.decodeQueueSize > this.maxDecodeQueue) {
       this.configure(this.codec); this.send({type:'video-reset'}); this.dropped++;
     }
     if (this.waitKey && !key) { this.dropped++; return; }
     this.waitKey = false;
-    const timestamp = seq * 16667;
+    const timestamp = Math.round(seq * 1000000 / this.fps);
     this.sources.set(timestamp, sourceAt);
     try { this.decoder.decode(new EncodedVideoChunk({type:key?'key':'delta',timestamp,data:data.subarray(16)})); }
     catch (error) { this.waitKey=true; this.sources.clear(); this.send({type:'video-reset'}); this.failure(error); }
     // Bounded even if a decoder accepts pictures without producing outputs.
-    if (this.sources.size > 8) {
+    if (this.sources.size > this.maxSources) {
       if (this.acceleration === 'prefer-hardware') {
         this.acceleration = 'prefer-software'; this.configure(this.codec); this.send({type:'video-reset'});
       } else { this.close(); this.failure(new Error('Video decoder stopped producing pictures'), true); }

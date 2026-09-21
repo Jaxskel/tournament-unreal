@@ -42,23 +42,24 @@ export function videoPacket(data, seq, capturedAt, key) {
   return Buffer.concat([header, data]);
 }
 export class HardwareEncoder {
-  constructor(path, onFrame, onFailure) {
-    this.closed = false; this.blocked = false; this.times = []; this.seq = 0; this.codec = null;
+  constructor(path, onFrame, onFailure, {fps = 120} = {}) {
+    if (![60,120].includes(fps)) throw new Error('Stream FPS must be 60 or 120');
+    const bitrate = fps === 120 ? '6M' : '4M';
+    this.closed = false; this.times = []; this.seq = 0; this.codec = null;
     this.dropped = 0; this.error = ''; this.lastInput = 0; this.lastOutput = Date.now();
     this.process = spawn(path, [
-      '-hide_banner', '-loglevel', 'error', '-f', 'rawvideo', '-pixel_format', 'bgra',
-      '-video_size', '960x540', '-framerate', '60', '-i', 'pipe:0', '-an',
+      '-hide_banner', '-loglevel', 'error', '-filter_threads', '1', '-threads', '1', '-f', 'rawvideo', '-pixel_format', 'bgra',
+      '-video_size', '960x540', '-framerate', String(fps), '-i', 'pipe:0', '-an',
       '-c:v', 'h264_nvenc', '-preset', 'p1', '-tune', 'ull', '-zerolatency', '1', '-delay', '0',
-      '-rc', 'cbr', '-b:v', '4M', '-maxrate', '4M', '-bufsize', '128k',
+      '-rc', 'cbr', '-b:v', bitrate, '-maxrate', bitrate, '-bufsize', '128k',
       '-g', '10', '-bf', '0', '-rc-lookahead', '0', '-aud', '1',
-      '-profile:v', 'baseline', '-pix_fmt', 'yuv420p', '-fps_mode', 'passthrough',
+      '-profile:v', 'baseline', '-pix_fmt', 'nv12', '-fps_mode', 'passthrough',
       '-flush_packets', '1', '-f', 'h264', 'pipe:1',
     ], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     const fail = error => { if (!this.closed) { this.close(); onFailure(error); } };
     this.process.on('error', fail);
     this.process.on('exit', code => fail(new Error(`Encoder exited (${code}): ${this.error}`)));
     this.process.stdin.on('error', fail);
-    this.process.stdin.on('drain', () => { this.blocked = false; });
     this.process.stderr.on('data', data => { this.error = (this.error + data.toString()).slice(-2000); });
     const parser = new AccessUnitParser(data => {
       this.lastOutput = Date.now();
@@ -77,11 +78,12 @@ export class HardwareEncoder {
   push(frame) {
     this.lastInput = Date.now();
     if (frame.length !== RAW_BYTES) throw new Error('Invalid raw frame size');
-    // At most one stdin write plus two pictures in the encoder/demuxer. Drop at
-    // the raw boundary, before inter-frame prediction creates dependencies.
-    if (this.closed || this.blocked || this.times.length >= 3) { this.dropped++; return; }
+    // At most three pictures total across the pipe, encoder and AU delimiter.
+    // A large write exceeding Node's small high-water mark is not itself a
+    // reason to lose the next picture; the explicit in-flight bound controls it.
+    if (this.closed || this.times.length >= 3) { this.dropped++; return; }
     this.times.push(Date.now());
-    this.blocked = !this.process.stdin.write(frame);
+    this.process.stdin.write(frame);
   }
   close() {
     if (this.closed) return;
@@ -95,7 +97,7 @@ export class HardwareEncoder {
 // Browser acknowledgements bound queues beyond the Cloudflare TCP endpoint.
 // A dropped predicted frame makes subsequent deltas unusable until an IDR.
 export class VideoWindow {
-  constructor() { this.reset(); }
+  constructor(fps = 60) { this.maxPending = Math.ceil(fps / 5); this.reset(); }
   reset() { this.pending = []; this.lastSent ??= 0; this.waitKey = true; this.dropped = 0; }
   ack(seq) {
     if (!Number.isSafeInteger(seq) || seq < 0 || seq > this.lastSent) return false;
@@ -104,7 +106,7 @@ export class VideoWindow {
   }
   send(ws, frame, now = Date.now()) {
     if (ws.readyState !== 1) return false;
-    if (this.pending.length >= 12 || ws.bufferedAmount > 64 * 1024 || (this.pending.length && now - this.pending[0].at > 200)) {
+    if (this.pending.length >= this.maxPending || ws.bufferedAmount > 64 * 1024 || (this.pending.length && now - this.pending[0].at > 200)) {
       this.waitKey = true; this.dropped++; return false;
     }
     if (this.waitKey && !frame.key) { this.dropped++; return false; }
