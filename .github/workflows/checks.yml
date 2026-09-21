@@ -48,6 +48,7 @@ jobs:
       - run: python3 -B ports/html5/test_patch_browser_outline.py
       - run: python3 -B ports/html5/test_patch_browser_asyncio.py
       - run: python3 -B ports/html5/test_patch_browser_tile_light.py
+      - run: python3 -B ports/html5/test_patch_browser_lineup.py
       - run: python3 -B ports/html5/test_configure_browser_config.py
       - run: python3 -B ports/html5/test_patcher_preflight.py
       - run: python3 -B ports/html5/test_verify_package.py

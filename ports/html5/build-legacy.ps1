@@ -30,6 +30,8 @@ if($LASTEXITCODE){throw 'Browser Outline postprocess patch failed'}
 if($LASTEXITCODE){throw 'Browser redundant AsyncIO hint patch failed'}
 & py -3 "$PSScriptRoot\patch-browser-tile-light.py" $root --apply
 if($LASTEXITCODE){throw 'Browser canvas tile lighting patch failed'}
+& py -3 "$PSScriptRoot\patch-browser-lineup.py" $root --apply
+if($LASTEXITCODE){throw 'Browser intro schedule bounds patch failed'}
 $logDir="$root\UnrealTournament\Saved\Logs\BrowserPort"
 New-Item -ItemType Directory -Force $logDir | Out-Null
 $configDir="$root\Engine\Saved\UnrealBuildTool"
