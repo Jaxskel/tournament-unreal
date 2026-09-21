@@ -22,9 +22,9 @@
     "legacyAssetPreloader": "passed in Chrome with real matching file_packager fixture; not a cooked map",
     "browserControlExports": "All nine exports present. Actual 1080p probe reached Ready=1 and SessionEpoch=1; resolution, sensitivity, volume and input-release calls returned success. Complete control behavior remains under verification.",
     "launcherTests": {
-      "passed": 80,
+      "passed": 89,
       "skipped": 1,
-      "scope": "Latest full installed-Chrome fixture suite; headed-only check skipped. Three subsequent focused assertion-diagnostic tests passed. Full game assertions remain fatal."
+      "scope": "Full installed-Chrome fixture suite, 90 total, 46.96 seconds; headed-only check skipped. Includes eight canvas-local pointer rejection regressions. Actual keyboard probe retained iframe after capture denial; unrelated errors remain fatal."
     },
     "nativePointerCapture": "headed Chrome launcher fixture passed",
     "actualWebGLContext": "Chrome WebGL1 initialized on M4 Pro: 16 fragment / 32 combined texture units; actual arena, bot and first-person weapon rendered at 1920\u00d71080. Sustained scene correctness remains under investigation.",
@@ -171,13 +171,13 @@
       "twoClients": "Stable engine/data fingerprints, both reached readiness; Array.h:633 bounds assertion as B joined before reconnect action. Not a reconnect pass.",
       "transport": "Explicit packageFiles bypasses eager Blob duplication; declared same-origin ArrayBuffer requests retain progress/error checks and synchronous teardown. Enabled on private operator manifest."
     },
-    "remainingMultiplayerCrash": "Array.h:633 bounds assertion during second-client join; matching stable artifact report captured, investigation ongoing.",
+    "remainingMultiplayerCrash": "Mapped stable two-client Array.h:633 crash to AUTLineUpHelper::IntroSpawnDelayedCharacter rescheduling against LineUpSlots while indexing the shorter intro-delay array after a late join. Bounded patch independently reviewed; 17 actual-source tests pass. Windows build and actual two-client rerun pending.",
     "canvasTileLighting": {
       "cause": "Actual crash trace enters FRendererModule::DrawTileMesh from a Canvas HUD tile. The temporary mobile view lacks the default directional-light buffer at slot zero; the bound pixel shader reads its light color and direction.",
       "patch": "Browser-only, feature level below SM4, initialize the typed default buffer at slot zero only if absent. Existing valid buffer and native behavior preserved.",
       "tests": "Six passed including pinned actual Renderer.cpp body roundtrip, compiled browser/native feature-level and existing-buffer cases, and physical preflight/backup/idempotence. Independently reviewed.",
       "build": "Passed: HTML5 compile/link 340.15 seconds; nine exports, matching converted module validated and all five transferred runtime file hashes verified.",
-      "runtime": "Actual fixed-1080p 30-second probe completed without that assertion. Initial arena/bot visible; final sky-only scene requires diagnosis. Not a full gameplay pass."
+      "runtime": "Actual fixed-1080p 30-second probe completed without the prior uniform-buffer assertion. Subsequent controlled probes identify sky-only view as pawn falling through BSP floor; sustained gameplay remains blocked."
     },
     "diagnosticTickObservation": {
       "resolution": [
@@ -190,10 +190,21 @@
       "p95CallbackMs": 18.400000095,
       "headless": true,
       "scope": "Diagnostic tick observation only. Sky-only final scene invalidates a representative gameplay benchmark; not presented FPS or evidence that target performance is achieved."
+    },
+    "browserFloorCollision": {
+      "status": "blocking",
+      "browser": "No-keyboard diagnostic at exact native PlayerStart_3 (4600,4670,633.230103) falls through floor into sky; actor collision flag reported true. Other spawn observations retain working floor/water interactions.",
+      "native": "Read-only native report enumerates 13 actual PlayerStarts. At PlayerStart_3, simple and complex Pawn lines/capsules hit BSP ModelComponent_65 at Z525. BodySetup_15 has one native triangle mesh, BlockAll/Pawn blocking; no simple collision shapes. All 13 native start anchors hit floors.",
+      "scope": "Native collision evidence does not validate cooked HTML5 collision. No map repair or browser collision fix applied."
+    },
+    "materialReadOnlyPreflight": {
+      "tests": 27,
+      "nativeBuildAndReport": "Passed; exact 11 targets reported twice, package hashes and native facts agree. Post-report original/sibling COW audits pass.",
+      "gate": "Strict preflight rejects dirty-on-load parent packages; no accepted repair snapshot and no asset saves. First dirty event traced to expression construction before deserialization, not proof of serialized missing GUIDs."
     }
   },
   "limitations": [
-    "Private Deck/Outpost package is complete. Canvas tile-light fix passed its first 30-second runtime observation, but a sky-only final scene and a separate two-client bounds assertion block gameplay acceptance. 65 distinct material fallbacks need scoped review; combat, reconnect, travel and performance remain under verification.",
+    "Private Deck/Outpost package is complete. Canvas tile-light fix passed its initial runtime check, but confirmed browser fall-through at a BSP floor blocks gameplay. Late-join bounds fix passes source tests; build/runtime validation pending. 65 distinct material fallbacks need scoped review. Combat, reconnect, travel and performance remain unverified.",
     "WASM Binaryen optimization -O2 produced invalid i64 code in probe; converter does not run those passes",
     "Targets of 120FPS at1080p and60FPS at1440p are not measured results",
     "Tournament production identity, rewards, delayed spectators and anti-cheat require private staging contracts"
