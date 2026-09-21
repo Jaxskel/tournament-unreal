@@ -107,4 +107,11 @@ EMSCRIPTEN_KEEPALIVE double TournamentBrowserFrame()
     return static_cast<double>(GFrameCounter);
 }
 }
+
+#ifndef TOURNAMENT_HTML5_PHYSICS_DIAGNOSTICS
+#define TOURNAMENT_HTML5_PHYSICS_DIAGNOSTICS 0
+#endif
+#if TOURNAMENT_HTML5_PHYSICS_DIAGNOSTICS && WITH_PHYSX
+#include "TournamentHTML5PhysicsReport.h"
+#endif
 #endif
