@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
-const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf8').then(text => text.replace(/^import .*;\n/, ''));
 function harness(joinResponses = []) {
   let joinRequests = 0;
   const timers = [];
@@ -38,7 +38,7 @@ function harness(joinResponses = []) {
   };
   document.exitPointerLock = () => { document.pointerLockElement = null; document.dispatch('pointerlockchange'); };
   const context = vm.createContext({
-    document, window, WebSocket:Socket, Blob,
+    document, window, WebSocket:Socket, Blob, ArrayBuffer,
     performance:{now:() => time}, Date:{now:() => 100000 + time},
     requestAnimationFrame:fn => { frame = fn; },
     setInterval:(fn, ms) => {intervals.push({fn,ms});}, setTimeout:(fn, ms) => { const timer = {fn,ms}; timers.push(timer); return timer; }, clearTimeout(timer) { if(timer) timer.cancelled = true; },

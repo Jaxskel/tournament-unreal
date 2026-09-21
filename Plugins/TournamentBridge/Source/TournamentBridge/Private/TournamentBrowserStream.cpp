@@ -6,6 +6,7 @@
 #include "SocketSubsystem.h"
 #include "IPAddress.h"
 #include "RenderingThread.h"
+#include "HAL/ThreadSafeBool.h"
 #include "RHICommandList.h"
 #include "Interfaces/IImageWrapper.h"
 #include "Interfaces/IImageWrapperModule.h"
@@ -13,9 +14,19 @@
 #include "Serialization/JsonSerializer.h"
 #include "GameFramework/PlayerInput.h"
 
+// Render commands retain ownership across map travel and module shutdown.
+// At most one capture is outstanding; no game-thread render flush is needed.
+struct FTournamentCapture
+{
+    TArray<FColor> Pixels;
+    FIntPoint Size;
+    FThreadSafeBool Ready;
+    FTournamentCapture(FIntPoint InSize) : Size(InSize), Ready(false) {}
+};
+
 FTournamentBrowserStream::FTournamentBrowserStream(int32 InFramePort, int32 InInputPort)
     : Frames(nullptr), Input(nullptr), FramePort(InFramePort), InputPort(InInputPort), Sent(0),
-      LastConnect(-10), LastCapture(0), LastInput(0), LastReconnect(0)
+      LastConnect(-10), LastCapture(0), bRawFrames(FParse::Param(FCommandLine::Get(), TEXT("TournamentRawFrames"))), LastInput(0), LastReconnect(0)
 {
     // This destination comes only from the host's validated launcher, never
     // from browser messages. The controller can be destroyed during travel.
@@ -44,6 +55,8 @@ FTournamentBrowserStream::FTournamentBrowserStream(int32 InFramePort, int32 InIn
 
 FTournamentBrowserStream::~FTournamentBrowserStream()
 {
+    // Finish the outstanding render command before the module can unload.
+    FlushRenderingCommands();
     Release(LastController.Get());
     CloseFrames();
     if (Input) { Input->Close(); ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Input); }
@@ -53,6 +66,7 @@ void FTournamentBrowserStream::CloseFrames()
 {
     if (Frames) { Frames->Close(); ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Frames); Frames = nullptr; }
     Pending.Empty();
+    Capture.Reset();
     Sent = 0;
 }
 
@@ -145,6 +159,8 @@ void FTournamentBrowserStream::PumpFrames()
         Frames = Sockets->CreateSocket(NAME_Stream, TEXT("Tournament viewport frames"), false);
         if (!Frames || !Frames->Connect(*Address)) { CloseFrames(); return; }
         Frames->SetNonBlocking(true);
+        int32 BufferSize = 0;
+        Frames->SetSendBufferSize(4 * 1024 * 1024, BufferSize);
         UE_LOG(LogTemp, Log, TEXT("Tournament browser: framebuffer gateway connected"));
     }
     if (!Frames) return;
@@ -161,39 +177,58 @@ void FTournamentBrowserStream::PumpFrames()
         if (Sent >= Pending.Num()) { Pending.Empty(); Sent = 0; }
         else return;
     }
-    if (Now - LastCapture < 1.0 / 24.0 || !GEngine || !GEngine->GameViewport || !GEngine->GameViewport->Viewport) return;
-    LastCapture = Now;
+    if (Capture.IsValid() && Capture->Ready)
+    {
+        if (Capture->Pixels.Num() == Capture->Size.X * Capture->Size.Y)
+        {
+            const uint8* Data = reinterpret_cast<const uint8*>(Capture->Pixels.GetData());
+            int32 Length = Capture->Pixels.Num() * sizeof(FColor);
+            IImageWrapperPtr JPEG;
+            if (!bRawFrames)
+            {
+                IImageWrapperModule& Module = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+                JPEG = Module.CreateImageWrapper(EImageFormat::JPEG);
+                if (!JPEG.IsValid() || !JPEG->SetRaw(Data, Length, Capture->Size.X, Capture->Size.Y, ERGBFormat::BGRA, 8)) { Capture.Reset(); return; }
+                const TArray<uint8>& Encoded = JPEG->GetCompressed(65);
+                Data = Encoded.GetData(); Length = Encoded.Num();
+            }
+            if (Length < 4 || Length > 4 * 1024 * 1024) { Capture.Reset(); return; }
+            Pending.SetNumUninitialized(Length + 4);
+            Pending[0] = uint8(uint32(Length) >> 24); Pending[1] = uint8(uint32(Length) >> 16);
+            Pending[2] = uint8(uint32(Length) >> 8); Pending[3] = uint8(Length);
+            FMemory::Memcpy(Pending.GetData() + 4, Data, Length);
+            Sent = 0;
+            // Send immediately, instead of delaying this frame until the next tick.
+            int32 Wrote = 0;
+            if (Frames->Send(Pending.GetData(), Pending.Num(), Wrote)) Sent = Wrote;
+            if (Sent >= Pending.Num()) { Pending.Empty(); Sent = 0; }
+        }
+        Capture.Reset();
+    }
+    if (Capture.IsValid() || Pending.Num() || !GEngine || !GEngine->GameViewport || !GEngine->GameViewport->Viewport) return;
+    const double Interval = bRawFrames ? 1.0 / 60.0 : 1.0 / 24.0;
+    // Keep the sampling phase, allowing tiny timer jitter without skipping a frame.
+    if (Now + 0.001 < LastCapture) return;
+    LastCapture = FMath::Max(LastCapture + Interval, Now);
     FViewport* Viewport = GEngine->GameViewport->Viewport;
     const FIntPoint Size = Viewport->GetSizeXY();
     if (Size.X < 1 || Size.Y < 1 || Size.X > 1920 || Size.Y > 1080) return;
-    TArray<FColor> Pixels;
+    if (bRawFrames && (Size.X != 960 || Size.Y != 540)) return;
     const FViewportRHIRef RHIViewport = Viewport->GetViewportRHI();
     if (!RHIViewport.IsValid()) return;
-    // Slate releases its scene-target reference after every frame. Read the
-    // persistent game backbuffer, on the render thread, after prior drawing.
-    ENQUEUE_UNIQUE_RENDER_COMMAND_THREEPARAMETER(
+    Capture = MakeShareable(new FTournamentCapture(Size));
+    typedef TSharedPtr<FTournamentCapture, ESPMode::ThreadSafe> FCapturePtr;
+    ENQUEUE_UNIQUE_RENDER_COMMAND_TWOPARAMETER(
         TournamentReadGameBackbuffer,
         FViewportRHIRef, Target, RHIViewport,
-        TArray<FColor>*, Output, &Pixels,
-        FIntPoint, Dimensions, Size,
+        FCapturePtr, Job, Capture,
         {
             FTexture2DRHIRef Texture = RHICmdList.GetViewportBackBuffer(Target);
             if (Texture.IsValid()) RHICmdList.ReadSurfaceData(Texture,
-                FIntRect(0, 0, Dimensions.X, Dimensions.Y), *Output, FReadSurfaceDataFlags(RCM_UNorm));
+                FIntRect(0, 0, Job->Size.X, Job->Size.Y), Job->Pixels, FReadSurfaceDataFlags(RCM_UNorm));
+            FPlatformMisc::MemoryBarrier();
+            Job->Ready = true;
         });
-    FlushRenderingCommands();
-    if (Pixels.Num() != Size.X * Size.Y) return;
-    IImageWrapperModule& Module = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
-    IImageWrapperPtr JPEG = Module.CreateImageWrapper(EImageFormat::JPEG);
-    if (!JPEG.IsValid() || !JPEG->SetRaw(Pixels.GetData(), Pixels.Num() * sizeof(FColor), Size.X, Size.Y, ERGBFormat::BGRA, 8)) return;
-    const TArray<uint8>& Encoded = JPEG->GetCompressed(65);
-    if (!Encoded.Num() || Encoded.Num() > 4 * 1024 * 1024) return;
-    const uint32 Length = uint32(Encoded.Num());
-    Pending.SetNumUninitialized(Length + 4);
-    Pending[0] = uint8(Length >> 24); Pending[1] = uint8(Length >> 16);
-    Pending[2] = uint8(Length >> 8); Pending[3] = uint8(Length);
-    FMemory::Memcpy(Pending.GetData() + 4, Encoded.GetData(), Length);
-    Sent = 0;
 }
 
 bool FTournamentBrowserStream::Tick(float DeltaTime)

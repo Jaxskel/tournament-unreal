@@ -1,0 +1,82 @@
+// H.264 Annex B is decoded by the browser's media decoder, not a JPEG/image loop.
+export class GameVideoDecoder {
+  constructor({draw, send, failure}) {
+    this.draw = draw; this.send = send; this.failure = failure;
+    this.decoder = null; this.waitKey = true; this.seq = 0; this.codec = null;
+    this.sources = new Map(); this.frameAge = null; this.serverOffset = null;
+    this.configVersion = 0; this.acceleration = 'prefer-hardware'; this.generation = 0; this.bytes = 0; this.dropped = 0; this.closed = false;
+  }
+  async configureSupported(codec) {
+    const version = ++this.configVersion;
+    for (const acceleration of ['prefer-hardware', 'prefer-software']) {
+      const {supported} = await VideoDecoder.isConfigSupported(this.config(codec, acceleration));
+      if (this.closed || version !== this.configVersion) return;
+      if (supported) { this.acceleration = acceleration; this.configure(codec); return; }
+    }
+    throw new Error('No supported H.264 decoder');
+  }
+  config(codec, acceleration = this.acceleration) {
+    return {codec,codedWidth:960,codedHeight:540,optimizeForLatency:true,hardwareAcceleration:acceleration};
+  }
+  configure(codec) {
+    const generation = ++this.generation;
+    this.codec = codec;
+    if (this.decoder && this.decoder.state !== 'closed') this.decoder.close(); this.sources.clear(); this.waitKey = true;
+    this.decoder = new VideoDecoder({
+      output: frame => {
+        try {
+          const source = this.sources.get(frame.timestamp);
+          this.sources.delete(frame.timestamp);
+          if (this.closed || generation !== this.generation) return;
+          if (source !== undefined && this.serverOffset !== null) this.frameAge = Math.max(0,Date.now() + this.serverOffset - source);
+          this.draw(frame);
+        } finally { frame.close(); }
+      },
+      error: error => {
+        if (this.closed || generation !== this.generation) return;
+        this.waitKey = true; this.sources.clear();
+        this.send({type:'video-reset'});
+        // Some Windows/headless drivers advertise a decoder that fails at use.
+        // Try software once; never loop forever on an unsupported configuration.
+        if (this.acceleration === 'prefer-hardware') {
+          this.acceleration = 'prefer-software';
+          try { this.configure(this.codec); this.failure(error, false); }
+          catch (fallbackError) { this.close(); this.failure(fallbackError, true); }
+        } else { this.close(); this.failure(error, true); }
+      },
+    });
+    this.decoder.configure(this.config(codec));
+  }
+  push(buffer) {
+    const data = new Uint8Array(buffer);
+    if (data.length < 20 || data.length > 4 * 1024 * 1024 || data[0] !== 0x48 || data[1] !== 1 || data[2] > 1) throw new Error('Invalid video packet');
+    const header = new DataView(buffer);
+    const seq = header.getUint32(4);
+    const sourceAt = header.getFloat64(8);
+    if (!Number.isFinite(sourceAt)) throw new Error('Invalid capture time');
+    this.bytes += data.length;
+    // Receipt acknowledgements bound the network queue. Decoder pressure has a
+    // separate three-picture limit so hidden/slow tabs cannot accumulate video.
+    this.send({type:'video-ack',seq});
+    const key = !!data[2];
+    if (seq !== this.seq + 1) this.waitKey = true;
+    this.seq = seq;
+    if (!this.decoder || this.closed) return;
+    if (this.decoder.state === 'closed' || this.decoder.decodeQueueSize > 2) {
+      this.configure(this.codec); this.send({type:'video-reset'}); this.dropped++;
+    }
+    if (this.waitKey && !key) { this.dropped++; return; }
+    this.waitKey = false;
+    const timestamp = seq * 16667;
+    this.sources.set(timestamp, sourceAt);
+    try { this.decoder.decode(new EncodedVideoChunk({type:key?'key':'delta',timestamp,data:data.subarray(16)})); }
+    catch (error) { this.waitKey=true; this.sources.clear(); this.send({type:'video-reset'}); this.failure(error); }
+    // Bounded even if a decoder accepts pictures without producing outputs.
+    if (this.sources.size > 8) {
+      if (this.acceleration === 'prefer-hardware') {
+        this.acceleration = 'prefer-software'; this.configure(this.codec); this.send({type:'video-reset'});
+      } else { this.close(); this.failure(new Error('Video decoder stopped producing pictures'), true); }
+    }
+  }
+  close() { this.closed = true; if (this.decoder && this.decoder.state !== 'closed') this.decoder.close(); this.sources.clear(); }
+}

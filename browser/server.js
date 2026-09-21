@@ -1,8 +1,10 @@
+import { HardwareEncoder, VideoWindow, RAW_BYTES } from './video.js';
+
 import http from 'node:http';
 import net from 'node:net';
 import dgram from 'node:dgram';
 import { randomBytes } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { FrameParser, MAX_BUFFERED, sendLatestFrame, validateControl } from './protocol.js';
@@ -40,6 +42,8 @@ async function emptyJson(req) {
 }
 
 export async function createGateway(options = {}) {
+  const video = !!options.ffmpegPath;
+  if (video) await access(options.ffmpegPath);
   const publicOrigin = options.publicOrigin ? normalizeOrigin(options.publicOrigin) : null;
   const extraOrigins = (options.extraOrigins ?? []).map(normalizeOrigin);
   const leaseMs = options.leaseMs ?? 10_000;
@@ -55,17 +59,34 @@ export async function createGateway(options = {}) {
   const hosts = new Set(configuredOrigins.map(url => url.host));
   const assets = new Map(await Promise.all([
     ['/', 'index.html', 'text/html; charset=utf-8'],
+    ['/video-client.js', 'video-client.js', 'text/javascript; charset=utf-8'],
     ['/app.js', 'app.js', 'text/javascript; charset=utf-8'],
     ['/style.css', 'style.css', 'text/css; charset=utf-8'],
   ].map(async ([route, file, type]) => [route, { data: await readFile(new URL(`./public/${file}`, import.meta.url)), type }])));
   const udp = dgram.createSocket('udp4');
   udp.on('error', () => {}); // Missing native listener does not crash the HTTP gateway.
   await new Promise(resolve => udp.bind(0, LOOPBACK, resolve));
-  const seats = [0, 1].map(id => ({ id, native: null, frame: null, frameAt: 0, frames: 0, dropped: 0, lease: null }));
+  const seats = [0, 1].map(id => ({ id, native: null, frame: null, frameAt: 0, frames: 0, dropped: 0, frameTimes: [], encoder: null, lease: null }));
   const leases = new Map();
   const sockets = new Set();
   const httpSockets = new Set();
   let closed = false;
+  function publish(seat, frame, metadata = null) {
+    seat.frame = frame; seat.frameAt = Date.now(); seat.frames++;
+    seat.frameTimes.push(seat.frameAt);
+    while (seat.frameTimes.length > 120 || seat.frameTimes[0] < seat.frameAt - 2000) seat.frameTimes.shift();
+    if (metadata) { metadata.seq = seat.frames; metadata.data.writeUInt32BE(seat.frames >>> 0,4); seat.videoFrame = metadata; }
+    const lease = seat.lease;
+    if (!lease?.ws) return;
+    if (metadata) {
+      if (lease.codec !== metadata.codec) {
+        lease.codec = metadata.codec;
+        sendJSON(lease.ws, {type:'video-config',codec:metadata.codec,width:960,height:540});
+        lease.videoWindow.reset();
+      }
+      if (!lease.videoWindow.send(lease.ws, metadata)) seat.dropped++;
+    } else if (!sendLatestFrame(lease.ws, frame)) seat.dropped++;
+  }
   function control(seat, message) {
     if (!closed) udp.send(Buffer.from(JSON.stringify(message)), udpPorts[seat.id], LOOPBACK, () => {});
   }
@@ -96,8 +117,11 @@ export async function createGateway(options = {}) {
     return {
       service: 'Tournament Unreal live demo', rewards: false, audio: false,
       players: seats.filter(s => s.lease?.ws?.readyState === 1).length,
-      capacity: 2,
-      seats: seats.map(s => ({ seat: s.id + 1, nativeConnected: !!s.native, frameAgeMs: s.frameAt ? Date.now() - s.frameAt : null, occupied: !!s.lease })),
+      capacity: 2, video: video ? 'h264-nvenc' : 'jpeg',
+      seats: seats.map(s => ({ seat: s.id + 1, nativeConnected: !!s.native, frameAgeMs: s.frameAt ? Date.now() - s.frameAt : null, occupied: !!s.lease,
+        encodedFps: s.frameTimes.length > 1 && Date.now()-s.frameAt < 1000 ? Math.round((s.frameTimes.length-1)*10000/Math.max(1,s.frameTimes.at(-1)-s.frameTimes[0]))/10 : 0,
+        encoderDropped: s.encoder?.dropped ?? 0, videoDropped: s.dropped,
+        unacknowledgedFrames: s.lease?.videoWindow.pending.length ?? 0 })),
     };
   }
   const allowedHost = req => typeof req.headers.host === 'string' && hosts.has(req.headers.host);
@@ -124,7 +148,7 @@ export async function createGateway(options = {}) {
         return json(res, full ? 409 : 503, { error: full ? 'Both seats are in use. Try again when a player leaves.' : 'The arena is reconnecting.', code: full ? 'full' : 'recovering' });
       }
       const token = randomBytes(32).toString('base64url');
-      const lease = { token, seat, expiresAt: now + leaseMs, lastActivity: now, inputStale: false, menuOpen: false, ws: null };
+      const lease = { token, seat, expiresAt: now + leaseMs, lastActivity: now, inputStale: false, menuOpen: false, ws: null, videoWindow: new VideoWindow(), codec:null };
       seats[seat.id].lease = lease;
       leases.set(token, lease);
       return json(res, 201, { token, expiresInMs: leaseMs, websocket: '/stream' });
@@ -169,8 +193,12 @@ export async function createGateway(options = {}) {
         clearTimeout(timer);
         control(lease.seat, { type: 'reset' });
         control(lease.seat, { type: 'menu-state', open: false });
-        sendJSON(ws, { type: 'joined', seat: lease.seat.id + 1, width: 960, height: 540, audio: false });
-        if (lease.seat.frame) sendLatestFrame(ws, lease.seat.frame);
+        sendJSON(ws, { type: 'joined', seat: lease.seat.id + 1, width: 960, height: 540, audio: false, video: video ? 'h264' : 'jpeg' });
+        if (video && lease.seat.videoFrame) {
+          lease.codec = lease.seat.videoFrame.codec;
+          sendJSON(ws, {type:'video-config',codec:lease.codec,width:960,height:540});
+          lease.videoWindow.send(ws, lease.seat.videoFrame);
+        } else if (!video && lease.seat.frame) sendLatestFrame(ws, lease.seat.frame);
         return;
       }
       const now = Date.now();
@@ -179,8 +207,15 @@ export async function createGateway(options = {}) {
       if (--budget < 0) { release(owned, 1008, 'Control rate exceeded'); return; }
       if (value?.type === 'ping' && Object.keys(value).sort().join(',') === 'id,type' && Number.isSafeInteger(value.id) && value.id >= 0) {
         markActivity(owned, now);
-        sendJSON(ws, { type: 'pong', id: value.id });
+        sendJSON(ws, { type: 'pong', id: value.id, serverTime: now });
         return;
+      }
+      if (video && value?.type === 'video-ack' && Object.keys(value).sort().join(',') === 'seq,type') {
+        if (!owned.videoWindow.ack(value.seq)) { release(owned,1008,'Invalid video acknowledgement'); return; }
+        return; // Receipt of video alone must not keep held input alive.
+      }
+      if (video && value?.type === 'video-reset' && Object.keys(value).join(',') === 'type') {
+        owned.videoWindow.waitKey = true; return;
       }
       const validated = validateControl(value);
       if (!validated) { release(owned, 1008, 'Unsupported control'); return; }
@@ -200,19 +235,24 @@ export async function createGateway(options = {}) {
     }
     socket.setNoDelay(true);
     socket.setTimeout(15_000, () => socket.destroy());
+    if (seat.lease) { seat.lease.videoWindow.reset(); seat.lease.codec = null; }
+    const encoder = video ? new (options.Encoder ?? HardwareEncoder)(options.ffmpegPath, frame => publish(seat,frame.data,frame), error => {
+      console.error(`Seat ${seat.id + 1}: ${error.message}`); socket.destroy();
+    }) : null;
+    seat.encoder = encoder;
     const parser = new FrameParser(frame => {
-      seat.frame = frame;
-      seat.frameAt = Date.now();
-      seat.frames++;
-      if (seat.lease?.ws && !sendLatestFrame(seat.lease.ws, frame)) seat.dropped++;
-    });
+      if (encoder) encoder.push(frame); else publish(seat,frame);
+    }, video ? RAW_BYTES : 0);
     socket.on('error', () => {});
     socket.on('data', chunk => { try { parser.push(chunk); } catch { socket.destroy(); } });
     socket.on('close', () => {
+      encoder?.close();
+      seat.videoFrame = null;
       if (seat.native !== socket) return;
       seat.native = null;
       seat.frame = null;
       seat.frameAt = 0;
+      seat.frameTimes = []; seat.encoder = null;
       control(seat, { type: 'reset' });
       const ws = seat.lease?.ws;
       if (ws?.readyState === 1) sendJSON(ws, { type: 'stream-state', state: 'waiting' });
@@ -270,6 +310,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   };
   try {
     const gateway = await createGateway({
+      ffmpegPath: process.env.FFMPEG_PATH,
       port: portFromEnv('PORT', 8890), publicOrigin: process.env.PUBLIC_ORIGIN,
       extraOrigins: process.env.EXTRA_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean),
       nativePorts: [portFromEnv('SEAT0_FRAME_PORT', 9001), portFromEnv('SEAT1_FRAME_PORT', 9002)],

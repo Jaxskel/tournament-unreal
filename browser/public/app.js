@@ -1,3 +1,4 @@
+import { GameVideoDecoder } from './video-client.js';
 const $ = id => document.getElementById(id);
 const canvas = $('game');
 const ctx = canvas.getContext('2d', { alpha: false });
@@ -6,6 +7,8 @@ const keys = new Map(Object.entries({ KeyW:'W', KeyA:'A', KeyS:'S', KeyD:'D', Sp
 let socket = null;
 let active = false;
 let joining = false;
+let videoDecoder = null;
+let minRtt = Infinity;
 let joinAbort = null;
 let menuMode = false;
 let pendingFrame = null;
@@ -85,6 +88,8 @@ function disconnect(message = 'Seat released. You can join again.') {
   held.clear();
   dx = dy = 0;
   releaseMouse();
+  videoDecoder?.close();
+  videoDecoder = null;
   generation++;
   pendingPings.clear();
   pendingFrame = null;
@@ -166,11 +171,18 @@ async function join() {
     if (version !== generation) return;
     const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/stream`);
     socket = ws;
-    ws.binaryType = 'blob';
+    ws.binaryType = 'arraybuffer';
     const joinTimer = setTimeout(() => { if (socket === ws && !active) disconnect('Connection timed out. Please try again.'); }, 8000);
     ws.onopen = () => { ws.send(JSON.stringify({ type: 'auth', token: result.token })); };
     ws.onmessage = event => {
       if (socket !== ws) return;
+      if (event.data instanceof ArrayBuffer) {
+        if (videoDecoder) {
+          try { videoDecoder.push(event.data); } catch { disconnect('Invalid video stream. Please reconnect.'); }
+          return;
+        }
+        event = {data:new Blob([event.data],{type:'image/jpeg'})};
+      }
       if (event.data instanceof Blob) {
         if (event.data.size > 4 * 1024 * 1024) { disconnect('Invalid frame size.'); return; }
         pendingFrame = { blob: event.data, version };
@@ -185,21 +197,45 @@ async function join() {
         joinAbort = null;
         frames = fps = 0;
         rtt = null;
+        minRtt = Infinity;
         lastFrameAt = performance.now();
         menuMode = false;
         lastPongAt = performance.now();
         lastMouseSentAt = -Infinity;
         pendingPings.clear();
         setActive(true);
+        if (packet.video === 'h264') {
+          if (typeof VideoDecoder === 'undefined') { disconnect('This stream needs a browser with H.264 WebCodecs support. Open it in current Chrome or Edge.'); return; }
+          videoDecoder = new GameVideoDecoder({
+            send,
+            draw: frame => {
+              if (!active || generation !== version) return;
+              ctx.drawImage(frame,0,0,canvas.width,canvas.height);
+              frames++; lastFrameAt=performance.now(); $('stream-notice').hidden=true;
+            },
+            failure: (_error, fatal) => {
+              if (fatal) { disconnect('H.264 decoding failed. Try current Chrome or Edge with an updated graphics driver.'); return; }
+              $('stream-notice').textContent='Resynchronizing video…'; $('stream-notice').hidden=false;
+            },
+          });
+        }
         $('connection').textContent = `LIVE · PLAYER ${packet.seat}`;
         $('stream-notice').textContent = 'Waiting for the game viewport…';
         $('stream-notice').hidden = false;
         canvas.focus({ preventScroll: true });
         void refreshHealth();
+      } else if (packet.type === 'video-config' && videoDecoder) {
+        const decoder = videoDecoder;
+        void decoder.configureSupported(packet.codec).catch(() => {
+          if (decoder === videoDecoder) disconnect('H.264 decoding is unavailable in this browser. Try current Chrome or Edge.');
+        });
       } else if (packet.type === 'pong' && Number.isSafeInteger(packet.id)) {
         const sentAt = pendingPings.get(packet.id);
         if (sentAt !== undefined && performance.now() - sentAt < INPUT_TIMEOUT_MS) {
           rtt = Math.round(performance.now() - sentAt);
+          if (videoDecoder && Number.isFinite(packet.serverTime) && rtt < minRtt) {
+            minRtt = rtt; videoDecoder.serverOffset = packet.serverTime + rtt / 2 - Date.now();
+          }
           lastPongAt = performance.now();
           pendingPings.delete(packet.id);
         }
@@ -319,9 +355,10 @@ setInterval(() => {
   fps = frames;
   frames = 0;
   if (!active) return;
-  $('metrics').textContent = `${fps} FPS · ${rtt === null ? '—' : rtt} ms RTT`;
+  const age = videoDecoder?.frameAge;
+  $('metrics').textContent = `${fps} FPS · ${rtt === null ? '—' : rtt} ms RTT${videoDecoder ? ` · H.264${age === null ? '' : ` · ${Math.round(age)} ms video age`}` : ''}`;
   if (performance.now() - lastFrameAt > 3000) {
-    $('stream-notice').textContent = 'Waiting for fresh game frames…';
+    $('stream-notice').textContent = 'Reconnecting game video…';
     $('stream-notice').hidden = false;
   }
   const now = performance.now();

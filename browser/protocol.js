@@ -23,9 +23,10 @@ export function validateControl(value) {
   return null;
 }
 
-// A bounded streaming parser: four header bytes and at most one allocated JPEG.
+// A bounded streaming parser: four header bytes and at most one allocated frame.
 export class FrameParser {
-  constructor(onFrame) {
+  constructor(onFrame, rawBytes = 0) {
+    this.rawBytes = rawBytes;
     this.onFrame = onFrame;
     this.header = Buffer.alloc(4);
     this.headerBytes = 0;
@@ -42,7 +43,7 @@ export class FrameParser {
         offset += count;
         if (this.headerBytes < 4) continue;
         const length = this.header.readUInt32BE(0);
-        if (length < 4 || length > MAX_FRAME) throw new Error('Invalid JPEG length');
+        if ((this.rawBytes && length !== this.rawBytes) || length < 4 || length > MAX_FRAME) throw new Error('Invalid frame length');
         this.payload = Buffer.allocUnsafe(length);
         this.payloadBytes = 0;
         this.headerBytes = 0;
@@ -55,7 +56,7 @@ export class FrameParser {
         const frame = this.payload;
         this.payload = null;
         this.payloadBytes = 0;
-        if (frame[0] !== 0xff || frame[1] !== 0xd8 || frame[frame.length - 2] !== 0xff || frame[frame.length - 1] !== 0xd9) throw new Error('Expected JPEG markers');
+        if (!this.rawBytes && (frame[0] !== 0xff || frame[1] !== 0xd8 || frame[frame.length - 2] !== 0xff || frame[frame.length - 1] !== 0xd9)) throw new Error('Expected JPEG markers');
         this.onFrame(frame);
       }
     }

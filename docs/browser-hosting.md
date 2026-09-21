@@ -1,6 +1,6 @@
 # Browser hosting
 
-The UT4 build uses UE4.15. The browser receives the game's own GPU-rendered viewport over a JPEG/WebSocket stream; a separate native client process represents each of two browser seats. Both clients join one authoritative native server. Neither the desktop nor operating-system controls are exposed. This is a free development demo with no audio stream, accounts, wallet, settlement, or Tournament anti-cheat ingestion.
+The UT4 build uses UE4.15. The browser receives the game's own GPU-rendered viewport over an H.264/WebSocket stream decoded with WebCodecs; a separate native client process represents each of two browser seats. Both clients join one authoritative native server. Neither the desktop nor operating-system controls are exposed. This is a free development demo with no audio stream, accounts, wallet, settlement, or Tournament anti-cheat ingestion.
 
 ## Prepare the licensed Windows installation
 
@@ -22,6 +22,12 @@ The offscreen patch adds the explicit `-TournamentOffscreen` flag, creates a GPU
 
 Read and accept the Epic agreement for your own installation with the existing explicit `-AcceptLicense` launcher option before unattended hosting. The local acceptance record is excluded from Git. This is not a grant to redistribute Epic assets or sell a separate commercial Unreal Tournament game.
 
+## GPU and video encoder
+
+On the demo PC, DXGI adapter 0 is AMD integrated graphics and adapter 1 is the RTX 5090. UE4.15's automatic heuristic picked the AMD GPU. `-GraphicsAdapter 1` writes `r.GraphicsAdapter=1` to `[Startup]` in `Engine/Config/ConsoleVariables.ini` before launching. Adapter indices are machine-specific: verify `Chosen D3D11 Adapter` and `Adapter Name` in both native client logs. Omit the option (default -1) for automatic selection on another host. No global Windows display preference is changed.
+
+Install a Windows FFmpeg build linked from [FFmpeg's download page](https://ffmpeg.org/download.html), including `h264_nvenc`. The demo uses Gyan essentials 9.0.2, verified against its published SHA-256 before extraction. The executable is host-local and is not redistributed in this repository. Verify `ffmpeg -encoders` lists `h264_nvenc` and run a short encoder smoke test on the hosting account. Set the gateway's `FFMPEG_PATH` and the native supervisor's `-HardwareVideo` together. An incorrect pairing is rejected as invalid frame sizes, not silently interpreted as a different codec.
+
 ## Run
 
 The components can run separately while debugging:
@@ -30,16 +36,17 @@ The components can run separately while debugging:
 # Terminal 1: gateway (configure the exact public origin if publishing).
 cd browser
 $env:PUBLIC_ORIGIN = 'https://YOUR-HOST.trycloudflare.com'
+$env:FFMPEG_PATH = 'F:\TournamentUT4\work\ffmpeg\ffmpeg-9.0.2-essentials_build\bin\ffmpeg.exe'
 npm start
 
 # Terminal 2: supervisor owns a server plus two offscreen clients.
-./scripts/start-web-game.ps1
+./scripts/start-web-game.ps1 -GraphicsAdapter 1 -HardwareVideo
 ```
 
 For a quick public demo, install `cloudflared` from Cloudflare's official release and run the combined supervisor instead:
 
 ```powershell
-./scripts/start-web-demo.ps1 -Cloudflared F:\TournamentUT4\work\cloudflared.exe
+./scripts/start-web-demo.ps1 -Cloudflared F:\TournamentUT4\work\cloudflared.exe -GraphicsAdapter 1 -FFmpeg F:\TournamentUT4\work\ffmpeg\ffmpeg-9.0.2-essentials_build\bin\ffmpeg.exe
 ```
 
 It starts a loopback tunnel, reads its generated HTTPS origin, configures the gateway to accept exactly that origin, and starts the native server and clients. The current address is written to `UnrealTournament/Saved/Tournament/Web/current-demo.local.json`. Wait until both seats in `/api/health` have fresh frames before sharing. Initial texture/shader cache preparation can take several minutes; a reachable landing page alone does not prove the game is playable.
@@ -50,14 +57,14 @@ HTTP 8890, frame TCP 9001/9002 and control UDP 9101/9102 bind to loopback only. 
 
 ## Diagnose
 
-- `/api/health`: seat availability, native connection, latest-frame age. No frames means the page cannot admit a player.
+- `/api/health`: seat availability, native connection, latest-frame age, rolling encoded FPS, raw/video drops, and outstanding acknowledgements. No frames means the page cannot admit a player.
 - Native `Saved/Logs/Tournament/client-BrowserOne.log`, `client-BrowserTwo.log`, and `server.log`: asset preparation, join errors, crashes.
 - `Saved/Tournament/Web/gateway-error.log` and tunnel log: browser/transport startup failures.
-- Browser toolbar: received frame rate and WebSocket RTT. RTT is not end-to-end video latency.
+- Browser toolbar: decoded frame rate, WebSocket RTT, H.264 mode, and estimated video age. Age starts at raw receipt in the gateway and excludes native capture; neither metric is input-to-photon latency.
 - Escape/Menu: native Tournament menu. Settings, diagnostics, and reconnect belong to the game; browser fullscreen belongs to the web toolbar.
 - Disconnect/blur releases held controls. Native input also has a three-second watchdog. Each seat has exclusive control; a third browser gets an arena-full response.
 
-The initial implementation captures at most 24 frames per second at 960×540, with bounded queues that drop stale frames under backpressure. It does not claim a tested 60 FPS stream or production availability. Transport tests are separate from live gameplay evidence.
+The optimized mode targets 60 FPS at 960×540 and approximately 4 Mbit/s per seat. Rendering uses the RTX, capture completion is asynchronous to the game thread, and NVENC replaces CPU JPEG compression. Raw-frame queues, WebSocket acknowledgements, and WebCodecs decode queues are bounded. Keyframes every ten pictures shorten recovery after a dropped prediction. Omitting both video options preserves the old 24 FPS JPEG diagnostic mode. See [measured performance](web-performance.md); transport tests are separate from live gameplay evidence.
 
 ## Keeping the arena ready
 
@@ -68,3 +75,5 @@ The supervisor catches failures and retries continuously; Task Scheduler's finit
 The recovered build crashed during replication of a post-match cosmetic `FavoriteWeapon` class reference. The minidump placed the invalid object at offset `0x648` in the replicated player state, matching `AUTPlayerState::FavoriteWeapon` in its debug symbols. `TournamentGameState` skips generating stock cosmetic weapon highlights and retains server-owned frag standings. `TournamentDeathmatch` keeps the base engine end-of-match lifecycle and bot learning, displays the scoreboard, and rotates after 12 seconds without the character ceremony. Disabling the ceremony alone did not resolve the crash; no engine object-validity checks are bypassed.
 
 The page joins immediately when a fresh seat exists. During a restart it retries HTTP 503 automatically, with Cancel and a 90-second deadline; a full arena still reports capacity immediately. Recovery is not instantaneous: native initialization takes time, so continuous preloading is what makes normal joins fast. This does not provide uptime while the Windows PC is off or offline.
+
+When updating a Scheduled Task wrapper, verify that its old Node child actually exited before starting the replacement. Stopping the wrapper alone can leave `node server.js` alive with old code; verify process creation time and the new health fields after deployment. Stop only the gateway and its owned encoders, and preserve the tunnel process to retain the shared URL.

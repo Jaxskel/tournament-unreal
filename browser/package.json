@@ -4,7 +4,15 @@
   "private": true,
   "type": "module",
   "description": "Two-seat game-only UT4 browser streaming gateway",
-  "engines": { "node": ">=20" },
-  "scripts": { "start": "node server.js", "test": "node --test", "check": "node --check server.js && node --check public/app.js" },
-  "dependencies": { "ws": "^8.18.3" }
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "check": "node --check server.js && node --check video.js && node --check public/app.js && node --check public/video-client.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
 }

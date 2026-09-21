@@ -25,7 +25,7 @@ Settings adjusts sensitivity. Disconnect releases a browser seat; Play Again req
 
 The native supervisor now restarts exited or stalled game processes automatically. Play retries a recovering arena without requiring another click. Warm Play-to-first-frame checks took 0.14–0.30 seconds; native recovery itself takes longer.
 
-Both arena caches have been prepared on the current host. A fresh installation still needs first-run texture and shader preparation; placeholder materials during compilation are not a finished visual result. The stream targets 24 FPS at 960×540; initial live checks saw approximately 21–22 FPS on Deck and lower performance while compiling Outpost. Those numbers are observations, not a 60 FPS or cross-browser performance guarantee. See [runtime verification](docs/multiplayer-verification.md) and [browser transport details](browser/README.md) for limits and further checks.
+Both arena caches have been prepared on the current host. A fresh installation still needs first-run texture and shader preparation; placeholder materials during compilation are not a finished visual result. The optimized stream targets 60 FPS at 960×540 using the RTX 5090, NVENC H.264 and WebCodecs. Two simultaneous Chromium browsers measured about 59 FPS, versus about 20 FPS before optimization, at roughly 4 Mbit/s per seat. A wired public-URL transport test had no frame gaps over 50 ms; the Mac wireless path still showed occasional ~100 ms network gaps. See [performance measurements and limitations](docs/web-performance.md). See [runtime verification](docs/multiplayer-verification.md) and [browser transport details](browser/README.md) for limits and further checks.
 
 ## Windows development setup
 

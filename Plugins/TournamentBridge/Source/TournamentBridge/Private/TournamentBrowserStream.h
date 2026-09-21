@@ -4,6 +4,7 @@
 
 class FSocket;
 class ATournamentPlayerController;
+struct FTournamentCapture;
 
 // Captures this Unreal viewport only. Never captures or controls the desktop.
 class FTournamentBrowserStream : public FTickerObjectBase
@@ -20,6 +21,8 @@ private:
     int32 Sent;
     double LastConnect;
     double LastCapture;
+    bool bRawFrames;
+    TSharedPtr<FTournamentCapture, ESPMode::ThreadSafe> Capture;
     double LastInput;
     double LastReconnect;
     FString ServerDestination;

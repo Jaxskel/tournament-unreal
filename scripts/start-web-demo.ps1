@@ -4,11 +4,15 @@ param(
     [Parameter(Mandatory=$true)][string]$Cloudflared,
     [string]$Node='C:\Program Files\nodejs\node.exe',
     [int]$Minutes=10,
-    [int]$Frags=30
+    [int]$Frags=30,
+    [ValidateRange(-1,15)][int]$GraphicsAdapter=-1,
+    [string]$FFmpeg
 )
 # Run from a persistent Windows Scheduled Task, not a short-lived SSH child.
 # Install browser npm dependencies and build the native offscreen plugin first.
 $ErrorActionPreference='Stop'
+if($FFmpeg -and !(Test-Path $FFmpeg -PathType Leaf)) { throw 'FFmpeg executable not found.' }
+$env:FFMPEG_PATH=$FFmpeg
 $repo=Split-Path $PSScriptRoot -Parent
 $state=Join-Path $SourceRoot 'UnrealTournament\Saved\Tournament\Web'
 New-Item -ItemType Directory -Force $state | Out-Null
@@ -34,7 +38,7 @@ try {
     @{url=$origin;startedAtUtc=[DateTime]::UtcNow.ToString('o');rewards=$false;audio=$false;capacity=2} | ConvertTo-Json | Set-Content "$state\current-demo.local.json"
     Write-Output "Browser demo URL: $origin"
     Write-Output 'Game content may need several minutes to build its initial cache.'
-    & "$PSScriptRoot\start-web-game.ps1" -SourceRoot $SourceRoot -Minutes $Minutes -Frags $Frags
+    & "$PSScriptRoot\start-web-game.ps1" -SourceRoot $SourceRoot -Minutes $Minutes -Frags $Frags -GraphicsAdapter $GraphicsAdapter -HardwareVideo:([bool]$FFmpeg)
 } finally {
     if($gateway -and !$gateway.HasExited) { Stop-Process -Id $gateway.Id -ErrorAction SilentlyContinue }
     if($tunnel -and !$tunnel.HasExited) { Stop-Process -Id $tunnel.Id -ErrorAction SilentlyContinue }

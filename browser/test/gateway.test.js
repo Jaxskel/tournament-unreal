@@ -322,3 +322,52 @@ test('late controls are preceded by reset even before a watchdog sweep', async t
   await until(() => f.received[0].length >= 2);
   assert.deepEqual(f.received[0].slice(0,2), [{type:'reset'}, {type:'key',key:'D',down:true}]);
 });
+
+test('H264 seats stay isolated across video reset, stale acknowledgements, and encoder restart', async t => {
+  const {RAW_BYTES,videoPacket}=await import('../video.js');
+  const encoders=[];
+  class TestEncoder {
+    constructor(_path,onFrame){this.onFrame=onFrame;this.seq=0;this.closed=false;this.dropped=0;encoders.push(this);}
+    push(raw){const key=raw[0]===1;const payload=Buffer.from([0,0,1,key?0x65:0x41,raw[1]]);this.onFrame({seq:++this.seq,key,codec:'avc1.42c020',capturedAt:Date.now(),data:videoPacket(payload,this.seq,Date.now(),key)});}
+    close(){this.closed=true;}
+  }
+  const raw=(key,marker)=>{const bytes=Buffer.alloc(RAW_BYTES);bytes[0]=key?1:0;bytes[1]=marker;return frame(bytes);};
+  const f=await fixture(t,{ffmpegPath:process.execPath,Encoder:TestEncoder});
+  const a=await f.native(0,raw(true,11));await f.native(1,raw(true,22));
+  const wa=await f.ws((await f.join()).body.token);const wb=await f.ws((await f.join()).body.token);
+  await until(()=>wa.packets.some(Buffer.isBuffer)&&wb.packets.some(Buffer.isBuffer));
+  assert.equal(wa.packets[0].video,'h264');assert.equal(wa.packets[1].type,'video-config');
+  const picture=packets=>packets.filter(Buffer.isBuffer);
+  assert.equal(picture(wa.packets)[0].at(-1),11);assert.equal(picture(wb.packets)[0].at(-1),22);
+  wa.socket.send(JSON.stringify({type:'video-ack',seq:1}));
+  wa.socket.send(JSON.stringify({type:'video-reset'}));await pause(10);
+  a.write(raw(false,33));await pause(15);assert.equal(picture(wa.packets).length,1);
+  a.write(raw(true,44));await until(()=>picture(wa.packets).length===2);
+  const last=picture(wa.packets).at(-1).readUInt32BE(4);assert.equal(last,3);
+  a.destroy();await until(()=>!f.gateway.status().seats[0].nativeConnected);
+  assert.equal(encoders[0].closed,true);
+  await f.native(0,raw(true,55));await until(()=>picture(wa.packets).length===3);
+  wa.socket.send(JSON.stringify({type:'video-ack',seq:last}));await pause(15);
+  assert.equal(wa.socket.readyState,1);assert.equal(f.gateway.status().players,2);
+  assert.equal(picture(wa.packets).at(-1).readUInt32BE(4),4);
+  assert.equal(picture(wb.packets).length,1);
+  wa.socket.send(JSON.stringify({type:'video-ack',seq:999999}));await once(wa.socket,'close');
+  assert.equal(f.gateway.status().seats[0].occupied,false);assert.equal(wb.socket.readyState,1);
+});
+
+test('video acknowledgements do not refresh the held-input watchdog', async t => {
+  const {RAW_BYTES,videoPacket}=await import('../video.js');
+  class Encoder {
+    constructor(_path,onFrame){this.onFrame=onFrame;}
+    push(){this.onFrame({seq:1,key:true,codec:'avc1.42c020',capturedAt:Date.now(),data:videoPacket(Buffer.from([0,0,1,0x65]),1,Date.now(),true)});}
+    close(){}
+  }
+  const f=await fixture(t,{ffmpegPath:process.execPath,Encoder,inputTimeoutMs:50,sweepMs:5,heartbeatMs:10});
+  await f.native(0,frame(Buffer.alloc(RAW_BYTES)));
+  const wa=await f.ws((await f.join()).body.token);await until(()=>wa.packets.some(Buffer.isBuffer));
+  wa.socket.send(JSON.stringify({type:'key',key:'W',down:true}));
+  const ack=setInterval(()=>wa.socket.send(JSON.stringify({type:'video-ack',seq:1})),10);
+  t.after(()=>clearInterval(ack));
+  await until(()=>wa.packets.some(p=>p.type==='input-state'&&p.state==='suspended'));
+  assert.ok(f.received[0].some(p=>p.type==='reset'));assert.equal(wa.socket.readyState,1);
+});
