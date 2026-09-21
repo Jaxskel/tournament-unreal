@@ -173,3 +173,110 @@ test('exactly four native-matched floor queries ignore only the local pawn and p
   assert.equal((helper.match(/Q.AddIgnoredActor\(/g)||[]).length,2);
   assert.match(helper, /ignorePawn=%d ignoreStarts=%d/);
 });
+
+test('actual loaded-triangle reader checks counts, index width, every index and optional remap', async () => {
+  const reader=helper.slice(helper.indexOf('struct Triangle182'),helper.indexOf('class TargetOnlyFilter'));
+  await compileRun(prefix + `
+namespace physx {
+ using PxU16=unsigned short; using PxU32=unsigned;
+ struct PxVec3 { float x=0,y=0,z=0; bool isFinite() const {return std::isfinite(x)&&std::isfinite(y)&&std::isfinite(z);} };
+ struct PxTriangleMeshFlag { enum Enum { e16_BIT_INDICES=2 }; };
+ struct Flags { bool Small; bool isSet(PxTriangleMeshFlag::Enum) const {return Small;} };
+ struct PxTriangleMesh {
+  unsigned Count=183,NV=3; bool Small=true;
+  const void* Indices=nullptr; const PxVec3* Vertices=nullptr; const PxU32* Remap=nullptr;
+  unsigned getNbTriangles() const {return Count;} unsigned getNbVertices() const {return NV;}
+  const void* getTriangles() const {return Indices;} const PxVec3* getVertices() const {return Vertices;}
+  Flags getTriangleMeshFlags() const {return Flags{Small};} const PxU32* getTrianglesRemap() const {return Remap;}
+ };
+}
+` + reader + `
+int main() {
+ physx::PxU16 small[183*3]={}; physx::PxU32 large[183*3]={},remap[183]={};
+ small[546]=0;small[547]=1;small[548]=2;large[546]=2;large[547]=1;large[548]=0;remap[182]=625;
+ physx::PxVec3 verts[3]; verts[0].x=4375;verts[1].y=4500;verts[2].z=525;
+ physx::PxTriangleMesh mesh;mesh.Indices=small;mesh.Vertices=verts;mesh.Remap=remap;
+ Triangle182 t;assert(!ReadTriangle182(nullptr,t));
+ assert(ReadTriangle182(&mesh,t));assert(t.Indices16&&t.HasRemap&&t.OriginalFace==625);
+ assert(t.Indices[2]==2&&t.Vertices[2].z==525);
+ mesh.Small=false;mesh.Indices=large;assert(ReadTriangle182(&mesh,t));assert(!t.Indices16&&t.Indices[0]==2);
+ mesh.Remap=nullptr;assert(ReadTriangle182(&mesh,t));assert(!t.HasRemap&&t.OriginalFace==0);
+ mesh.Count=182;assert(!ReadTriangle182(&mesh,t));mesh.Count=183;
+ mesh.NV=0;assert(!ReadTriangle182(&mesh,t));mesh.NV=3;
+ mesh.Indices=nullptr;assert(!ReadTriangle182(&mesh,t));mesh.Indices=large;
+ mesh.Vertices=nullptr;assert(!ReadTriangle182(&mesh,t));
+ // No vertex may be touched when even the last index is out of range.
+ mesh.Vertices=reinterpret_cast<const physx::PxVec3*>(1);large[548]=3;
+ assert(!ReadTriangle182(&mesh,t));large[548]=0;mesh.Vertices=verts;
+ verts[0].x=std::numeric_limits<float>::quiet_NaN();assert(!ReadTriangle182(&mesh,t));
+}
+`);
+});
+
+test('actual target-only callback rejects other actors/shapes and preserves hit flags', async () => {
+  const filter=helper.slice(helper.indexOf('class TargetOnlyFilter'),helper.indexOf('static void RayHit'));
+  await compileRun(prefix + `
+namespace physx {
+ struct PxShape {};struct PxRigidActor {};struct PxFilterData {};struct PxQueryHit {};
+ struct PxHitFlags {unsigned Bits=19;};
+ struct PxQueryHitType {enum Enum{eNONE,eTOUCH,eBLOCK};};
+ struct PxQueryFilterCallback {
+ virtual PxQueryHitType::Enum preFilter(const PxFilterData&,const PxShape*,const PxRigidActor*,PxHitFlags&)=0;
+ virtual PxQueryHitType::Enum postFilter(const PxFilterData&,const PxQueryHit&)=0;
+ virtual ~PxQueryFilterCallback() {}
+ };
+}
+` + filter + `
+int main() {
+ physx::PxShape target,other;physx::PxRigidActor actor,otherActor;physx::PxFilterData data;physx::PxHitFlags flags;
+ TargetOnlyFilter f(&actor,&target);
+ assert(f.preFilter(data,&other,&actor,flags)==physx::PxQueryHitType::eNONE);
+ assert(f.preFilter(data,&target,&otherActor,flags)==physx::PxQueryHitType::eNONE);
+ assert(f.preFilter(data,nullptr,nullptr,flags)==physx::PxQueryHitType::eNONE);
+ assert(f.preFilter(data,&target,&actor,flags)==physx::PxQueryHitType::eBLOCK);
+ assert(f.Calls==4&&f.TargetCalls==1&&flags.Bits==19);
+ physx::PxQueryHit hit;assert(f.postFilter(data,hit)==physx::PxQueryHitType::eNONE);
+ assert(f.Calls==4&&f.TargetCalls==1);
+}
+`);
+});
+
+test('actual ray formatter does not read miss fields and keeps hits bounded', async () => {
+  const ray=helper.slice(helper.indexOf('static void RayHit'),helper.indexOf('static void MeshProbe'));
+  await compileRun(prefix + portable + `
+namespace physx {
+ struct V {double x=0,y=0,z=0;};
+ struct PxRaycastHit {double distance=std::numeric_limits<double>::quiet_NaN();unsigned faceIndex=625;V position,normal;};
+}
+` + ray + `
+int main() {
+ Admission a={true,true,true,true,true,true,true,1,1};assert(Check(a)==1);
+ physx::PxRaycastHit h;Output o(1,2,1);
+ RayHit(o,"geometry",false,h);assert(strstr(o.Lines[0],"hit=0"));assert(!strstr(o.Lines[0],"distance="));
+ h.distance=364.230103;h.position.z=525;h.normal.z=1;RayHit(o,"geometry",true,h);o.Finish();
+ assert(strstr(o.Lines[1],"face=625"));assert(strstr(o.Lines[1],"525.000000"));
+ assert(o.Count==3&&!o.Truncated);
+}
+`);
+});
+
+test('mesh probe uses exact target once, original shape geometry, zero query words and a read lock', () => {
+  const probe=helper.slice(helper.indexOf('static void MeshProbe'),helper.indexOf('static void Component'));
+  assert.match(probe,/Actor->getGlobalPose\(\) \* Shape->getLocalPose\(\)/);
+  assert.match(probe,/if \(!G.isValid\(\) \|\| !GlobalPose.isValid\(\)\)/);
+  assert.match(probe,/Origin\(4600.f,4670.f,633.2301025390625f\+256.f\), Direction\(0.f,0.f,-1.f\)/);
+  assert.match(probe,/PxGeometryQuery::raycast\(Origin,Direction,G,GlobalPose,2304.f,HitFlags,1,&Direct\)/);
+  assert.match(probe,/PxFilterData\(0,0,0,0\),physx::PxQueryFlag::eSTATIC \| physx::PxQueryFlag::ePREFILTER/);
+  assert.match(probe,/Scene->raycast\(Origin,Direction,2304.f,SceneHit,HitFlags,Query,&Filter,nullptr\)/);
+  assert.match(probe,/SceneHit.hasBlock && SceneHit.block.actor==Actor && SceneHit.block.shape==Shape/);
+  assert.match(probe,/G.triangleMesh->getLocalBounds\(\)/);
+  assert.match(probe,/Actor->getWorldBounds\(1.0f\)/);
+  const actors=helper.slice(helper.indexOf('static void ActorShapes'),helper.indexOf('static void Hit'));
+  assert.match(actors,/getGeometryType\(\) == physx::PxGeometryType::eTRIANGLEMESH && Shape->getTriangleMeshGeometry\(G\)/);
+  assert.match(actors,/!Probed && SceneType==PST_Sync && Match==0 && B && B->GetFName\(\)==FName\(TEXT\("BodySetup_15"\)\)/);
+  assert.ok(actors.indexOf('SCOPED_SCENE_READ_LOCK(Scene)')<actors.indexOf('MeshProbe(O,Scene,Actor,Shape,G)'));
+  assert.match(actors,/Probed=true;\s*MeshProbe/);
+  assert.equal((helper.match(/PxGeometryQuery::raycast\(/g)||[]).length,1);
+  assert.equal((helper.match(/Scene->raycast\(/g)||[]).length,1);
+  assert.doesNotMatch(helper,/->(?:refitBVH|getVerticesForModification|flushQueryUpdates|flushSimulation|set\w*)\s*\(/);
+});

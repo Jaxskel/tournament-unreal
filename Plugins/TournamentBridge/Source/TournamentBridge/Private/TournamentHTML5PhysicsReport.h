@@ -79,6 +79,98 @@ struct Output
 };
 // End portable policy/output code.
 
+struct Triangle182
+{
+    unsigned Indices[3];
+    physx::PxVec3 Vertices[3];
+    bool Indices16 = false, HasRemap = false;
+    unsigned OriginalFace = 0;
+};
+static bool ReadTriangle182(const physx::PxTriangleMesh* Mesh, Triangle182& T)
+{
+    if (!Mesh || Mesh->getNbTriangles() <= 182 || Mesh->getNbVertices() == 0) return false;
+    const void* Indices = Mesh->getTriangles();
+    const physx::PxVec3* Vertices = Mesh->getVertices();
+    if (!Indices || !Vertices) return false;
+    T.Indices16 = Mesh->getTriangleMeshFlags().isSet(physx::PxTriangleMeshFlag::e16_BIT_INDICES);
+    for (unsigned I=0; I<3; ++I)
+    {
+        T.Indices[I] = T.Indices16 ? static_cast<const physx::PxU16*>(Indices)[182*3+I]
+            : static_cast<const physx::PxU32*>(Indices)[182*3+I];
+        if (T.Indices[I] >= Mesh->getNbVertices()) return false;
+    }
+    // Validate every index before accessing any vertex; the optional remap has nbTriangles entries.
+    for (unsigned I=0; I<3; ++I)
+    {
+        T.Vertices[I] = Vertices[T.Indices[I]];
+        if (!T.Vertices[I].isFinite()) return false;
+    }
+    const physx::PxU32* Remap = Mesh->getTrianglesRemap();
+    T.HasRemap = Remap != nullptr;
+    T.OriginalFace = Remap ? Remap[182] : 0;
+    return true;
+}
+class TargetOnlyFilter : public physx::PxQueryFilterCallback
+{
+    const physx::PxRigidActor* TargetActor;
+    const physx::PxShape* TargetShape;
+public:
+    unsigned Calls = 0, TargetCalls = 0;
+    TargetOnlyFilter(const physx::PxRigidActor* A, const physx::PxShape* S) : TargetActor(A), TargetShape(S) {}
+    virtual physx::PxQueryHitType::Enum preFilter(const physx::PxFilterData&, const physx::PxShape* Shape,
+        const physx::PxRigidActor* Actor, physx::PxHitFlags&) override
+    {
+        ++Calls;
+        if (Actor == TargetActor && Shape == TargetShape)
+        { ++TargetCalls; return physx::PxQueryHitType::eBLOCK; }
+        return physx::PxQueryHitType::eNONE;
+    }
+    virtual physx::PxQueryHitType::Enum postFilter(const physx::PxFilterData&, const physx::PxQueryHit&) override
+    { return physx::PxQueryHitType::eNONE; } // No post-filter flag is requested.
+};
+static void RayHit(Output& O, const char* Kind, bool HasHit, const physx::PxRaycastHit& H)
+{
+    // Misses have no valid distance/position/normal; never read those fields.
+    if (!HasHit) { O.Add("ray kind=%s hit=0",Kind); return; }
+    O.Add("ray kind=%s hit=1 distance=%.6f face=%u point=%.6f,%.6f,%.6f normal=%.6f,%.6f,%.6f",
+        Kind,H.distance,H.faceIndex,H.position.x,H.position.y,H.position.z,H.normal.x,H.normal.y,H.normal.z);
+}
+static void MeshProbe(Output& O, const physx::PxScene* Scene, const physx::PxRigidActor* Actor,
+    const physx::PxShape* Shape, const physx::PxTriangleMeshGeometry& G)
+{
+    // Caller holds the sync scene read lock. No flush, refit, or scene/geometry writes.
+    const physx::PxTransform GlobalPose = Actor->getGlobalPose() * Shape->getLocalPose();
+    if (!G.isValid() || !GlobalPose.isValid())
+    { O.Add("meshProbe skipped=invalidGeometryOrPose"); return; }
+    const physx::PxBounds3 LocalBounds = G.triangleMesh->getLocalBounds();
+    const physx::PxBounds3 ActorBounds = Actor->getWorldBounds(1.0f);
+    O.Add("meshBounds min=%.6f,%.6f,%.6f max=%.6f,%.6f,%.6f",LocalBounds.minimum.x,LocalBounds.minimum.y,LocalBounds.minimum.z,
+        LocalBounds.maximum.x,LocalBounds.maximum.y,LocalBounds.maximum.z);
+    O.Add("actorBounds inflation=1 min=%.6f,%.6f,%.6f max=%.6f,%.6f,%.6f",ActorBounds.minimum.x,ActorBounds.minimum.y,ActorBounds.minimum.z,
+        ActorBounds.maximum.x,ActorBounds.maximum.y,ActorBounds.maximum.z);
+    Triangle182 T;
+    if (!ReadTriangle182(G.triangleMesh,T))
+    { O.Add("meshProbe skipped=triangle182Unreadable"); return; }
+    O.Add("triangle internal=182 indexBits=%d indices=%u,%u,%u remapPresent=%d originalFace=%u expectedFace=%d",
+        T.Indices16 ? 16 : 32,T.Indices[0],T.Indices[1],T.Indices[2],T.HasRemap,T.OriginalFace,T.HasRemap && T.OriginalFace==625);
+    for (unsigned I=0; I<3; ++I)
+        O.Add("triangleVertex slot=%u index=%u local=%.6f,%.6f,%.6f",I,T.Indices[I],T.Vertices[I].x,T.Vertices[I].y,T.Vertices[I].z);
+    const physx::PxVec3 Origin(4600.f,4670.f,633.2301025390625f+256.f), Direction(0.f,0.f,-1.f);
+    const physx::PxHitFlags HitFlags(physx::PxHitFlag::eDEFAULT);
+    O.Add("raySpec origin=%.6f,%.6f,%.6f dir=0,0,-1 length=2304 maxHits=1",Origin.x,Origin.y,Origin.z);
+    physx::PxRaycastHit Direct;
+    const unsigned DirectCount=physx::PxGeometryQuery::raycast(Origin,Direction,G,GlobalPose,2304.f,HitFlags,1,&Direct);
+    RayHit(O,"geometry",DirectCount!=0,Direct);
+    TargetOnlyFilter Filter(Actor,Shape);
+    const physx::PxQueryFilterData Query(physx::PxFilterData(0,0,0,0),physx::PxQueryFlag::eSTATIC | physx::PxQueryFlag::ePREFILTER);
+    physx::PxRaycastBuffer SceneHit;
+    const bool Result=Scene->raycast(Origin,Direction,2304.f,SceneHit,HitFlags,Query,&Filter,nullptr);
+    O.Add("sceneRay result=%d block=%d prefilterCalls=%u targetCalls=%u targetHit=%d staticOnly=1 queryWords=0,0,0,0",
+        Result,SceneHit.hasBlock,Filter.Calls,Filter.TargetCalls,
+        SceneHit.hasBlock && SceneHit.block.actor==Actor && SceneHit.block.shape==Shape);
+    RayHit(O,"targetScene",SceneHit.hasBlock,SceneHit.block);
+}
+
 static void Component(Output& O, const char* Label, UPrimitiveComponent* C)
 {
     if (!C) { O.Add("%s missing=1", Label); return; }
@@ -112,6 +204,7 @@ static void ActorShapes(Output& O, FBodyInstance* BI, UBodySetup* B, FPhysScene*
     physx::PxShape* Shapes[8];
     const unsigned Count = Actor->getShapes(Shapes, 8);
     if (Total > Count) { O.Truncated = true; O.Add("px scene=%d shapesOmitted=%u", SceneType, Total-Count); }
+    bool Probed = false;
     for (unsigned I = 0; I < Count; ++I)
     {
         const physx::PxShape* Shape = Shapes[I];
@@ -125,7 +218,7 @@ static void ActorShapes(Output& O, FBodyInstance* BI, UBodySetup* B, FPhysScene*
         O.Add("shapePose scene=%d i=%u pos=%.6f,%.6f,%.6f quat=%.6f,%.6f,%.6f,%.6f", SceneType,I,
             Local.p.x,Local.p.y,Local.p.z,Local.q.x,Local.q.y,Local.q.z,Local.q.w);
         physx::PxTriangleMeshGeometry G;
-        if (Shape->getTriangleMeshGeometry(G))
+        if (Shape->getGeometryType() == physx::PxGeometryType::eTRIANGLEMESH && Shape->getTriangleMeshGeometry(G))
         {
             int Match = -1;
             if (B) for (int J = 0; J < FMath::Min(B->TriMeshes.Num(),8); ++J) if (B->TriMeshes[J] == G.triangleMesh) { Match = J; break; }
@@ -133,8 +226,14 @@ static void ActorShapes(Output& O, FBodyInstance* BI, UBodySetup* B, FPhysScene*
                 SceneType,I,Match,G.triangleMesh ? G.triangleMesh->getNbVertices() : 0,
                 G.triangleMesh ? G.triangleMesh->getNbTriangles() : 0,static_cast<unsigned>(G.meshFlags),
                 G.scale.scale.x,G.scale.scale.y,G.scale.scale.z,G.scale.rotation.x,G.scale.rotation.y,G.scale.rotation.z,G.scale.rotation.w);
+            if (!Probed && SceneType==PST_Sync && Match==0 && B && B->GetFName()==FName(TEXT("BodySetup_15")))
+            {
+                Probed=true;
+                MeshProbe(O,Scene,Actor,Shape,G);
+            }
         }
     }
+    if (SceneType==PST_Sync && !Probed) O.Add("meshProbe skipped=targetShapeMissing");
 }
 static void Hit(Output& O, const char* Kind, int Complex, const FHitResult& H)
 {
