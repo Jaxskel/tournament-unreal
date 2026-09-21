@@ -32,6 +32,16 @@
 #include "MaterialShared.h"
 #include "AssetRegistryModule.h"
 #include "UObject/UnrealType.h"
+#include "UObject/UObjectIterator.h"
+#include "Editor.h"
+#include "Engine/World.h"
+#include "Engine/Level.h"
+#include "Components/StaticMeshComponent.h"
+#include "PhysicsEngine/BodySetup.h"
+#include "CollisionQueryParams.h"
+#include "EngineUtils.h"
+#include "GameFramework/PlayerStart.h"
+#include "Components/CapsuleComponent.h"
 #if PLATFORM_WINDOWS
 #include "Windows/AllowWindowsPlatformTypes.h"
 #include <windows.h>
@@ -332,6 +342,7 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
     UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_REPORT %s"), *Text);
 }
 #include "MaterialPreflightReport.h"
+#include "PhysicsPreflightReport.h"
 static bool ReportMeshes(const TArray<FString>& Meshes)
 {
     bool OK = true;
@@ -475,6 +486,8 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
     // A separate read-only entry point: its spec cannot enter Apply/Verify or COW.
     if (Mode.Equals(TEXT("MaterialReport"), ESearchCase::IgnoreCase))
         return MaterialPreflightReport(Params);
+    if (Mode.Equals(TEXT("PhysicsReport"), ESearchCase::IgnoreCase))
+        return PhysicsPreflightReport(Params);
     const bool Apply = Mode.Equals(TEXT("Apply"), ESearchCase::IgnoreCase);
     const bool Verify = Mode.Equals(TEXT("Verify"), ESearchCase::IgnoreCase);
     const bool Report = Mode.Equals(TEXT("Report"), ESearchCase::IgnoreCase);
