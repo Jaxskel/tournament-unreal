@@ -1,5 +1,28 @@
 # Browser stream performance — September 21, 2026
 
+## Per-player resolution selection (2026-09-21)
+
+The live page now offers 720p, 1080p and 1440p. The chosen resolution persists in browser local storage, is reapplied after reconnect/reload, and is never automatically lowered. Native rendering remains at 100% scale. Each browser changes only its leased native client's viewport and encoder; the authoritative multiplayer server and other player's resolution remain unchanged. Health reports actual and requested resolution separately.
+
+The resize path synchronizes Slate window geometry with the actual GPU backbuffer. The launcher reserves maximum 2560×1440 window bounds before selecting the startup size: without that reservation UE4's session-zero window limits clipped larger images into the old viewport. The native plugin drains its outstanding readback once on resize and starts a new bounded frame connection. Encoders are selected from exact raw frame lengths, and callbacks from superseded encoders cannot publish stale images. The browser recreates its decoder and canvas when dimensions change, even with the same codec string.
+
+Further changes retain the native packet allocation across frames rather than freeing and reallocating several megabytes per picture, request a low-latency canvas where supported, and keep existing bounded capture/encode/network queues. These reduce avoidable overhead; they do not establish a higher FPS result. Escape now releases a newly acquired pointer lock even when its asynchronous change event has not arrived yet, fixing a reproduced rapid Resume → capture → Escape trap.
+
+Native compilation, 60 browser/transport tests, eight event tests and Windows launcher checks passed. Tests include seat isolation, coalesced resize requests, invalid size/seat claims, stale encoder callbacks, native reconnect, saved preference, low-FPS preservation, and rapid mouse recapture. The actual Mac browser displayed full 2560×1440 video; screenshots confirmed the full image rather than a cropped old-size viewport.
+
+Two independent Windows Edge contexts joined the same public arena. Each profile was sampled for approximately ten seconds with movement and firing, while the second seat continued receiving 720p pictures:
+
+| Selected size | Measured FPS | p95 gap | p99 gap | Maximum gap |
+| --- | ---: | ---: | ---: | ---: |
+| 1280×720 | 96.1 | 20.1 ms | 28.1 ms | 41.4 ms |
+| 1920×1080 | 47.2 | 36.2 ms | 44.1 ms | 49.1 ms |
+| 2560×1440 | 29.5 | 48.9 ms | 61.5 ms | 65.2 ms |
+
+No sample had a gap above 100 ms. These short wired-host samples are not a Wi-Fi or long-session guarantee. The second player's dimensions remained unchanged and frames continued throughout each switch. Settings navigation, sensitivity adjustment, Escape, firing after recapture, disconnect/rejoin, full-page reload with the saved 1440p preference, and simultaneous 1440p + 1080p seats passed with zero page errors. The two browser contexts ran on the host itself, adding work relative to the earlier Mac/Windows split test. Test seats were released afterward.
+
+ Frame rate counts decoded canvas draws, not physical display refresh. Higher resolution remains limited by the native capture path; it is not a 120 FPS high-resolution result.
+
+
 ## Image clarity follow-up: HD with a measured speed tradeoff
 
 The current host profile is **1280x720, target 120 FPS, 12 Mbit/s H.264 High / NVENC P3**. The old profile was 960x540, 6 Mbit/s Baseline / P1. The new canvas and decoder retain the actual negotiated resolution end to end. The toolbar displays `720p` so source resolution cannot be mistaken for screen size. The native launcher requests 100% render scale, no motion blur or depth of field, FXAA instead of temporal AA, and 16x anisotropic filtering. The render ceiling is 240 FPS to give capture headroom, not a claim that the stream reaches 240 FPS.

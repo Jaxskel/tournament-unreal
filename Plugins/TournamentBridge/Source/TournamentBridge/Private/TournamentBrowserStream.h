@@ -23,6 +23,7 @@ private:
     double LastCapture;
     bool bRawFrames;
     int32 CaptureFPS;
+    FIntPoint RequestedSize = FIntPoint::ZeroValue;
     TSharedPtr<FTournamentCapture, ESPMode::ThreadSafe> Capture;
     double LastInput;
     double LastReconnect;

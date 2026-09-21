@@ -7,7 +7,7 @@ param(
     [int]$Frags=30,
     [ValidateRange(-1,15)][int]$GraphicsAdapter=-1,
     [ValidateSet(60,120)][int]$StreamFPS=120,
-    [ValidateSet('540p','720p','1080p')][string]$StreamResolution='720p',
+    [ValidateSet('540p','720p','1080p','1440p')][string]$StreamResolution='720p',
     [string]$FFmpeg
 )
 # Run from a persistent Windows Scheduled Task, not a short-lived SSH child.

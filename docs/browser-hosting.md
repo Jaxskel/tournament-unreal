@@ -89,12 +89,15 @@ A 120 Hz display/browser presentation path is needed to see 120 distinct frames 
 
 ### Resolution and clarity
 
-Pair the gateway `STREAM_RESOLUTION` with native `-StreamResolution`; both default to `720p`. Supported values are `540p`, `720p` and `1080p`. Restart both gateway and native clients after a profile change; reload browser clients. The combined launcher passes both settings automatically. Legacy JPEG mode stays at 540p.
+Players choose **720p, 1080p or 1440p** from the Resolution selector below the game, before joining or while playing. The preference is saved in browser local storage, reapplied after reconnect/reload, and never automatically reduced. Each selection resizes only the owning native client and encoder, preserving the multiplayer server, match and other player. Higher resolution can reduce measured FPS. Escape releases the cursor to reach the selector.
+
+`STREAM_RESOLUTION` and native `-StreamResolution` set the startup/default profile (`720p` by default; `540p`, `720p`, `1080p`, `1440p` supported). The gateway detects each actual native size from the allowlisted raw frame length. Runtime changes need no process restart. The launcher reserves 2560×1440 maximum window bounds at creation, then selects the actual startup size. This is necessary because UE4 otherwise caps the hidden window at its launch dimensions. The native window's Slate geometry and independent GPU viewport resize together; only the old frame connection/encoder is recycled. Legacy JPEG stays at 540p and disables the picker during play. A released seat returns to the host default, while the browser retains its owner's preference.
 
 | Profile | Native size | 120 FPS bitrate target | 60 FPS bitrate target |
 | --- | --- | --- | --- |
 | 540p | 960x540 | 6 Mbit/s | 4 Mbit/s |
 | 720p (default) | 1280x720 | 12 Mbit/s | 8 Mbit/s |
 | 1080p | 1920x1080 | 24 Mbit/s | 16 Mbit/s |
+| 1440p | 2560x1440 | 40 Mbit/s | 28 Mbit/s |
 
 These are targets, not measured frame-rate guarantees. On this host, two-seat gameplay measured about 103-109 FPS at 720p; the 1080p test delivered about 50 FPS. Source rendering is 100% scale with motion blur/depth of field disabled, FXAA and 16x anisotropic filtering. H.264 High uses NVENC P3 with zero B-frames and lookahead; the VBV buffer represents about 32 ms of target bitrate. The 720p default preserves more detail than the old 540p profile while avoiding the larger 1080p speed regression. See the latest performance report before changing it.

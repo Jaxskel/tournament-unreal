@@ -395,3 +395,64 @@ test('720p profile matches encoder configuration, client metadata and raw-frame 
   assert.equal(f.gateway.status().width,1280);assert.equal(f.gateway.status().height,720);
   await assert.rejects(createGateway({ffmpegPath:process.execPath,resolution:'4k'}),/profile/);
 });
+
+test('resolution switches are seat-scoped, coalesced, survive reconnect and reject stale encoder pictures',async t=>{
+  const {videoProfile}=await import('../video.js');const encoders=[];
+  class Encoder {
+    constructor(_path,publish,_fail,options){this.publish=publish;this.options=options;encoders.push(this);}
+    push(){this.publish({data:Buffer.alloc(20),seq:1,key:true,codec:'avc1.640033'});}
+    close(){this.closed=true;}
+  }
+  const raw=res=>frame(Buffer.alloc(videoProfile(res).rawBytes));
+  const f=await fixture(t,{ffmpegPath:process.execPath,Encoder,heartbeatMs:20});
+  let a=await f.native(0,raw('720p'));await f.native(1,raw('720p'));
+  const wa=await f.ws((await f.join()).body.token),wb=await f.ws((await f.join()).body.token);
+  await until(()=>wa.packets.some(Buffer.isBuffer)&&wb.packets.some(Buffer.isBuffer));
+  wa.socket.send(JSON.stringify({type:'resolution',resolution:'1440p'}));
+  await until(()=>f.received[0].some(p=>p.type==='resolution'));
+  for(let i=0;i<30;i++)wa.socket.send(JSON.stringify({type:'resolution',resolution:i%2?'1440p':'1080p'}));
+  await pause(30);assert.equal(f.received[0].filter(p=>p.type==='resolution').length,1);
+  assert.ok(!f.received[1].some(p=>p.type==='resolution'));
+  a.write(raw('1440p'));await until(()=>wa.packets.some(p=>p.type==='video-config'&&p.height===1440));
+  assert.equal(encoders[0].closed,true);
+  const count=wa.packets.filter(Buffer.isBuffer).length;encoders[0].push();await pause(20);
+  assert.equal(wa.packets.filter(Buffer.isBuffer).length,count);
+  assert.deepEqual(encoders.at(-1).options,{fps:120,resolution:'1440p'});
+  assert.equal(f.gateway.status().seats[0].width,2560);assert.equal(f.gateway.status().seats[1].height,720);
+  assert.ok(!wb.packets.some(p=>p.type==='video-config'&&p.height!==720));
+  wa.socket.send(JSON.stringify({type:'key',key:'W',down:true}));await until(()=>f.received[0].some(p=>p.key==='W'));
+  a.destroy();await until(()=>!f.gateway.status().seats[0].nativeConnected);
+  a=await f.native(0,raw('720p'));
+  await until(()=>f.received[0].filter(p=>p.type==='resolution').length>=2);
+  assert.equal(f.received[0].filter(p=>p.type==='resolution').at(-1).resolution,'1440p');
+  a.write(raw('1440p'));await until(()=>f.gateway.status().seats[0].height===1440);
+  assert.equal(f.gateway.status().players,2);
+  wa.socket.terminate();await until(()=>!f.gateway.status().seats[0].occupied);
+  assert.equal(f.gateway.status().seats[0].requestedResolution,'720p');assert.equal(f.gateway.status().seats[1].height,720);
+});
+
+test('resolution controls require authentication and reject arbitrary sizes and other-seat claims',async t=>{
+  class Encoder {
+    constructor(_path,publish){this.publish=publish;}
+    push(){this.publish({data:Buffer.alloc(20),seq:1,key:true,codec:'avc1.640033'});}
+    close(){}
+  }
+  const f=await fixture(t,{ffmpegPath:process.execPath,Encoder});await f.native(0,frame(Buffer.alloc(1280*720*4)));
+  for(const control of [{type:'resolution',resolution:'4k'},{type:'resolution',resolution:'1440p',seat:1},{type:'resolution',width:99999,height:1440}]){
+    const owner=await f.ws((await f.join()).body.token);await until(()=>owner.packets.length>0);
+    owner.socket.send(JSON.stringify(control));await until(()=>owner.socket.readyState===3);
+  }
+  const stranger=await f.ws();stranger.socket.send(JSON.stringify({type:'resolution',resolution:'1440p'}));
+  await until(()=>stranger.socket.readyState===3);assert.ok(!f.received.flat().some(p=>p.type==='resolution'));
+});
+
+test('variable raw parser accepts exact profiles and rejects invalid sizes before allocating',()=>{
+  const sizes=[960*540*4,1280*720*4,1920*1080*4,2560*1440*4],seen=[];
+  const parser=new FrameParser(p=>seen.push(p.length),sizes);
+  for(const size of sizes)parser.push(frame(Buffer.alloc(size)));assert.deepEqual(seen,sizes);
+  for(const size of [4,1280*720*4+1,2560*1440*4+1,0xffffffff]){
+    const header=Buffer.alloc(4);header.writeUInt32BE(size);const invalid=new FrameParser(()=>assert.fail(),sizes);
+    assert.throws(()=>invalid.push(header),/length/);assert.equal(invalid.payload,null);
+  }
+  assert.throws(()=>new FrameParser(()=>{},[14_000_000]),/profile/);assert.throws(()=>new FrameParser(()=>{},[]),/profile/);
+});

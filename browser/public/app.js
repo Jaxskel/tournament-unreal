@@ -1,13 +1,59 @@
 import { GameVideoDecoder } from './video-client.js';
 const $ = id => document.getElementById(id);
 const canvas = $('game');
-const ctx = canvas.getContext('2d', { alpha: false });
+const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
 const held = new Set();
 const keys = new Map(Object.entries({ KeyW:'W', KeyA:'A', KeyS:'S', KeyD:'D', Space:'SpaceBar', ShiftLeft:'LeftShift', ControlLeft:'LeftControl', Digit1:'One', Digit2:'Two', Digit3:'Three', Digit4:'Four', Digit5:'Five', Digit6:'Six', Digit7:'Seven', Digit8:'Eight', Digit9:'Nine', Tab:'Tab', Enter:'Enter', ArrowUp:'Up', ArrowDown:'Down', ArrowLeft:'Left', ArrowRight:'Right' }));
 let socket = null;
 let active = false;
 let joining = false;
 let videoDecoder = null;
+const resolutions = ['720p','1080p','1440p'];
+let preferredResolution = '720p';
+try {
+  const saved = localStorage.getItem('tournament-resolution');
+  if (resolutions.includes(saved)) preferredResolution = saved;
+} catch { /* Private browsing may disable persistence; keep the session choice. */ }
+$('resolution').value = preferredResolution;
+let resolutionRequestedAt = 0;
+const validSize = (width,height) => [[960,540],[1280,720],[1920,1080],[2560,1440]].some(([w,h]) => width===w && height===h);
+function requestResolution() {
+  if (!active || !videoDecoder) return;
+  resolutionRequestedAt = performance.now();
+  send({type:'resolution',resolution:preferredResolution});
+  updateResolutionHelp();
+}
+function updateResolutionHelp() {
+  const waiting = active && videoDecoder && canvas.height !== Number.parseInt(preferredResolution);
+  const state = waiting
+    ? performance.now() - resolutionRequestedAt > 15000
+      ? `${preferredResolution} is still selected, but the host has not applied it. Reconnect to retry.`
+      : `Applying ${preferredResolution} to your game…`
+    : `${preferredResolution} selected. Your choice stays fixed and is saved in this browser.`;
+  $('resolution-help').textContent = `${state} Higher resolutions may reduce FPS.`;
+}
+function createDecoder(packet, version) {
+  if (!validSize(packet.width,packet.height) || ![60,120].includes(packet.fps ?? 60)) { disconnect('Invalid stream resolution or frame rate.'); return false; }
+  const offset = videoDecoder?.serverOffset ?? null;
+  videoDecoder?.close();
+  canvas.width = packet.width; canvas.height = packet.height;
+  const decoder = new GameVideoDecoder({
+    send, fps:packet.fps ?? 60, width:packet.width, height:packet.height,
+    draw: frame => {
+      if (!active || generation !== version || videoDecoder !== decoder) return;
+      ctx.drawImage(frame,0,0,canvas.width,canvas.height);
+      frames++; lastFrameAt=performance.now(); $('stream-notice').hidden=true;
+    },
+    failure: (_error, fatal) => {
+      if (videoDecoder !== decoder) return;
+      if (fatal) { disconnect('H.264 decoding failed. Try current Chrome or Edge with an updated graphics driver.'); return; }
+      $('stream-notice').textContent='Resynchronizing video…'; $('stream-notice').hidden=false;
+    },
+  });
+  decoder.serverOffset = offset;
+  videoDecoder = decoder;
+  return true;
+}
 let minRtt = Infinity;
 let joinAbort = null;
 let menuMode = false;
@@ -74,6 +120,7 @@ async function captureMouse() {
 function setActive(value) {
   active = value;
   for (const id of ['capture', 'menu', 'disconnect']) $(id).disabled = !value;
+  if (!value) $('resolution').disabled = false;
   $('landing').hidden = value;
   if (!value) {
     $('stream-notice').hidden = true;
@@ -195,7 +242,7 @@ async function join() {
       let packet;
       try { packet = JSON.parse(event.data); } catch { return; }
       if (packet.type === 'joined') {
-        if (![[960,540],[1280,720],[1920,1080]].some(([w,h]) => packet.width===w && packet.height===h)) { disconnect('Invalid stream resolution.'); return; }
+        if (!validSize(packet.width,packet.height)) { disconnect('Invalid stream resolution.'); return; }
         canvas.width = packet.width; canvas.height = packet.height;
         clearTimeout(joinTimer);
         joining = false;
@@ -213,25 +260,22 @@ async function join() {
         setActive(true);
         if (packet.video === 'h264') {
           if (typeof VideoDecoder === 'undefined') { disconnect('This stream needs a browser with H.264 WebCodecs support. Open it in current Chrome or Edge.'); return; }
-          videoDecoder = new GameVideoDecoder({
-            send, fps:packet.fps ?? 60, width:packet.width, height:packet.height,
-            draw: frame => {
-              if (!active || generation !== version) return;
-              ctx.drawImage(frame,0,0,canvas.width,canvas.height);
-              frames++; lastFrameAt=performance.now(); $('stream-notice').hidden=true;
-            },
-            failure: (_error, fatal) => {
-              if (fatal) { disconnect('H.264 decoding failed. Try current Chrome or Edge with an updated graphics driver.'); return; }
-              $('stream-notice').textContent='Resynchronizing video…'; $('stream-notice').hidden=false;
-            },
-          });
+          if (!createDecoder(packet,version)) return;
+          requestResolution();
         }
+        $('resolution').disabled = packet.video !== 'h264';
         $('connection').textContent = `LIVE · PLAYER ${packet.seat}`;
         $('stream-notice').textContent = 'Waiting for the game viewport…';
         $('stream-notice').hidden = false;
         canvas.focus({ preventScroll: true });
         void refreshHealth();
       } else if (packet.type === 'video-config' && videoDecoder) {
+        if (!validSize(packet.width,packet.height) || ![60,120].includes(packet.fps)) { disconnect('Invalid stream resolution or frame rate.'); return; }
+        if (videoDecoder.width !== packet.width || videoDecoder.height !== packet.height || videoDecoder.fps !== packet.fps) {
+          if (!createDecoder(packet,version)) return;
+          frames = 0; metricsAt = performance.now();
+        }
+        updateResolutionHelp();
         const decoder = videoDecoder;
         void decoder.configureSupported(packet.codec).catch(() => {
           if (decoder === videoDecoder) disconnect('H.264 decoding is unavailable in this browser. Try current Chrome or Edge.');
@@ -282,6 +326,13 @@ async function refreshHealth() {
   } catch { $('availability').textContent = 'Waiting for the host'; }
   finally { healthLoading = false; }
 }
+$('resolution').addEventListener('change', () => {
+  if (!resolutions.includes($('resolution').value)) return;
+  preferredResolution = $('resolution').value;
+  try { localStorage.setItem('tournament-resolution',preferredResolution); } catch { /* Session choice still works. */ }
+  reset(); releaseMouse();
+  requestResolution(); updateResolutionHelp();
+});
 $('play').addEventListener('click', () => joining ? disconnect('Connection cancelled.') : join());
 $('disconnect').addEventListener('click', () => disconnect());
 $('capture').addEventListener('click', captureMouse);
@@ -322,7 +373,7 @@ window.addEventListener('keydown', event => {
   if (!active) return;
   if (event.code === 'Escape') {
     event.preventDefault();
-    if (!event.repeat && performance.now() - lastEscapeAt > 200) { lastEscapeAt = performance.now(); toggleMenu(); }
+    if (!event.repeat && (locked() || performance.now() - lastEscapeAt > 200)) { lastEscapeAt = performance.now(); toggleMenu(); }
     return;
   }
   if (!locked() && !(menuMode && document.activeElement === canvas)) return;
@@ -336,7 +387,7 @@ window.addEventListener('keyup', event => {
   if (key && held.delete(key)) { event.preventDefault(); send({ type: 'key', key, down: false }); }
 });
 document.addEventListener('pointerlockchange', () => {
-  if (locked()) { exitingLock = false; setMenu(false); }
+  if (locked()) { exitingLock = false; lastEscapeAt = -Infinity; setMenu(false); }
   else {
     reset();
     if (active && !exitingLock && !menuMode && !document.hidden && document.hasFocus()) { lastEscapeAt = performance.now(); setMenu(true); }
@@ -369,6 +420,7 @@ setInterval(() => {
   frames = animationFrames = 0;
   metricsAt = performance.now();
   if (!active) return;
+  updateResolutionHelp();
   const age = videoDecoder?.frameAge;
   $('metrics').title = `${browserHz} Hz browser animation cadence. FPS counts decoded game frames, not physical screen refresh. RTT is network round-trip time; video age excludes input and screen scanout.`;
   $('metrics').textContent = `${canvas.height}p · ${fps} FPS · ${rtt === null ? '—' : rtt} ms RTT${videoDecoder ? ` · H.264${age === null ? '' : ` · ${Math.round(age)} ms video age`}` : ''}`;

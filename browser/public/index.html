@@ -35,6 +35,13 @@
       <div class="toolbar">
         <div class="connection"><span class="dot" id="connection-dot"></span><span id="connection">READY TO JOIN</span><span class="metrics" id="metrics">— FPS · — ms RTT</span></div>
         <div class="actions">
+          <label class="resolution-label" for="resolution">Resolution
+            <select id="resolution" aria-describedby="resolution-help">
+              <option value="720p">720p</option>
+              <option value="1080p">1080p · Full HD</option>
+              <option value="1440p">1440p · QHD</option>
+            </select>
+          </label>
           <button id="capture" type="button" disabled title="Capture your mouse for aiming">Capture mouse</button>
           <button id="menu" type="button" disabled>Menu</button>
           <button id="fullscreen" type="button">Fullscreen</button>
@@ -44,6 +51,7 @@
     </section>
     <section class="below">
       <div class="controls"><strong>HOW TO PLAY</strong><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</span><span><kbd>SPACE</kbd> Jump</span><span><kbd>CLICK</kbd> Fire</span><span><kbd>1–9</kbd> Weapons</span><span><kbd>TAB</kbd> Scores</span><span><kbd>ESC</kbd> Menu</span></div>
+      <p id="resolution-help" class="smallprint" role="status">Your resolution is saved in this browser and never lowered automatically. Higher resolutions may reduce FPS.</p>
       <p id="input-help">In menus, use your cursor. After choosing Resume, use Capture mouse to aim again.</p>
       <p class="smallprint">Audio is unavailable in this first stream. Demo play carries no platform rewards. Two independent browser seats share the host’s native multiplayer arena.</p>
     </section>

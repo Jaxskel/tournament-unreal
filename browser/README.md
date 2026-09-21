@@ -31,7 +31,7 @@ For a local-only run, omit both origin variables and visit `http://127.0.0.1:889
 
 | Environment variable | Default | Purpose |
 | --- | --- | --- |
-| `STREAM_RESOLUTION` | `720p` | `540p`, `720p` or `1080p`; pair with native `-StreamResolution` |
+| `STREAM_RESOLUTION` | `720p` | Startup/default profile: `540p`, `720p`, `1080p` or `1440p`; players can change their own stream live |
 | `STREAM_FPS` | `120` | Hardware stream cadence; accepts 60 or 120, pair with native `-StreamFPS` |
 | `FFMPEG_PATH` | unset | Absolute executable path; enables H.264 NVENC and raw native frames |
 | `PORT` | `8890` | Loopback HTTP and WebSocket listener |
@@ -46,7 +46,7 @@ No port is an administrative API. `GET /api/health` reports native connection st
 
 ## Native protocol — agreed wire format preserved
 
-**Frames: native → gateway TCP.** Each native client connects to its seat's loopback TCP port. In hardware-video mode, each packet is a four-byte unsigned big-endian length followed by exactly **width × height × 4 BGRA bytes**, with the exact host-selected profile (960×540, 1280×720 or 1920×1080). Any other size is rejected before allocation. The parser handles fragmented headers/payloads and coalesced packets with one bounded frame allocation. Only one native producer per seat is accepted. Idle native connections close after 15 seconds; the native plugin reconnects automatically. The source is exclusively the game's offscreen backbuffer.
+**Frames: native → gateway TCP.** Each native client connects to its seat's loopback TCP port. In hardware-video mode, each packet is a four-byte unsigned big-endian length followed by exactly **width × height × 4 BGRA bytes**, with an exact allowlisted profile (960×540, 1280×720, 1920×1080 or 2560×1440). Any other size is rejected before allocation. The parser handles fragmented headers/payloads and coalesced packets with one bounded frame allocation (at most 14,745,600 raw bytes). The encoder is rebuilt from the actual raw dimensions; superseded encoder callbacks are discarded. Only one native producer per seat is accepted. Idle native connections close after 15 seconds; the native plugin reconnects automatically. The source is exclusively the game's offscreen backbuffer.
 
 The game captures at up to 120 Hz on the render thread, with one capture in flight. The game thread polls completion rather than flushing rendering each frame. Completed frames are sent immediately. Raw frames stay on loopback and never go to the browser. NVENC produces low-delay H.264 High using preset P3 at a target 12 Mbit/s for the default 720p profile (8 Mbit/s in 60 FPS mode), with no B-frames/lookahead, a small VBV buffer, and an IDR every ten frames. Three outstanding encoder timestamps cause raw frames to be dropped before prediction. A write exceeding Node’s small stream high-water mark alone does not drop the next frame; the explicit three-picture bound controls memory. Single-threaded pixel conversion into NV12 avoids CPU oversubscription. A stalled encoder is recycled after five seconds without output while frames are arriving. FFmpeg logs identify encoder failures; missing executables fail startup.
 
@@ -69,7 +69,7 @@ The browser acknowledges receipt with `{type:"video-ack",seq}`. The gateway allo
 {"type":"heartbeat"}
 ```
 
-Allowed keys, exactly: `W A S D SpaceBar LeftShift LeftControl One Two Three Four Five Six Seven Eight Nine Escape Tab Enter LeftMouseButton RightMouseButton`.
+Allowed keys, exactly: `W A S D SpaceBar LeftShift LeftControl One Two Three Four Five Six Seven Eight Nine Escape Tab Enter Up Down Left Right LeftMouseButton RightMouseButton`.
 
 Mouse deltas are finite numbers clamped to ±300 per axis. Menu coordinates must be finite normalized numbers from 0 through 1, relative to the visible game image (fullscreen letterboxing excluded). Extra fields, arbitrary commands, console keys, client seat IDs, unknown keys, malformed JSON, and oversized payloads are rejected. UDP on loopback is not a guaranteed-delivery protocol: the native **three-second input watchdog** and resets remain necessary.
 
@@ -117,3 +117,11 @@ Tests use local sockets and tiny JPEG-marker fixtures to verify transport, not a
 Runtime handoff checks for the parent: start the matching multiplayer server and two native clients; confirm both `/api/health` seats have fresh frames; join with two separate browser profiles; confirm distinct views and game-controlled inputs; fight/respawn; test menu clicks and mouse capture; hide a tab/close a browser while holding movement; verify the native watchdog stops held input; test a third browser's full message; disconnect/rejoin; then measure actual frame rate/latency through the public URL. This directory does not assert those gameplay checks have passed.
 
 Native engine/content rights and public-demo permission remain governed by the parent project. This frontend labels play **Live demo / no rewards** and exposes no wallet, login imitation, reward settlement, or asset downloads.
+
+## Resolution selection
+
+The browser's Resolution selector exposes 720p, 1080p and 1440p. It persists `tournament-resolution` locally and reapplies it after joining. No automatic resolution adaptation exists. The FPS counter reports actual draws independently of the requested size.
+
+Authenticated H.264 owners may send exactly `{"type":"resolution","resolution":"1440p"}` (or `720p` / `1080p`). Extra fields, dimensions, commands and seat IDs are rejected. The gateway coalesces requests to at most one native resize request per second per seat and retries a lost UDP request while the actual size differs. Releasing a seat restores its host default; it does not erase the browser preference.
+
+Native resize finishes any outstanding render command once, releases held input, discards the old partially sent TCP picture, updates that game's Slate window and independent viewport, then reconnects. New raw frames identify the actual size. `video-config` is resent when either dimensions or codec change, even if the H.264 codec string is identical. The browser closes the old decoder and resizes its canvas; obsolete decoder outputs cannot paint over the new stream. Per-seat health includes actual/requested resolution, dimensions and bitrate. A failed resize remains visibly pending; it never quietly changes the selected value.

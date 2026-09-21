@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 
 export function videoProfile(resolution = '720p', fps = 120) {
-  const sizes = {'540p':[960,540,6,4], '720p':[1280,720,12,8], '1080p':[1920,1080,24,16]};
+  const sizes = {'540p':[960,540,6,4], '720p':[1280,720,12,8], '1080p':[1920,1080,24,16], '1440p':[2560,1440,40,28]};
   if (!Object.hasOwn(sizes, resolution) || ![60,120].includes(fps)) throw new Error('Invalid video profile');
   const [width,height,fastMbps,normalMbps] = sizes[resolution];
   return {width,height,rawBytes:width*height*4,bitrateMbps:fps===120?fastMbps:normalMbps};

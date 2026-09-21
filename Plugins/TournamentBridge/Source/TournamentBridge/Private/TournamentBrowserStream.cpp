@@ -13,6 +13,8 @@
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "GameFramework/PlayerInput.h"
+#include "Slate/SceneViewport.h"
+#include "Widgets/SWindow.h"
 
 // Render commands retain ownership across map travel and module shutdown.
 // At most one capture is outstanding; no game-thread render flush is needed.
@@ -67,7 +69,7 @@ FTournamentBrowserStream::~FTournamentBrowserStream()
 void FTournamentBrowserStream::CloseFrames()
 {
     if (Frames) { Frames->Close(); ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Frames); Frames = nullptr; }
-    Pending.Empty();
+    Pending.Reset();
     Capture.Reset();
     Sent = 0;
 }
@@ -102,7 +104,38 @@ void FTournamentBrowserStream::ReadInput(ATournamentPlayerController* PC, float 
         if (Type == TEXT("heartbeat")) { LastInput = FPlatformTime::Seconds(); continue; }
         if (!PC) continue;
         if (Type == TEXT("reset")) { Release(PC); LastInput = FPlatformTime::Seconds(); continue; }
-        if (Type == TEXT("menu-state"))
+        if (Type == TEXT("resolution") && bRawFrames)
+        {
+            FString Resolution;
+            if (!Object->TryGetStringField(TEXT("resolution"), Resolution)) continue;
+            FIntPoint Size(0, 0);
+            if (Resolution == TEXT("540p")) Size = FIntPoint(960, 540);
+            else if (Resolution == TEXT("720p")) Size = FIntPoint(1280, 720);
+            else if (Resolution == TEXT("1080p")) Size = FIntPoint(1920, 1080);
+            else if (Resolution == TEXT("1440p")) Size = FIntPoint(2560, 1440);
+            else continue;
+            if (!GEngine->GameViewport || !GEngine->GameViewport->GetGameViewport()) continue;
+            FSceneViewport* GameViewport = GEngine->GameViewport->GetGameViewport();
+            TSharedPtr<SWindow> GameWindow = GameViewport->FindWindow();
+            if (!GameWindow.IsValid()) continue;
+            RequestedSize = Size;
+            if (GEngine->GameViewport->Viewport->GetSizeXY() != Size)
+            {
+                // Only on explicit resize, never per frame. Finish the old readback
+                // before replacing its backbuffer; discard its partially sent TCP frame.
+                Release(PC);
+                FlushRenderingCommands();
+                CloseFrames();
+                // Keep Slate's clipping geometry and the GPU backbuffer in sync.
+                // SWindow::Resize clamps to the launch desktop size in session zero.
+                // Reshape this game's window explicitly, then resize its independent viewport.
+                GameWindow->ReshapeWindow(GameWindow->GetPositionInScreen(),
+                    GameWindow->GetWindowSizeFromClientSize(FVector2D(Size.X, Size.Y)));
+                GameViewport->SetViewportSize(Size.X, Size.Y);
+                UE_LOG(LogTemp, Log, TEXT("Tournament browser: requested %dx%d"), Size.X, Size.Y);
+            }
+        }
+        else if (Type == TEXT("menu-state"))
         {
             bool Open = false;
             if (!Object->TryGetBoolField(TEXT("open"), Open)) continue;
@@ -162,7 +195,7 @@ void FTournamentBrowserStream::PumpFrames()
         if (!Frames || !Frames->Connect(*Address)) { CloseFrames(); return; }
         Frames->SetNonBlocking(true);
         int32 BufferSize = 0;
-        Frames->SetSendBufferSize(12 * 1024 * 1024, BufferSize);
+        Frames->SetSendBufferSize(16 * 1024 * 1024, BufferSize);
         UE_LOG(LogTemp, Log, TEXT("Tournament browser: framebuffer gateway connected"));
     }
     if (!Frames) return;
@@ -176,7 +209,7 @@ void FTournamentBrowserStream::PumpFrames()
             CloseFrames();
             return;
         }
-        if (Sent >= Pending.Num()) { Pending.Empty(); Sent = 0; }
+        if (Sent >= Pending.Num()) { Pending.Reset(); Sent = 0; }
         else return;
     }
     if (Capture.IsValid() && Capture->Ready)
@@ -194,7 +227,7 @@ void FTournamentBrowserStream::PumpFrames()
                 const TArray<uint8>& Encoded = JPEG->GetCompressed(65);
                 Data = Encoded.GetData(); Length = Encoded.Num();
             }
-            if (Length < 4 || Length > (bRawFrames ? 1920 * 1080 * 4 : 4 * 1024 * 1024)) { Capture.Reset(); return; }
+            if (Length < 4 || Length > (bRawFrames ? 2560 * 1440 * 4 : 4 * 1024 * 1024)) { Capture.Reset(); return; }
             Pending.SetNumUninitialized(Length + 4);
             Pending[0] = uint8(uint32(Length) >> 24); Pending[1] = uint8(uint32(Length) >> 16);
             Pending[2] = uint8(uint32(Length) >> 8); Pending[3] = uint8(Length);
@@ -203,7 +236,7 @@ void FTournamentBrowserStream::PumpFrames()
             // Send immediately, instead of delaying this frame until the next tick.
             int32 Wrote = 0;
             if (Frames->Send(Pending.GetData(), Pending.Num(), Wrote)) Sent = Wrote;
-            if (Sent >= Pending.Num()) { Pending.Empty(); Sent = 0; }
+            if (Sent >= Pending.Num()) { Pending.Reset(); Sent = 0; }
         }
         Capture.Reset();
     }
@@ -214,8 +247,10 @@ void FTournamentBrowserStream::PumpFrames()
     LastCapture = FMath::Max(LastCapture + Interval, Now);
     FViewport* Viewport = GEngine->GameViewport->Viewport;
     const FIntPoint Size = Viewport->GetSizeXY();
-    if (Size.X < 1 || Size.Y < 1 || Size.X > 1920 || Size.Y > 1080) return;
-    if (bRawFrames && !((Size.X == 960 && Size.Y == 540) || (Size.X == 1280 && Size.Y == 720) || (Size.X == 1920 && Size.Y == 1080))) return;
+    if (Size.X < 1 || Size.Y < 1 || Size.X > 2560 || Size.Y > 1440) return;
+    if (bRawFrames && !((Size.X == 960 && Size.Y == 540) || (Size.X == 1280 && Size.Y == 720) || (Size.X == 1920 && Size.Y == 1080) || (Size.X == 2560 && Size.Y == 1440))) return;
+    // Capture only the selected native size, even during viewport recreation.
+    if (RequestedSize.X && Size != RequestedSize) return;
     const FViewportRHIRef RHIViewport = Viewport->GetViewportRHI();
     if (!RHIViewport.IsValid()) return;
     Capture = MakeShareable(new FTournamentCapture(Size));

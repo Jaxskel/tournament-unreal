@@ -2,7 +2,7 @@
 export class GameVideoDecoder {
   constructor({draw, send, failure, fps = 60, width = 960, height = 540}) {
     if (![60,120].includes(fps)) throw new Error('Invalid stream frame rate');
-    if (![[960,540],[1280,720],[1920,1080]].some(([w,h])=>width===w&&height===h)) throw new Error('Invalid video size');
+    if (![[960,540],[1280,720],[1920,1080],[2560,1440]].some(([w,h])=>width===w&&height===h)) throw new Error('Invalid video size');
     this.width = width; this.height = height;
     this.fps = fps;
     this.maxDecodeQueue = fps === 120 ? 12 : 2;

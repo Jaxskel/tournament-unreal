@@ -8,6 +8,6 @@ public class TournamentBridge : ModuleRules
         PublicDependencyModuleNames.AddRange(new string[] {
             "Core", "CoreUObject", "Engine", "InputCore", "UnrealTournament"
         });
-        PrivateDependencyModuleNames.AddRange(new string[] { "Json", "Sockets", "ImageWrapper", "RHI", "RenderCore" });
+        PrivateDependencyModuleNames.AddRange(new string[] { "Json", "Sockets", "ImageWrapper", "RHI", "RenderCore", "SlateCore" });
     }
 }

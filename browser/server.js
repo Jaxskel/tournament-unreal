@@ -47,7 +47,9 @@ export async function createGateway(options = {}) {
   const resolution = video ? (options.resolution ?? '720p') : '540p';
   if (![60,120].includes(fps)) throw new Error('Stream FPS must be 60 or 120');
   const profile = videoProfile(resolution, fps);
-  const {width,height,rawBytes} = profile;
+  const {width,height} = profile;
+  const profiles = Object.fromEntries(['540p','720p','1080p','1440p'].map(name => [name, videoProfile(name, fps)]));
+  const rawSizes = Object.values(profiles).map(p => p.rawBytes);
   if (video) await access(options.ffmpegPath);
   const publicOrigin = options.publicOrigin ? normalizeOrigin(options.publicOrigin) : null;
   const extraOrigins = (options.extraOrigins ?? []).map(normalizeOrigin);
@@ -71,7 +73,7 @@ export async function createGateway(options = {}) {
   const udp = dgram.createSocket('udp4');
   udp.on('error', () => {}); // Missing native listener does not crash the HTTP gateway.
   await new Promise(resolve => udp.bind(0, LOOPBACK, resolve));
-  const seats = [0, 1].map(id => ({ id, native: null, frame: null, frameAt: 0, frames: 0, dropped: 0, frameTimes: [], rawTimes: [], encoder: null, lease: null }));
+  const seats = [0, 1].map(id => ({ id, resolution, requestedResolution: resolution, profile, resolutionSentAt: 0, native: null, frame: null, frameAt: 0, frames: 0, dropped: 0, frameTimes: [], rawTimes: [], encoder: null, lease: null }));
   const leases = new Map();
   const sockets = new Set();
   const httpSockets = new Set();
@@ -84,9 +86,9 @@ export async function createGateway(options = {}) {
     const lease = seat.lease;
     if (!lease?.ws) return;
     if (metadata) {
-      if (lease.codec !== metadata.codec) {
-        lease.codec = metadata.codec;
-        sendJSON(lease.ws, {type:'video-config',codec:metadata.codec,width,height,fps});
+      if (lease.codec !== `${metadata.codec}:${seat.resolution}`) {
+        lease.codec = `${metadata.codec}:${seat.resolution}`;
+        sendJSON(lease.ws, {type:'video-config',codec:metadata.codec,width:seat.profile.width,height:seat.profile.height,fps});
         lease.videoWindow.reset();
       }
       if (!lease.videoWindow.send(lease.ws, metadata)) seat.dropped++;
@@ -95,10 +97,18 @@ export async function createGateway(options = {}) {
   function control(seat, message) {
     if (!closed) udp.send(Buffer.from(JSON.stringify(message)), udpPorts[seat.id], LOOPBACK, () => {});
   }
+  function applyResolution(seat) {
+    if (!video || !seat.native || seat.resolution === seat.requestedResolution || Date.now() - seat.resolutionSentAt < 1000) return;
+    // Coalesce rapid changes and retry lost UDP requests without restarting either game.
+    seat.resolutionSentAt = Date.now();
+    control(seat, {type:'resolution',resolution:seat.requestedResolution});
+  }
   function release(lease, code = 1000, reason = 'Seat released') {
     if (!lease || leases.get(lease.token) !== lease) return;
     leases.delete(lease.token);
     if (lease.seat.lease === lease) lease.seat.lease = null;
+    lease.seat.requestedResolution = resolution;
+    applyResolution(lease.seat);
     control(lease.seat, { type: 'reset' });
     control(lease.seat, { type: 'menu-state', open: false });
     if (lease.ws && lease.ws.readyState < 2) lease.ws.close(code, reason);
@@ -123,7 +133,7 @@ export async function createGateway(options = {}) {
       service: 'Tournament Unreal live demo', rewards: false, audio: false,
       players: seats.filter(s => s.lease?.ws?.readyState === 1).length,
       capacity: 2, width, height, bitrateMbps: video ? profile.bitrateMbps : null, targetFps: video ? fps : 24, video: video ? 'h264-nvenc' : 'jpeg',
-      seats: seats.map(s => ({ seat: s.id + 1, nativeConnected: !!s.native, frameAgeMs: s.frameAt ? Date.now() - s.frameAt : null, occupied: !!s.lease,
+      seats: seats.map(s => ({ seat: s.id + 1, resolution:s.resolution, requestedResolution:s.requestedResolution, width:s.profile.width, height:s.profile.height, bitrateMbps:video?s.profile.bitrateMbps:null, nativeConnected: !!s.native, frameAgeMs: s.frameAt ? Date.now() - s.frameAt : null, occupied: !!s.lease,
         encodedFps: s.frameTimes.length > 1 && Date.now()-s.frameAt < 1000 ? Math.round((s.frameTimes.length-1)*10000/Math.max(1,s.frameTimes.at(-1)-s.frameTimes[0]))/10 : 0,
         rawFps: s.rawTimes.length > 1 && Date.now()-s.rawTimes.at(-1) < 1000 ? Math.round((s.rawTimes.length-1)*10000/Math.max(1,s.rawTimes.at(-1)-s.rawTimes[0]))/10 : 0,
         encoderDropped: s.encoder?.dropped ?? 0, videoDropped: s.dropped,
@@ -199,10 +209,10 @@ export async function createGateway(options = {}) {
         clearTimeout(timer);
         control(lease.seat, { type: 'reset' });
         control(lease.seat, { type: 'menu-state', open: false });
-        sendJSON(ws, { type: 'joined', seat: lease.seat.id + 1, width, height, audio: false, fps, video: video ? 'h264' : 'jpeg' });
+        sendJSON(ws, { type: 'joined', seat: lease.seat.id + 1, width:lease.seat.profile.width, height:lease.seat.profile.height, audio: false, fps, video: video ? 'h264' : 'jpeg' });
         if (video && lease.seat.videoFrame) {
-          lease.codec = lease.seat.videoFrame.codec;
-          sendJSON(ws, {type:'video-config',codec:lease.codec,width,height,fps});
+          lease.codec = `${lease.seat.videoFrame.codec}:${lease.seat.resolution}`;
+          sendJSON(ws, {type:'video-config',codec:lease.seat.videoFrame.codec,width:lease.seat.profile.width,height:lease.seat.profile.height,fps});
           lease.videoWindow.send(ws, lease.seat.videoFrame);
         } else if (!video && lease.seat.frame) sendLatestFrame(ws, lease.seat.frame);
         return;
@@ -223,6 +233,13 @@ export async function createGateway(options = {}) {
       if (video && value?.type === 'video-reset' && Object.keys(value).join(',') === 'type') {
         owned.videoWindow.waitKey = true; return;
       }
+      if (video && value?.type === 'resolution' && Object.keys(value).sort().join(',') === 'resolution,type'
+          && ['720p','1080p','1440p'].includes(value.resolution)) {
+        markActivity(owned, now);
+        owned.seat.requestedResolution = value.resolution;
+        applyResolution(owned.seat);
+        return;
+      }
       const validated = validateControl(value);
       if (!validated) { release(owned, 1008, 'Unsupported control'); return; }
       markActivity(owned, now);
@@ -242,21 +259,41 @@ export async function createGateway(options = {}) {
     socket.setNoDelay(true);
     socket.setTimeout(15_000, () => socket.destroy());
     if (seat.lease) { seat.lease.videoWindow.reset(); seat.lease.codec = null; }
-    const encoder = video ? new (options.Encoder ?? HardwareEncoder)(options.ffmpegPath, frame => publish(seat,frame.data,frame), error => {
-      console.error(`Seat ${seat.id + 1}: ${error.message}`); socket.destroy();
-    }, {fps, resolution}) : null;
-    seat.encoder = encoder;
+    let encoder = null;
+    let encoderGeneration = 0;
     const parser = new FrameParser(frame => {
+      if (video) {
+        const actualResolution = Object.keys(profiles).find(name => profiles[name].rawBytes === frame.length);
+        if (!encoder || actualResolution !== seat.resolution) {
+          const version = ++encoderGeneration;
+          encoder?.close();
+          seat.resolution = actualResolution;
+          seat.profile = profiles[actualResolution];
+          seat.videoFrame = null;
+          seat.frameTimes = []; seat.rawTimes = [];
+          if (seat.lease) { seat.lease.codec = null; seat.lease.videoWindow.reset(); }
+          encoder = new (options.Encoder ?? HardwareEncoder)(options.ffmpegPath, picture => {
+            // Closed encoders can still have queued callbacks: never publish old-size pictures.
+            if (!socket.destroyed && seat.native === socket && version === encoderGeneration) publish(seat,picture.data,picture);
+          }, error => {
+            if (version !== encoderGeneration || socket.destroyed) return;
+            console.error(`Seat ${seat.id + 1}: ${error.message}`); socket.destroy();
+          }, {fps, resolution:actualResolution});
+          seat.encoder = encoder;
+        }
+        applyResolution(seat);
+      }
       const now=Date.now(); seat.rawTimes.push(now);
       while(seat.rawTimes.length>240 || seat.rawTimes[0]<now-2000) seat.rawTimes.shift();
       if (encoder) encoder.push(frame); else publish(seat,frame);
-    }, video ? rawBytes : 0);
+    }, video ? rawSizes : 0);
     socket.on('error', () => {});
     socket.on('data', chunk => { try { parser.push(chunk); } catch { socket.destroy(); } });
     socket.on('close', () => {
+      encoderGeneration++;
       encoder?.close();
-      seat.videoFrame = null;
       if (seat.native !== socket) return;
+      seat.videoFrame = null;
       seat.native = null;
       seat.frame = null;
       seat.frameAt = 0;
@@ -277,6 +314,7 @@ export async function createGateway(options = {}) {
   const heartbeat = setInterval(() => {
     const now = Date.now();
     for (const seat of seats) {
+      applyResolution(seat);
       const lease = seat.lease;
       if (lease?.ws?.readyState === 1 && !suspendStaleInput(lease, now)) control(seat, { type: 'heartbeat' });
     }

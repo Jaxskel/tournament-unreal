@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
 const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf8').then(text => text.replace(/^import .*;\n/, ''));
-function harness(joinResponses = []) {
+function harness(joinResponses = [], storage = new Map()) {
   let joinRequests = 0;
   const timers = [];
   let time = 0;
@@ -39,6 +39,13 @@ function harness(joinResponses = []) {
   document.exitPointerLock = () => { document.pointerLockElement = null; document.dispatch('pointerlockchange'); };
   const context = vm.createContext({
     document, window, WebSocket:Socket, Blob, ArrayBuffer,
+    localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},
+    VideoDecoder:class {},
+    GameVideoDecoder:class {
+      constructor(options){Object.assign(this,options);}
+      configureSupported(codec){this.codec=codec;return Promise.resolve();}
+      close(){this.closed=true;}
+    },
     performance:{now:() => time}, Date:{now:() => 100000 + time},
     requestAnimationFrame:fn => { frame = fn; },
     setInterval:(fn, ms) => {intervals.push({fn,ms});}, setTimeout:(fn, ms) => { const timer = {fn,ms}; timers.push(timer); return timer; }, clearTimeout(timer) { if(timer) timer.cancelled = true; },
@@ -264,4 +271,50 @@ test('1080p stream resizes the canvas instead of downsampling into the old 540p 
   assert.deepEqual(ws.sent.at(-1),{type:'menu',x:0.5,y:0.5});
   ws.onmessage({data:JSON.stringify({type:'joined',seat:1,width:99999,height:1080})});
   assert.equal(ws.readyState,3);assert.match(h.element('feedback').textContent,/resolution/);
+});
+
+test('saved resolution stays fixed through resize, reconnect, slow FPS and page reload',async()=>{
+  const storage=new Map();const h=harness([],storage);
+  h.element('resolution').value='1440p';h.element('resolution').dispatch('change');
+  assert.equal(storage.get('tournament-resolution'),'1440p');
+  const ws=await h.join();const joined={type:'joined',seat:1,width:1280,height:720,fps:120,video:'h264'};
+  ws.onmessage({data:JSON.stringify(joined)});assert.deepEqual(ws.sent.at(-1),{type:'resolution',resolution:'1440p'});
+  const old=h.run('videoDecoder');
+  ws.onmessage({data:JSON.stringify({type:'video-config',codec:'avc1.640033',width:2560,height:1440,fps:120})});
+  assert.equal(old.closed,true);assert.equal(h.element('game').width,2560);assert.equal(h.element('game').height,1440);
+  assert.equal(h.element('resolution').value,'1440p');
+  h.advance(1000);h.run('frames=12');h.intervals.find(i=>i.ms===1000).fn();
+  assert.equal(h.run('preferredResolution'),'1440p');assert.match(h.element('metrics').textContent,/12 FPS/);
+  h.run('disconnect()');const next=await h.join();next.onmessage({data:JSON.stringify(joined)});
+  assert.deepEqual(next.sent.at(-1),{type:'resolution',resolution:'1440p'});
+  assert.equal(harness([],storage).element('resolution').value,'1440p');
+});
+
+test('resolution change releases held input and mouse and never locks the selector on failure',async()=>{
+  const h=harness();const ws=await h.join();
+  ws.onmessage({data:JSON.stringify({type:'joined',seat:1,width:1280,height:720,fps:120,video:'h264'})});
+  await h.run('captureMouse()');h.window.dispatch('keydown',{code:'KeyW'});
+  h.element('resolution').value='1080p';h.element('resolution').dispatch('change');
+  assert.equal(h.document.pointerLockElement,null);assert.equal(h.run('held.size'),0);assert.equal(h.nativeMenu(),false);
+  assert.deepEqual(ws.sent.at(-1),{type:'resolution',resolution:'1080p'});
+  h.advance(16000);h.run('updateResolutionHelp()');assert.match(h.element('resolution-help').textContent,/still selected/);
+  assert.equal(h.element('resolution').disabled,false);
+});
+
+test('Escape immediately after recapturing always releases the mouse',async()=>{
+  const h=harness();await h.join();await h.run('captureMouse()');
+  h.window.dispatch('keydown',{code:'Escape',repeat:false});
+  assert.equal(h.document.pointerLockElement,null);
+  h.advance(30);await h.run('captureMouse()');h.advance(30);
+  h.window.dispatch('keydown',{code:'Escape',repeat:false});
+  assert.equal(h.document.pointerLockElement,null);assert.equal(h.nativeMenu(),true);
+});
+
+test('Escape also releases a new lock before its asynchronous change event arrives',async()=>{
+  const h=harness();await h.join();h.run('setMenu(true)');
+  h.window.dispatch('keydown',{code:'Escape',repeat:false});
+  h.advance(30);h.document.pointerLockElement=h.element('game');
+  // The browser exposes the new lock before it dispatches pointerlockchange.
+  h.window.dispatch('keydown',{code:'Escape',repeat:false});
+  assert.equal(h.document.pointerLockElement,null);assert.equal(h.nativeMenu(),true);
 });

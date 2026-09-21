@@ -5,7 +5,7 @@ param(
     [ValidateRange(-1,15)][int]$GraphicsAdapter=-1,
     [switch]$HardwareVideo,
     [ValidateSet(60,120)][int]$StreamFPS=120,
-    [ValidateSet('540p','720p','1080p')][string]$StreamResolution='720p',
+    [ValidateSet('540p','720p','1080p','1440p')][string]$StreamResolution='720p',
     [ValidateRange(1,500)][int]$Frags=30,
     [ValidateRange(1,60)][int]$RestartDelaySeconds=3,
     [ValidateRange(30,600)][int]$FrameTimeoutSeconds=120,
