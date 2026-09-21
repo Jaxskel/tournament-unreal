@@ -91,6 +91,7 @@ test('strict input schema clamps relative mouse and rejects commands, seat claim
   for (const value of [null, [], {type:'exec',command:'quit'}, {type:'key',key:'F4',down:true}, {type:'key',key:'W',down:1}, {type:'key',key:'W',down:true,seat:1}, {type:'mouse',dx:NaN,dy:0}, {type:'mouse',dx:Infinity,dy:0}, {type:'menu',x:-0.1,y:0.2}, {type:'menu',x:0.1,y:1.1}, {type:'reset',extra:true}, {type:'heartbeat'}, {type:'menu-state',open:1}, {type:'menu-state',open:true,seat:1}]) assert.equal(validateControl(value), null);
   assert.deepEqual(validateControl({type:'menu-state',open:false}), {type:'menu-state',open:false});
   assert.deepEqual(validateControl({type:'menu',x:0,y:1}), {type:'menu',x:0,y:1});
+  for (const key of ['Up','Down','Left','Right']) assert.deepEqual(validateControl({type:'key',key,down:true}), {type:'key',key,down:true});
   assert.deepEqual(validateControl({type:'key',key:'Nine',down:false}), {type:'key',key:'Nine',down:false});
 });
 

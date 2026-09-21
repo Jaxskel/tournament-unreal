@@ -209,3 +209,47 @@ test('recovery has a deadline and does not retry a full arena', async () => {
   assert.equal(full.joinRequests(), 1);
   assert.match(full.element('feedback').textContent, /Both seats/);
 });
+
+
+test('120 Hz aiming tolerates early animation callbacks without dropping to half rate', async () => {
+  for (const gaps of [[1000/120], [8.0, 8.6666666667], [1000/119.88]]) {
+    const h = harness(); const ws = await h.join();
+    await h.run('captureMouse()'); ws.sent.length = 0;
+    for (let i=0; i<120; i++) {
+      h.document.dispatch('mousemove', {movementX:2,movementY:-1});
+      h.tickFrame(); h.advance(gaps[i % gaps.length]);
+    }
+    const packets = ws.sent.filter(p => p.type === 'mouse');
+    assert.ok(packets.length >= 119, `${gaps}: only ${packets.length} mouse updates`);
+    assert.equal(packets.reduce((sum,p) => sum+p.dx,0), 240);
+  }
+});
+
+test('mouse scheduling does not replay a burst after a long pause', async () => {
+  const h = harness(); const ws = await h.join();
+  await h.run('captureMouse()'); ws.sent.length=0;
+  h.document.dispatch('mousemove', {movementX:5,movementY:0}); h.tickFrame();
+  h.advance(2000);
+  h.document.dispatch('mousemove', {movementX:7,movementY:0}); h.tickFrame();
+  for(let i=0;i<50;i++) h.tickFrame();
+  assert.deepEqual(ws.sent.filter(p => p.type==='mouse').map(p => p.dx), [5,7]);
+});
+
+test('arrow controls reach the native menu and release cleanly', async () => {
+  const h = harness(); const ws = await h.join(); h.run('setMenu(true)'); ws.sent.length=0;
+  for(const [code,key] of [['ArrowUp','Up'],['ArrowDown','Down'],['ArrowLeft','Left'],['ArrowRight','Right']]) {
+    h.window.dispatch('keydown', {code,repeat:false});
+    h.window.dispatch('keyup', {code});
+    assert.deepEqual(ws.sent.slice(-2), [{type:'key',key,down:true},{type:'key',key,down:false}]);
+  }
+  h.window.dispatch('blur'); assert.deepEqual(ws.sent.at(-1), {type:'reset'});
+});
+
+test('FPS normalizes delayed timer intervals and distinguishes browser cadence', async () => {
+  const h = harness(); await h.join();
+  for(let i=0;i<90;i++) {h.advance(1000/60); h.tickFrame();}
+  h.run('frames=180');
+  h.intervals.find(i => i.ms===1000).fn();
+  assert.match(h.element('metrics').textContent, /120 FPS/);
+  assert.match(h.element('metrics').title, /60 Hz browser animation/);
+});

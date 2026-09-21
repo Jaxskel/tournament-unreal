@@ -1,5 +1,15 @@
 # Browser stream performance — September 21, 2026
 
+## Gameplay and Mac refresh follow-up
+
+Fixed an input scheduling defect that reproducibly sent only 99 mouse updates during 120 evenly spaced animation callbacks. The sender now preserves its deadline with a 0.5 ms tolerance and resets after idle time without catch-up bursts. Regression tests cover 120/119.88 Hz, alternating early/late callbacks, and 360/1000 Hz rate limits. Added the advertised arrow controls through the browser, gateway allowlist and native receiver; Up/Down navigate the menu and Left/Right adjust settings.
+
+FPS is now normalized by actual elapsed time, including delayed timer callbacks. Hover the FPS metrics for measured browser animation cadence and the limits of the latency measurements. The actual Codex in-app browser on this M4 Pro Mac reported about 121 Hz animation cadence and 119 FPS video after reload. The headless test browsers reported 60 Hz animation cadence while decoding about 119 FPS. Neither measurement is physical panel scanout.
+
+After deployment, a 30-second Mac Chromium sample counted 3,571 canvas draws at 119.0 FPS: p95 17.7 ms, p99 96.4 ms, max 113 ms, with 23 gaps above 100 ms. A separate 20-second Windows Edge gameplay sample counted 2,421 draws at 118.9 FPS: p95 16.7 ms, p99 24 ms, max 51.9 ms, with one gap above 50 ms. Both runs used the public URL, with two independent seats connected during verification. Network pauses on the Mac remain unresolved; these results do not establish zero-lag play.
+
+Visible checks confirmed distinct PlayerOne/PlayerTwo views, active bots and native standings, firing, death and respawn back to 100 health, Settings reached with arrows/Enter, Escape/recapture, fullscreen and disconnect/rejoin. Edge reported no page errors and recovered pointer lock. The native server's logs before the update also recorded completed Deck → Outpost → Deck rotation. Browser tests: 49 passing; event-contract tests: eight passing. The native plugin rebuilt successfully with MSVC v140. The public URL is unchanged.
+
 ## 120 FPS follow-up
 
 The public host now defaults to 120 FPS. With a Mac Chromium seat and Windows Edge 153 seat connected simultaneously, the final warmed tests measured:

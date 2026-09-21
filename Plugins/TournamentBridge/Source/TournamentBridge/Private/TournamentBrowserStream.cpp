@@ -117,7 +117,7 @@ void FTournamentBrowserStream::ReadInput(ATournamentPlayerController* PC, float 
             static const TSet<FString> Allowed = { TEXT("W"), TEXT("A"), TEXT("S"), TEXT("D"), TEXT("SpaceBar"),
                 TEXT("LeftShift"), TEXT("LeftControl"), TEXT("One"), TEXT("Two"), TEXT("Three"), TEXT("Four"),
                 TEXT("Five"), TEXT("Six"), TEXT("Seven"), TEXT("Eight"), TEXT("Nine"), TEXT("Escape"), TEXT("Tab"),
-                TEXT("Enter"), TEXT("LeftMouseButton"), TEXT("RightMouseButton") };
+                TEXT("Up"), TEXT("Down"), TEXT("Left"), TEXT("Right"), TEXT("Enter"), TEXT("LeftMouseButton"), TEXT("RightMouseButton") };
             if (!Allowed.Contains(Key)) continue;
             const FName Name(*Key);
             if (Down && !Held.Contains(Name)) { Held.Add(Name); PC->InputKey(FKey(Name), IE_Pressed, 1, false); }

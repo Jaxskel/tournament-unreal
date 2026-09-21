@@ -3,7 +3,7 @@ export const MAX_BUFFERED = 512 * 1024;
 export const KEYS = new Set([
   'W', 'A', 'S', 'D', 'SpaceBar', 'LeftShift', 'LeftControl',
   'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
-  'Escape', 'Tab', 'Enter', 'LeftMouseButton', 'RightMouseButton',
+  'Escape', 'Tab', 'Enter', 'Up', 'Down', 'Left', 'Right', 'LeftMouseButton', 'RightMouseButton',
 ]);
 const exact = (value, fields) => Object.keys(value).sort().join(',') === fields.sort().join(',');
 export function validateControl(value) {

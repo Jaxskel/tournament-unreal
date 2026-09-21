@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const canvas = $('game');
 const ctx = canvas.getContext('2d', { alpha: false });
 const held = new Set();
-const keys = new Map(Object.entries({ KeyW:'W', KeyA:'A', KeyS:'S', KeyD:'D', Space:'SpaceBar', ShiftLeft:'LeftShift', ControlLeft:'LeftControl', Digit1:'One', Digit2:'Two', Digit3:'Three', Digit4:'Four', Digit5:'Five', Digit6:'Six', Digit7:'Seven', Digit8:'Eight', Digit9:'Nine', Tab:'Tab', Enter:'Enter' }));
+const keys = new Map(Object.entries({ KeyW:'W', KeyA:'A', KeyS:'S', KeyD:'D', Space:'SpaceBar', ShiftLeft:'LeftShift', ControlLeft:'LeftControl', Digit1:'One', Digit2:'Two', Digit3:'Three', Digit4:'Four', Digit5:'Five', Digit6:'Six', Digit7:'Seven', Digit8:'Eight', Digit9:'Nine', Tab:'Tab', Enter:'Enter', ArrowUp:'Up', ArrowDown:'Down', ArrowLeft:'Left', ArrowRight:'Right' }));
 let socket = null;
 let active = false;
 let joining = false;
@@ -22,7 +22,9 @@ let dx = 0;
 let dy = 0;
 let exitingLock = false;
 let lastEscapeAt = -Infinity;
-let lastMouseSentAt = -Infinity;
+let nextMouseAt = 0;
+let animationFrames = 0;
+let metricsAt = performance.now();
 let lastPongAt = 0;
 const pendingPings = new Map();
 const INPUT_TIMEOUT_MS = 3000;
@@ -77,6 +79,7 @@ function setActive(value) {
     $('stream-notice').hidden = true;
     $('connection').textContent = 'READY TO JOIN';
     $('metrics').textContent = '— FPS · — ms RTT';
+    $('metrics').title = '';
   }
   inputHint();
 }
@@ -201,7 +204,9 @@ async function join() {
         lastFrameAt = performance.now();
         menuMode = false;
         lastPongAt = performance.now();
-        lastMouseSentAt = -Infinity;
+        nextMouseAt = 0;
+        animationFrames = 0;
+        metricsAt = performance.now();
         pendingPings.clear();
         setActive(true);
         if (packet.video === 'h264') {
@@ -343,8 +348,12 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) { res
 window.addEventListener('pagehide', () => disconnect());
 function animate() {
   const now = performance.now();
-  if ((dx || dy) && now - lastMouseSentAt >= MOUSE_INTERVAL_MS) {
-    lastMouseSentAt = now;
+  animationFrames++;
+  if ((dx || dy) && now + 0.5 >= nextMouseAt) {
+    // Preserve the 120 Hz phase through sub-millisecond rAF jitter. Reset the
+    // deadline after idle time; never replay missed sends as a catch-up burst.
+    nextMouseAt = now - nextMouseAt > MOUSE_INTERVAL_MS
+      ? now + MOUSE_INTERVAL_MS : nextMouseAt + MOUSE_INTERVAL_MS;
     const clamp = n => Math.max(-300, Math.min(300, n));
     send({ type: 'mouse', dx: clamp(dx), dy: clamp(dy) });
     dx = dy = 0;
@@ -352,10 +361,14 @@ function animate() {
   requestAnimationFrame(animate);
 }
 setInterval(() => {
-  fps = frames;
-  frames = 0;
+  const elapsed = Math.max(1, performance.now() - metricsAt);
+  fps = Math.round(frames * 1000 / elapsed);
+  const browserHz = Math.round(animationFrames * 1000 / elapsed);
+  frames = animationFrames = 0;
+  metricsAt = performance.now();
   if (!active) return;
   const age = videoDecoder?.frameAge;
+  $('metrics').title = `${browserHz} Hz browser animation cadence. FPS counts decoded game frames, not physical screen refresh. RTT is network round-trip time; video age excludes input and screen scanout.`;
   $('metrics').textContent = `${fps} FPS · ${rtt === null ? '—' : rtt} ms RTT${videoDecoder ? ` · H.264${age === null ? '' : ` · ${Math.round(age)} ms video age`}` : ''}`;
   if (performance.now() - lastFrameAt > 3000) {
     $('stream-notice').textContent = 'Reconnecting game video…';
