@@ -204,3 +204,116 @@ Source-checked against `F:\TournamentUT4\browser-port\Engine\Source\`:
 
 UE4.15 `TargetInfo` module rules and direct material-expression APIs are used; no
 modern Python editor subsystem, `FSavePackageArgs`, or `FCoreRedirects` dependency.
+
+## First five combat parents: read-only MaterialReport
+
+The new `-Mode=MaterialReport` is a separate reporting path. It cannot use an Apply
+manifest or COW receipt. Its native allowlist accepts exactly the five parents and
+six variants in `report.materials-first5.json`: UDamage Glass, Skin, Overlay; Link
+BeamMaterial and projectile Core; Skin/Overlay 1P, three beam instances and Core_Inst.
+It adds no repair operation and does not prepare or save content. **The native module now builds and the read-only report has completed for all
+11 licensed targets (exit 0, 0 errors, 3 warnings).** Preflight remains blocked by
+five parent packages marked dirty in memory; no assets were saved. The COW audit
+passes. Local tests cover the report contract, not Unreal shader compilation.
+
+After main coordinates the UniformBuffer build and a safe editor window, transfer
+these local plugin source changes and report tools to the existing isolated tooling
+location. Do not replace source during another build. The following commands were exercised for the native build/report; they do not
+constitute a successful repair preflight:
+
+```powershell
+$port = 'F:\TournamentUT4\browser-port'
+$compat = 'F:\TournamentUT4\integration\ports\html5\compat' # Place the updated tools here first
+$project = "$port\UnrealTournament\UnrealTournament.uproject"
+$editor = "$port\Engine\Binaries\Win64\UE4Editor-Cmd.exe"
+# Coordinate copying only the updated plugin source into the existing project plugin.
+# Do not run prepare_cow.py: this report does not change the existing overlay/receipt.
+$env:TOURNAMENT_UT4_UCRT_VERSION = '10.0.10240.0'
+& "$port\Engine\Build\BatchFiles\Build.bat" UnrealTournamentEditor Win64 Development $project -Module UT4Html5Compat -NoUBTMakefiles -WaitMutex -NoHotReload -2015
+if ($LASTEXITCODE) { throw 'MaterialReport module build failed' }
+$log = 'F:\TournamentUT4\work\material-first5-report-1.log'
+& $editor $project -run=UT4Html5Compat -Mode=MaterialReport "-ReportSpec=$compat\report.materials-first5.json" -NullRHI -unattended -nop4 -stdout "-abslog=$log"
+if ($LASTEXITCODE) { throw 'MaterialReport failed; preserve log, do not continue to repair' }
+py -3 "$compat\material_preflight.py" --report-log $log --out 'F:\TournamentUT4\work\material-first5-review-1.json'
+if ($LASTEXITCODE) { throw 'Material preflight evidence differs or is incomplete; inspect native log' }
+```
+
+Use a fresh process for a second report and a fresh filename. After reviewing the first snapshot, compare the second with
+`--baseline F:\TournamentUT4\work\material-first5-review-1.json`. Any drift in graph,
+outputs/channel masks, constants, parameters, raw overrides, function/package
+hashes, parent chain or referencers fails. Existing output files are never replaced.
+Snapshots always say `apply_ready: false`; there is no automatic baseline approval.
+The parser rejects missing completion, unexpected targets, dirty loaded packages,
+missing override/mask evidence and known-edge/class/blend/parent disagreements.
+Keep the native log even if validation fails; it contains the unexpected facts.
+
+Native evidence includes:
+
+- Every selected direct graph node and nested function graph, node class/owner,
+  named input with ordinal, output index and all five mask fields. Reflected
+  non-transient properties include constants, mip settings, function-call
+  input/output GUID mappings and material flags; these are native text, not edits.
+- Effective native blend/shading/two-sided/mask-clip getters, parent chains,
+  effective scalar/vector/texture values, raw instance scalar/vector/texture/font
+  and base-property overrides, plus separate static override/effective sets.
+  RGBA values remain unclamped, including Skin's reported alpha 50.
+- SHA-1 of the actual resolved selected/parent/function package files. The prior
+  private SHA-256 entries in the spec are provenance only and are **not compared**
+  to SHA-1. Before a future Apply plan, separately reconcile those source snapshots
+  and pin the reviewed native package hashes. Core_Inst has no prior snapshot.
+- Synchronous AssetRegistry scan followed by direct/transitive package referencers,
+  without loading those dependents or expanding a save allowlist. Runtime string
+  lookups, dynamic material instances and gameplay swaps require separate checks.
+  `-NoDependsGathering` and selected packages absent from the on-disk registry are rejected.
+  Graph/dependency budget exhaustion fails; it never reports truncated success.
+
+The review must resolve these exact branch decisions before anyone adds Apply:
+
+| Parent | Candidate boundary | Required preserved evidence |
+|---|---|---|
+| UDamage Glass | Emissive Lerp_7 → existing B/ParticleColor on ES2 | Native A/B pins/masks; translucent/unlit; Opacity Multiply_2; inspect refraction/depth-fade remaining reachability. |
+| UDamage Skin | WPO Add_0 → existing A/Panini on ES2 | Function identity and call input/output GUIDs; bypass only B distortion; additive/unlit; Skin_1P overrides including unclamped Effect Color alpha. |
+| UDamage Overlay | ES2 emissive → existing Color parameter | Verify actual Color node/value, opacity Constant_0 = 0.2, Panini/offset branch and Overlay_1P overrides; simplified appearance requires review. |
+| Link BeamMaterial | WPO Add_0 → existing B projection on ES2; inspect WorldDisplacement too | A displacement versus B/Panini pin proof; preserve pixel samples; Inst_Translucent inherits through Inst2 and must retain its different blend. |
+| Link Core | ES2 WPO zero only | WPO Multiply_8, ParticleColor opacity output mask, shared pixel noise samples untouched; first native Core_Inst lineage/overrides/effective settings still need review. |
+
+The initial spec asserts only edges/classes/lineages already observed and provisional
+native blend expectations. Output indices, channel masks, function input values,
+remaining unsupported paths and all extra dependents need review from the first
+native report before producing exact mutation assertions. No missing evidence is
+filled with invented pin values. The existing opaque `fallback_textured` operation
+must not be used for this batch. No assets were saved and no COW expansion, cook or browser verification was
+performed. Native build and report results are described above.
+
+Pinned source API checks: `MaterialExpression.h:244–246`, `MaterialExpressionIO.h:14–34`,
+`MaterialExpressionMaterialFunctionCall.h:86–92`, `Material.h:1048–1049,1370`,
+`MaterialInterface.h:580–583`, `MaterialInstance.h:180,199–217,381`,
+`StaticParameterSet.h`, `IAssetRegistry.h:133,191`, and `UnrealType.h:311–313`.
+
+Local verification for this addition: 27 compat tests pass (15 report/preflight tests,
+including the actual MRPin C++ body against minimal data-container stubs, plus the
+12 existing COW tests). Native compilation/reporting is separately observed; this
+does not establish a passing shader permutation or visual correctness.
+
+For diagnosis only, `-TraceDirty` adds an observer to MaterialReport. It is off by
+default, records at most the first dirty-event stack for each of the 11 selected
+packages, and records whether the event occurs during loading or description.
+The delegate is removed on return; the observer never clears flags or saves.
+`COMPAT_MATERIAL_DIRTY` lines are separate from the report contract. The
+`package_dirty_before_description` field distinguishes loading from report getters.
+The strict dirty-package preflight rejection remains in force.
+
+Observed on the isolated native run: all five parents' first clean-to-dirty events
+occurred during `LoadObject`, through `FLinkerLoad::CreateExport` →
+`FObjectInitializer::PostConstructInit` → `UMaterialExpression::PostInitProperties`
+→ `UObjectBaseUtility::MarkPackageDirty`. The pinned `MaterialExpressions.cpp:506`
+calls `UpdateMaterialExpressionGuid(false, true)`; lines 915–929 generate a new
+GUID when the current GUID is invalid and permit dirty marking. This construction-time event does not prove a
+persisted GUID is missing, and observing only the first event cannot exclude later
+fixups. All six instances remained clean. The observer rebuild and report exited 0;
+post-run COW audit passed. Preflight still exited 1 without creating an accepted
+baseline. Material facts and package hashes matched the run without the observer.
+
+Disconnected native function inputs may have `OutputIndex = INDEX_NONE (-1)`
+(`MaterialExpressions.cpp:8316`). Only disconnected -1 is accepted; connected
+negative indices and values below -1 are rejected.

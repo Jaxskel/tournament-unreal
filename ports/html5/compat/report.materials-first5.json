@@ -1,0 +1,154 @@
+{
+  "schema": "ut4-material-preflight-first5-v1",
+  "read_only": true,
+  "targets": [
+    {
+      "package": "/Game/RestrictedAssets/Effects/Pickups/UDamage/Materials/M_UDamageGlass",
+      "role": "parent",
+      "expected_class": "Material",
+      "expected_blend": 2,
+      "expected_shading": 0,
+      "expected_parent": null,
+      "assert_edges": {
+        "EmissiveColor": "MaterialExpressionLinearInterpolate_7",
+        "MaterialExpressionLinearInterpolate_7.A": "MaterialExpressionMultiply_3",
+        "MaterialExpressionLinearInterpolate_7.B": "MaterialExpressionParticleColor_0",
+        "Opacity": "MaterialExpressionMultiply_2"
+      },
+      "prior_private_sha256": "8d2455701802a00cdcef83759728f2f8cb83395d21edb441026f37642aca3c9e",
+      "candidate": "ES2 only: use existing EmissiveColor lerp B/ParticleColor branch, removing SceneColor dependency while retaining particle-alpha opacity, depth fade graph and translucent blend. Validate remaining refraction path on ES2."
+    },
+    {
+      "package": "/Game/RestrictedAssets/Effects/Pickups/UDamage/Materials/M_UDamageSkin",
+      "role": "parent",
+      "expected_class": "Material",
+      "expected_blend": 3,
+      "expected_shading": 0,
+      "expected_parent": null,
+      "assert_edges": {
+        "WorldPositionOffset": "MaterialExpressionAdd_0",
+        "MaterialExpressionAdd_0.A": "MaterialExpressionMaterialFunctionCall_1",
+        "MaterialExpressionAdd_0.B": "MaterialExpressionLinearInterpolate_2"
+      },
+      "prior_private_sha256": "b0ee8f079806b05f77afadb01fad8ef25bed3fa4e43a38dc6ff57281dbdc086d",
+      "candidate": "ES2 only: retain WPO Add_0.A (MF_BlendPanini), bypass Add_0.B texture distortion. Preserve pixel opacity/emissive graph, Effect Color/Power/MovementSpeed, additive blend and 1P overrides."
+    },
+    {
+      "package": "/Game/RestrictedAssets/Effects/Pickups/UDamage/Materials/M_UDamageSkin_1P",
+      "role": "variant",
+      "expected_class": "MaterialInstanceConstant",
+      "expected_blend": 3,
+      "expected_shading": 0,
+      "expected_parent": "/Game/RestrictedAssets/Effects/Pickups/UDamage/Materials/M_UDamageSkin.M_UDamageSkin",
+      "assert_edges": {},
+      "prior_private_sha256": "6223a3920edb24cbe4f64d3751b6b5d64328da36e4406837646f62596fb6250c",
+      "review_required": []
+    },
+    {
+      "package": "/Game/RestrictedAssets/Pickups/Powerups/Assets/M_UDamage_Overlay",
+      "role": "parent",
+      "expected_class": "Material",
+      "expected_blend": 2,
+      "expected_shading": 0,
+      "expected_parent": null,
+      "assert_edges": {
+        "Opacity": "MaterialExpressionConstant_0",
+        "EmissiveColor": "MaterialExpressionMultiply_16"
+      },
+      "prior_private_sha256": "9ed6f04f8cd7b11779d8b09dcd98ffe29ca821d96af2ce196d22e91e73daa0ed",
+      "candidate": "ES2 only: replace unsupported Noise/SceneTexture emissive route with existing Color parameter (15,2,20), preserving opacity constant0.2, Panini and Vertex offset. This is an explicit simplified purple glow, not a texture-faithful reconstruction. Preserve _1P inheritance."
+    },
+    {
+      "package": "/Game/RestrictedAssets/Pickups/Powerups/Assets/M_UDamage_Overlay_1P",
+      "role": "variant",
+      "expected_class": "MaterialInstanceConstant",
+      "expected_blend": 2,
+      "expected_shading": 0,
+      "expected_parent": "/Game/RestrictedAssets/Pickups/Powerups/Assets/M_UDamage_Overlay.M_UDamage_Overlay",
+      "assert_edges": {},
+      "prior_private_sha256": "009f24f3f1b26c1f1bbfde644e75a6ee3f87d583e796fa52ef1e44d0c0bb435b",
+      "review_required": []
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/Weapon_Effects/Materials/Link/BeamMaterial",
+      "role": "parent",
+      "expected_class": "Material",
+      "expected_blend": 0,
+      "expected_shading": 0,
+      "expected_parent": null,
+      "assert_edges": {
+        "WorldPositionOffset": "MaterialExpressionAdd_0",
+        "MaterialExpressionAdd_0.A": "MaterialExpressionMultiply_1",
+        "MaterialExpressionAdd_0.B": "MaterialExpressionMultiply_3"
+      },
+      "prior_private_sha256": "c74b85c73df7dbfe6be18f9e920440797adf379d9a0b685c8e5f7d8612b53304",
+      "candidate": "ES2 only: bypass WPO Add_0.A (texture-driven displacement); preserve Add_0.B Panini/weapon-position branch. Also exclude same displacement tree from ES2 WorldDisplacement. Preserve emissive/opacity texture samples _5/_9 and all instance overrides."
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/Weapon_Effects/Materials/Link/BeamMaterial_Inst2",
+      "role": "variant",
+      "expected_class": "MaterialInstanceConstant",
+      "expected_blend": 0,
+      "expected_shading": 0,
+      "expected_parent": "/Game/RestrictedAssets/Weapons/Weapon_Effects/Materials/Link/BeamMaterial.BeamMaterial",
+      "assert_edges": {},
+      "prior_private_sha256": "b799b7fdbc7fe3cae48bb1fce04eae2088d992ceb4cc736244ecd3a93a78f94c",
+      "review_required": []
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/Weapon_Effects/Materials/Link/BeamMaterial_Inst_Translucent",
+      "role": "variant",
+      "expected_class": "MaterialInstanceConstant",
+      "expected_blend": 2,
+      "expected_shading": 0,
+      "expected_parent": "/Game/RestrictedAssets/Weapons/Weapon_Effects/Materials/Link/BeamMaterial_Inst2.BeamMaterial_Inst2",
+      "assert_edges": {},
+      "prior_private_sha256": "10874ef12eadf9011f2e6cd88d741e5ae326d924ce24a8e9bfcbcdd3a24b4573",
+      "review_required": []
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/Weapon_Effects/Materials/Link/BeamMaterial_Slim_Inst",
+      "role": "variant",
+      "expected_class": "MaterialInstanceConstant",
+      "expected_blend": 0,
+      "expected_shading": 0,
+      "expected_parent": "/Game/RestrictedAssets/Weapons/Weapon_Effects/Materials/Link/BeamMaterial.BeamMaterial",
+      "assert_edges": {},
+      "prior_private_sha256": "5a3235e0f61e65bbdbed1fdf8eb1e298465d3aaa594fa0f6f4c4c66dc3459b7b",
+      "review_required": []
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/Weapon_Effects/Materials/Link/M_LinkProjectile_Core",
+      "role": "parent",
+      "expected_class": "Material",
+      "expected_blend": 0,
+      "expected_shading": 0,
+      "expected_parent": null,
+      "assert_edges": {
+        "WorldPositionOffset": "MaterialExpressionMultiply_8",
+        "Opacity": "MaterialExpressionParticleColor_0"
+      },
+      "prior_private_sha256": "818afaef82329034976c90fd5a8c5e5e5b5541ed7741782f89e8b11462d734e4",
+      "candidate": "ES2 only: zero root WPO to exclude four vertex noise samples; leave their shared pixel/emissive path, particle-color opacity output and original blend mode intact."
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/Weapon_Effects/Materials/Link/M_LinkProjectile_Core_Inst",
+      "role": "variant",
+      "expected_class": "MaterialInstanceConstant",
+      "expected_blend": 0,
+      "expected_shading": 0,
+      "expected_parent": null,
+      "assert_edges": {},
+      "prior_private_sha256": null,
+      "review_required": [
+        "Confirm previously unreported parent, overrides, effective blend and shader usage."
+      ]
+    }
+  ],
+  "limitations": [
+    "Not an Apply/COW manifest. No material edits are implemented.",
+    "Existing edge evidence lacks native output indices and masks. Capture and review them before defining repair assertions.",
+    "Registry referencers cover package metadata, not runtime string lookups or gameplay material swaps.",
+    "No shader compilation, cook coverage or browser appearance proof."
+  ]
+}

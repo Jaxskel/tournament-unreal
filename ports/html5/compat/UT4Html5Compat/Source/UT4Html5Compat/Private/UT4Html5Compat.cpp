@@ -13,6 +13,8 @@
 #include "Misc/App.h"
 #include "Misc/SecureHash.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/CommandLine.h"
+#include "HAL/PlatformStackWalk.h"
 #include "UObject/Package.h"
 #include "UObject/LinkerLoad.h"
 #include "UObject/UObjectGlobals.h"
@@ -28,6 +30,8 @@
 #include "Materials/MaterialExpressionMaterialFunctionCall.h"
 #include "Materials/MaterialFunction.h"
 #include "MaterialShared.h"
+#include "AssetRegistryModule.h"
+#include "UObject/UnrealType.h"
 #if PLATFORM_WINDOWS
 #include "Windows/AllowWindowsPlatformTypes.h"
 #include <windows.h>
@@ -327,6 +331,7 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
     FJsonSerializer::Serialize(J.ToSharedRef(), TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Text));
     UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_REPORT %s"), *Text);
 }
+#include "MaterialPreflightReport.h"
 static bool ReportMeshes(const TArray<FString>& Meshes)
 {
     bool OK = true;
@@ -467,6 +472,9 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
     FParse::Value(*Params, TEXT("Manifest="), ManifestPath);
     FParse::Value(*Params, TEXT("Receipt="), ReceiptPath);
     FParse::Value(*Params, TEXT("Meshes="), MeshOverride);
+    // A separate read-only entry point: its spec cannot enter Apply/Verify or COW.
+    if (Mode.Equals(TEXT("MaterialReport"), ESearchCase::IgnoreCase))
+        return MaterialPreflightReport(Params);
     const bool Apply = Mode.Equals(TEXT("Apply"), ESearchCase::IgnoreCase);
     const bool Verify = Mode.Equals(TEXT("Verify"), ESearchCase::IgnoreCase);
     const bool Report = Mode.Equals(TEXT("Report"), ESearchCase::IgnoreCase);
