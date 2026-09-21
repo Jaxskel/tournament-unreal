@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#100e0b">
+  <title>Tournament · Local UT4 experiment</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23100e0b'/%3E%3Cpath d='M7 7h18v5h-6v14h-6V12H7z' fill='%23ffbe57'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./launcher.mjs"></script>
+</head>
+<body>
+  <main>
+    <header><div class="brand"><span class="emblem" aria-hidden="true">T</span>TOURNAMENT</div><span class="tag">LOCAL BROWSER EXPERIMENT</span></header>
+    <section class="intro"><p class="eyebrow">THE ARENA IS CALLING</p><h1>Unreal Arena<span>.</span></h1><p>UT4 beta · UE4.15 CL3228288 · Rendered on this computer</p></section>
+    <section id="shell" aria-label="Local engine viewport">
+      <div id="stage"><div id="viewport"></div></div>
+      <aside id="hud" aria-label="Engine performance"><strong id="fps">— engine FPS</strong><span id="timing">Not initialized · no engine frames observed</span></aside>
+      <section id="panel" aria-labelledby="panel-title">
+        <p class="eyebrow">UNREAL TOURNAMENT / EXPERIMENTAL</p>
+        <h2 id="panel-title">Enter the arena.</h2>
+        <p id="description">Launch the locally compiled engine and Deck test assets.<br>Actual engine gameplay has not yet been validated.</p>
+        <div id="mode-picker">
+          <label for="mode">Launch mode</label>
+          <select id="mode" aria-describedby="mode-help"><option value="practice">Practice · six bots</option><option id="multiplayer-option" value="multiplayer" disabled>Multiplayer · operator configured</option></select>
+          <p id="mode-help" role="status">Checking multiplayer configuration…</p>
+        </div>
+        <div id="loading" hidden><progress id="progress" aria-label="Current asset download"></progress><p id="progress-text"></p></div>
+        <p id="status" role="status" aria-live="polite">Engine not initialized.</p>
+        <p id="error" role="alert" hidden></p>
+        <div class="menu-actions">
+          <button id="launch" class="primary" type="button">Launch experiment <span aria-hidden="true">↗</span></button>
+          <button id="resume" class="primary" type="button" hidden>Return to engine</button>
+          <button id="retry" class="primary" type="button" hidden>Retry from clean runtime</button>
+          <button id="reconnect" type="button" hidden>Reconnect from clean runtime</button>
+          <button id="settings" type="button">Settings</button>
+          <button id="stop" type="button" hidden>Stop runtime</button>
+        </div>
+        <section id="settings-panel" hidden aria-label="Launcher settings">
+          <label for="resolution">Render resolution</label>
+          <select id="resolution"><option value="1080p">1920 × 1080 · Full HD</option><option value="1440p">2560 × 1440 · QHD</option></select>
+          <p id="resolution-help">Saved in this browser. Fixed 16:9; never lowered automatically.</p>
+          <p id="bindings-help">Changes apply on the next launch. Audio and sensitivity controls are unavailable until their native bindings and the game world are ready.</p>
+          <div id="engine-settings" hidden>
+            <label for="volume">Engine volume <output id="volume-value">Not set by launcher</output></label>
+            <input id="volume" type="range" min="0" max="1" step="0.01" value="1" disabled>
+            <label for="sensitivity">Mouse sensitivity <output id="sensitivity-value">Not set by launcher</output></label>
+            <input id="sensitivity" type="range" min="0.005" max="0.5" step="0.005" value="0.05" disabled>
+          </div>
+          <button id="close-settings" type="button">Back to menu</button>
+        </section>
+      </section>
+      <div id="toolbar"><span id="input-status">Mouse released · Esc opens menu</span><div>
+        <button id="capture" type="button" disabled>Capture mouse</button>
+        <button id="release" type="button" disabled>Release mouse</button>
+        <button id="menu" type="button">Menu</button>
+        <button id="fullscreen" type="button">Fullscreen</button>
+      </div></div>
+    </section>
+    <section class="notes"><p><kbd>W A S D</kbd> Move <kbd>SPACE</kbd> Jump <kbd>CLICK</kbd> Fire <kbd>ESC</kbd> Release mouse / menu</p><p id="resolution-status">Selected: 1920 × 1080</p><p id="engine-resolution">Engine resolution: uninitialized</p><p id="graphics-status">WebGL capability preflight: not checked</p><p id="native-frame">Native frame counter: unavailable</p><p>Engine FPS counts completed Emscripten main-loop callbacks. It does not measure GPU time or prove gameplay readiness.</p></section>
+    <footer><span>TOURNAMENT / LOCAL UT4</span><span>Experimental launcher · Desktop keyboard &amp; mouse</span></footer>
+  </main>
+</body>
+</html>

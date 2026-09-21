@@ -124,8 +124,15 @@ FString ATournamentPlayerController::GetTournamentItemLabel(int32 Index) const
     UUTGameUserSettings* Settings = GEngine ? Cast<UUTGameUserSettings>(GEngine->GetGameUserSettings()) : nullptr;
     if (Index < 4)
         return FString::Printf(TEXT("MASTER VOLUME  %d%%   %s"), Settings ? FMath::RoundToInt(100.f * Settings->GetSoundClassVolume(EUTSoundClass::Master)) : 0, Index == 2 ? TEXT("[-]") : TEXT("[+]"));
-    if (Index == 4) return FParse::Param(FCommandLine::Get(), TEXT("TournamentOffscreen"))
-        ? TEXT("FULLSCREEN: USE BROWSER TOOLBAR") : TEXT("TOGGLE WINDOW / FULLSCREEN");
+    if (Index == 4)
+    {
+#if PLATFORM_HTML5
+        return TEXT("FULLSCREEN: USE BROWSER TOOLBAR");
+#else
+        return FParse::Param(FCommandLine::Get(), TEXT("TournamentOffscreen"))
+            ? TEXT("FULLSCREEN: USE BROWSER TOOLBAR") : TEXT("TOGGLE WINDOW / FULLSCREEN");
+#endif
+    }
     return TEXT("BACK");
 }
 
@@ -182,6 +189,9 @@ bool ATournamentPlayerController::CanTournamentReconnect() const
 
 bool ATournamentPlayerController::IsTournamentItemEnabled(int32 Index) const
 {
+#if PLATFORM_HTML5
+    if (MenuPage == 1 && Index == 4) return false;
+#endif
     return Index >= 0 && Index < GetTournamentItemCount()
         && (MenuPage != 3 || Index != 0 || CanTournamentReconnect());
 }
@@ -251,11 +261,17 @@ void ATournamentPlayerController::AdjustSetting(int32 Index, int32 Direction)
     }
     else if (Index == 4)
     {
+#if PLATFORM_HTML5
+        // Browser fullscreen and fixed render resolution belong to the launcher.
+        // Guard the action too: settings arrows can call it without activation.
+        return;
+#else
         // Browser fullscreen belongs to the web player; keep the native stream size fixed.
         if (FParse::Param(FCommandLine::Get(), TEXT("TournamentOffscreen"))) return;
         Settings->SetFullscreenMode(Settings->GetFullscreenMode() == EWindowMode::Windowed ? EWindowMode::WindowedFullscreen : EWindowMode::Windowed);
         Settings->ApplyResolutionSettings(false);
         Settings->ConfirmVideoMode();
         Settings->SaveSettings();
+#endif
     }
 }

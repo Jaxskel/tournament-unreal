@@ -159,12 +159,23 @@ void ATournamentHUD::DrawTournamentDiagnostics(ATournamentPlayerController* PC, 
         GetTextSize(Text, TextW, TextH, Font, 0.95f * Scale);
         if (TextW > W)
         {
-            do
+            const FString Ellipsis(TEXT("..."));
+            GetTextSize(Ellipsis, TextW, TextH, Font, 0.95f * Scale);
+            if (TextW <= W)
             {
-                Text = Text.Left(FMath::Max(0, Text.Len() - 1));
-                GetTextSize(Text + TEXT("..."), TextW, TextH, Font, 0.95f * Scale);
-            } while (Text.Len() > 0 && TextW > W);
-            Text += TEXT("...");
+                // At most eight prefix measurements for the 256-character cap,
+                // rather than remeasuring every successively shorter string.
+                int32 Low = 0, High = Text.Len() - 1;
+                while (Low < High)
+                {
+                    const int32 Mid = Low + (High - Low + 1) / 2;
+                    GetTextSize(Text.Left(Mid) + Ellipsis, TextW, TextH, Font, 0.95f * Scale);
+                    if (TextW <= W) Low = Mid;
+                    else High = Mid - 1;
+                }
+                Text = Text.Left(Low) + Ellipsis;
+            }
+            else Text.Empty(); // Even the suffix must stay inside the panel.
         }
         Label(Text, X, Y + I * 30 * Scale, 0.95f * Scale, TournamentPalette::Text);
     }

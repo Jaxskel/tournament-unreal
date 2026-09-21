@@ -1,0 +1,65 @@
+{
+  "date": "2026-09-21",
+  "engine": "UT4 beta / UE4.15 CL3228288",
+  "liveSiteChanged": false,
+  "localGameReady": false,
+  "checks": {
+    "legacyHTML5CompileAndLink": "passed; beta controls/glue build exit 0, 507.50 seconds, no unresolved symbol warnings",
+    "legacyPacketTestsInChrome": "passed",
+    "newerLinkerProbe": "passed for packet test only; full engine rejected due C library ABI mismatch",
+    "matchingRuntimeWasmConversion": "full module validates; asynchronous Chrome runtime initialization and allocator smoke passed",
+    "wasmRuntimeBytes": 1610612736,
+    "smokeCanvas": [
+      1920,
+      1080
+    ],
+    "mapLoaded": false,
+    "fpsMeasured": false,
+    "multiplayerGameplayVerified": false,
+    "gatewayTests": 42,
+    "existingBrowserRegressionTests": 70,
+    "eventTests": 8,
+    "legacyAssetPreloader": "passed in Chrome with real matching file_packager fixture; not a cooked map",
+    "browserControlExports": "all nine present including SessionEpoch; return not-ready before main; actual allocator and matching preloader passed; in-game behavior unverified",
+    "launcherTests": {
+      "passed": 33,
+      "skipped": 1,
+      "scope": "fixtures and actual-body native logic; headed pointer skipped in this run"
+    },
+    "nativePointerCapture": "headed Chrome launcher fixture passed",
+    "actualWebGLContext": "Chrome WebGL1 initialized: 16 fragment texture units, 32 combined; world not ready",
+    "partialPackageProbe": "UAT staged/packaged partial cook successfully; runtime stopped at missing WorldGrid shader map, expected incomplete assets",
+    "partialPackageBytes": 185151908,
+    "compatPreparationTests": 12,
+    "browserPacingBuild": "passed; HTML5 build exit0 after removing the desktop busy-wait only on browser target",
+    "converterRegressionTests": {
+      "python": 3,
+      "realWasmJavascript": 6
+    },
+    "materialReport": "Editor plugin build and read-only asset reporting passed; actual first-person base mesh included in fresh Verify",
+    "privateMaterialPreparation": "Windows sparse copy preparation passed; 281 files copied, original source audit passed",
+    "materialApply": "passed with native commandlet rendering enabled; 3 repaired Robot materials and 18 textured weapon surfaces saved only to private copies",
+    "materialVerify": "fresh process without redirects passed selected material structures and actual first-person base mesh; original-source/sibling hash audit passed",
+    "loggingPatchTests": {
+      "python": 14,
+      "actualLegacyFormatterCases": 12
+    },
+    "browserGlueTests": {
+      "python": 10,
+      "javascriptBoundsCases": 37
+    },
+    "actualLauncherStartup": "Real converted engine initializes WebGL via blob-hosted launcher; incomplete package stops at Party::RegisterIdentityDelegates ensure(World); visible clean failure verified, world not ready",
+    "patcherPreflightTests": 30,
+    "partyCallbackTests": 11,
+    "runtimeHarness": "CLI and 113 diagnostic checks passed; real partial package correctly fails on missing material/map with metrics uninitialized",
+    "matchReadiness": "Tightened to require Tournament match controller; native build queued after Party/logging build",
+    "browserPlatformConfiguration": "Pinned idempotent installer preserves existing values and overrides UTGameEngine subclass IP game driver; temporary-directory checks passed; not yet staged",
+    "partyAndLoggingBuild": "passed; full HTML5 link exit0 in582.80seconds; newest match-readiness change still building"
+  },
+  "limitations": [
+    "Full Deck shader cook in progress; map readiness, appearance, and performance remain unverified",
+    "WASM Binaryen optimization -O2 produced invalid i64 code in probe; converter does not run those passes",
+    "Targets of 120FPS at1080p and60FPS at1440p are not measured results",
+    "Tournament production identity, rewards, delayed spectators and anti-cheat require private staging contracts"
+  ]
+}

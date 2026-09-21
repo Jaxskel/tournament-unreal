@@ -1,0 +1,167 @@
+{
+  "schema": 1,
+  "meshes": [
+    "/Game/RestrictedAssets/Character/Malcom_New/Meshes/malcolm_3p.malcolm_3p",
+    "/Game/RestrictedAssets/Character/Malcom_New/Meshes/malcolm_1p.malcolm_1p",
+    "/Game/RestrictedAssets/Weapons/Enforcer/Meshes/Enforcer_1p.Enforcer_1p",
+    "/Game/RestrictedAssets/Weapons/Enforcer/Meshes/Enforcer_3p.Enforcer_3p"
+  ],
+  "assets": [
+    {
+      "package": "/Game/RestrictedAssets/Character/Robot/Materials/M_86D_Robot_Head",
+      "operation": "repair_robot"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Character/Robot/Materials/M_86D_Robot_Legs",
+      "operation": "repair_robot"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Character/Robot/Materials/M_86D_Robot_Visor",
+      "operation": "repair_robot"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/Enforcer/Materials/M_Enforcer_Gun",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/Enforcer/Textures/T_Enforcer_Color.T_Enforcer_Color",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_M_Enforcer_Gun",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/Enforcer/Materials/Material_Custom/M_Enforcer_Gun_Pattern_test_Inst",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/Enforcer/Textures/T_Enforcer_Color.T_Enforcer_Color",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_M_Enforcer_Gun_Pattern_test_Inst",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/Enforcer/Materials/Materials_thirdPerson/M_Enforcer_Gun_3rdPerson_Inst",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/Enforcer/Textures/T_Enforcer_Color.T_Enforcer_Color",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_M_Enforcer_Gun_3rdPerson_Inst",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/Flak/Materials/M_Flak_Gun_Inst",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/Flak/Textures/T_FlakCannon_Color.T_FlakCannon_Color",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_M_Flak_Gun_Inst",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/Flak/Materials/Materials_thirdPerson/M_Flak_Gun_3P_Inst",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/Flak/Textures/T_FlakCannon_Color.T_FlakCannon_Color",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_M_Flak_Gun_3P_Inst",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/GrenadeLauncher/Materials/MIC_Grenade_Launcher",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/GrenadeLauncher/Textures/T_Grenade_Launcher_Color.T_Grenade_Launcher_Color",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_MIC_Grenade_Launcher",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/GrenadeLauncher/Materials/Material_ThirdPerson/MIC_Grenade_Launcher_3P",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/GrenadeLauncher/Textures/T_Grenade_Launcher_Color.T_Grenade_Launcher_Color",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_MIC_Grenade_Launcher_3P",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/LightningRifle/Material/MIC_Lighting_Gun_Partone",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/LightningRifle/Textures/T_LightingGun_one_Color.T_LightingGun_one_Color",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_MIC_Lighting_Gun_Partone",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/LightningRifle/Material/MIC_Lighting_Gun_Parttwo_Inst",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/LightningRifle/Textures/TexturesPartTwo/T_LightingGun_two_Color.T_LightingGun_two_Color",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_MIC_Lighting_Gun_Parttwo_Inst",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/LightningRifle/Material/Material_ThirdPerson/MIC_Lighting_Gun_Partone_3P_Inst",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/LightningRifle/Textures/T_LightingGun_one_Color.T_LightingGun_one_Color",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_MIC_Lighting_Gun_Partone_3P_Inst",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/LightningRifle/Material/Material_ThirdPerson/MIC_Lighting_Gun_Parttwo_3P_Inst",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/LightningRifle/Textures/TexturesPartTwo/T_LightingGun_two_Color.T_LightingGun_two_Color",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_MIC_Lighting_Gun_Parttwo_3P_Inst",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/LinkGun/Materials/MIC_LinkGun_Inst",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/LinkGun/Textures/T_Link_Gun_D.T_Link_Gun_D",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_MIC_LinkGun_Inst",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/LinkGun/Materials/Material_ThirdPerson/MIC_LinkGun_3P_Inst",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/LinkGun/Textures/T_Link_Gun_D.T_Link_Gun_D",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_MIC_LinkGun_3P_Inst",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/RocketLauncher/Materials/MIC_Rocket_Launcher_Inst",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/RocketLauncher/Textures/T_Rocket_Launcher_D.T_Rocket_Launcher_D",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_MIC_Rocket_Launcher_Inst",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/RocketLauncher/Materials/Material_ThirdPerson/MIC_Rocket_Launcher_3P_Inst",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/RocketLauncher/Textures/T_Rocket_Launcher_D.T_Rocket_Launcher_D",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_MIC_Rocket_Launcher_3P_Inst",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/RocketLauncher/Materials/Material_ThirdPerson/MIC_Rocket_Launcher_3P_Inst2",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/RocketLauncher/Textures/T_Rocket_Launcher_D.T_Rocket_Launcher_D",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_MIC_Rocket_Launcher_3P_Inst2",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/Sniper/Materials/M_Sniper_Rifle_Inst",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/Sniper/Textures/T_Sniper_D.T_Sniper_D",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_M_Sniper_Rifle_Inst",
+      "shading": "default_lit"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Weapons/Sniper/Materials/Materials_thridperson/M_Sniper_Rifle_3P_Inst",
+      "operation": "fallback_textured",
+      "diffuse_texture": "/Game/RestrictedAssets/Weapons/Sniper/Textures/T_Sniper_D.T_Sniper_D",
+      "source_parameter": "OverlayMap",
+      "fallback_parent": "/Game/HTML5Compat/M_M_Sniper_Rifle_3P_Inst",
+      "shading": "default_lit"
+    }
+  ]
+}

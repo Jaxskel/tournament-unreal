@@ -13,6 +13,6 @@
     "check": "node --check server.js && node --check video.js && node --check public/app.js && node --check public/video-client.js"
   },
   "dependencies": {
-    "ws": "^8.18.3"
+    "ws": "8.21.3"
   }
 }

@@ -31,6 +31,10 @@ Both arena caches have been prepared on the current host. A fresh installation s
 
 Use the **Resolution** selector for **720p, 1080p or 1440p**. Your choice is saved, applies only to your stream, and is never automatically lowered; 720p remains the initial default. Native rendering stays at 100% scale, with motion blur disabled and 24/40 Mbit/s targets for 1080p/1440p. The Mac network path still showed occasional pauses above 100 ms, so these results do not establish zero-lag play. This remains compressed game streaming. See [performance measurements](docs/web-performance.md), [runtime verification](docs/multiplayer-verification.md), and [browser transport details](browser/README.md).
 
+## Local browser port in development
+
+The [experimental HTML5 port](ports/html5/README.md) is working toward running this same UT4 beta on the player's device with game-packet multiplayer. It is separate from the live streaming demo. Engine compilation and transport tests are progressing; local gameplay, visuals and FPS are not yet validated.
+
 ## Windows development setup
 
 This repository contains original integration source and launch scripts, **not Epic's engine, game packages, or a downloadable finished installer**. You need your own licensed local Unreal Tournament source/content installation.

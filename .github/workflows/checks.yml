@@ -1,6 +1,43 @@
 name: Integration source checks
 on: [push, pull_request, workflow_dispatch]
 jobs:
+  html5-packet-framing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: g++ -std=c++11 -O2 -DNDEBUG -Wall -Wextra -Werror -fsanitize=address,undefined ports/html5/packet-buffer.test.cpp -o /tmp/packet-test
+      - run: /tmp/packet-test
+      - run: python -m compileall -q ports/html5
+      - run: python -m unittest discover -s ports/html5/compat -p "test_*.py" -v
+  html5-launcher:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ports/html5/client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - run: node verify-runtime.mjs --self-test-args
+      - run: node verify-runtime.mjs --self-test-diagnostics
+  html5-packet-gateway:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --prefix ports/html5
+      - run: npm test --prefix ports/html5
+      - run: python3 -B ports/html5/test_convert_asm_to_wasm.py
+      - run: python3 -B ports/html5/test_patch_browser_glue.py
+      - run: python3 -B ports/html5/test_patch_browser_logging.py
+      - run: python3 -B ports/html5/test_patch_browser_party.py
+      - run: python3 -B ports/html5/test_patcher_preflight.py
   event-contract:
     runs-on: ubuntu-latest
     steps:

@@ -1,0 +1,13 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1",
+  "FriendlyName": "UT4 HTML5 compatibility commandlet",
+  "Description": "Manifest-scoped asset reports, private-copy repairs and verification for the UT4 UE4.15 port.",
+  "Category": "Editor",
+  "CanContainContent": false,
+  "EnabledByDefault": true,
+  "Modules": [
+    { "Name": "UT4Html5Compat", "Type": "Editor", "LoadingPhase": "Default", "WhitelistPlatforms": ["Win64"] }
+  ]
+}

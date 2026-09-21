@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "meshes": [
+    "/Game/RestrictedAssets/Character/Malcom_New/Meshes/malcolm_3p.malcolm_3p",
+    "/Game/RestrictedAssets/Character/Malcom_New/Meshes/malcolm_1p.malcolm_1p",
+    "/Game/RestrictedAssets/Weapons/Enforcer/Meshes/Enforcer_1p.Enforcer_1p",
+    "/Game/RestrictedAssets/Weapons/Enforcer/Meshes/Enforcer_3p.Enforcer_3p"
+  ],
+  "assets": [
+    {
+      "package": "/Game/RestrictedAssets/Character/Robot/Materials/M_86D_Robot_Head",
+      "operation": "repair_robot"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Character/Robot/Materials/M_86D_Robot_Legs",
+      "operation": "repair_robot"
+    },
+    {
+      "package": "/Game/RestrictedAssets/Character/Robot/Materials/M_86D_Robot_Visor",
+      "operation": "repair_robot"
+    }
+  ]
+}
