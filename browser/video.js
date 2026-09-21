@@ -125,3 +125,18 @@ export class VideoWindow {
     return true;
   }
 }
+
+// One complete native NVENC access unit. The 12-byte envelope is local-only;
+// the browser receives the same bounded H.264 protocol as the legacy encoder.
+export function nativeVideoFrame(packet, expectedFps) {
+  if (packet.length < 17 || packet.length > 4 * 1024 * 1024 - 4 || packet.readUInt32BE(0) !== 0x544e5601
+      || packet.readUInt16BE(10) !== 0) throw new Error('Invalid native video envelope');
+  const width = packet.readUInt16BE(4), height = packet.readUInt16BE(6), fps = packet.readUInt16BE(8);
+  const resolution = `${height}p`;
+  const profile = videoProfile(resolution, fps);
+  if (profile.width !== width || fps !== expectedFps) throw new Error('Mismatched native video profile');
+  const data = packet.subarray(12);
+  if (!(data[0]===0 && data[1]===0 && (data[2]===1 || (data[2]===0 && data[3]===1)))) throw new Error('Expected Annex B video');
+  const {key,codec} = inspectUnit(data);
+  return {resolution,profile,data,key,codec};
+}

@@ -4,6 +4,7 @@ param(
     [ValidateRange(1,60)][int]$Minutes=10,
     [ValidateRange(-1,15)][int]$GraphicsAdapter=-1,
     [switch]$HardwareVideo,
+    [switch]$GpuVideo,
     [ValidateSet(60,120)][int]$StreamFPS=120,
     [ValidateSet('540p','720p','1080p','1440p')][string]$StreamResolution='720p',
     [ValidateRange(1,500)][int]$Frags=30,
@@ -44,7 +45,7 @@ while($true) {
         if(!$ready) { throw 'Server did not bind its game port within two minutes.' }
         foreach($seat in 0,1) {
             $name=if($seat -eq 0){'BrowserOne'}else{'BrowserTwo'}
-            $client=& "$PSScriptRoot\join-game.ps1" -SourceRoot $SourceRoot -Name $name -StreamSeat $seat -HardwareVideo:$HardwareVideo -StreamFPS $StreamFPS -StreamResolution $StreamResolution
+            $client=& "$PSScriptRoot\join-game.ps1" -SourceRoot $SourceRoot -Name $name -StreamSeat $seat -HardwareVideo:$HardwareVideo -GpuVideo:$GpuVideo -StreamFPS $StreamFPS -StreamResolution $StreamResolution
             $owned.Add($client.pid)
         }
         Write-SupervisorLog ("Native processes: "+($owned -join ', '))

@@ -1,4 +1,4 @@
-import { HardwareEncoder, VideoWindow, videoProfile } from './video.js';
+import { HardwareEncoder, VideoWindow, videoProfile, nativeVideoFrame, videoPacket } from './video.js';
 
 import http from 'node:http';
 import net from 'node:net';
@@ -42,7 +42,8 @@ async function emptyJson(req) {
 }
 
 export async function createGateway(options = {}) {
-  const video = !!options.ffmpegPath;
+  const nativeVideo = options.nativeVideo === true;
+  const video = nativeVideo || !!options.ffmpegPath;
   const fps = options.fps ?? 120;
   const resolution = video ? (options.resolution ?? '720p') : '540p';
   if (![60,120].includes(fps)) throw new Error('Stream FPS must be 60 or 120');
@@ -50,7 +51,7 @@ export async function createGateway(options = {}) {
   const {width,height} = profile;
   const profiles = Object.fromEntries(['540p','720p','1080p','1440p'].map(name => [name, videoProfile(name, fps)]));
   const rawSizes = Object.values(profiles).map(p => p.rawBytes);
-  if (video) await access(options.ffmpegPath);
+  if (video && !nativeVideo) await access(options.ffmpegPath);
   const publicOrigin = options.publicOrigin ? normalizeOrigin(options.publicOrigin) : null;
   const extraOrigins = (options.extraOrigins ?? []).map(normalizeOrigin);
   const leaseMs = options.leaseMs ?? 10_000;
@@ -132,7 +133,7 @@ export async function createGateway(options = {}) {
     return {
       service: 'Tournament Unreal live demo', rewards: false, audio: false,
       players: seats.filter(s => s.lease?.ws?.readyState === 1).length,
-      capacity: 2, width, height, bitrateMbps: video ? profile.bitrateMbps : null, targetFps: video ? fps : 24, video: video ? 'h264-nvenc' : 'jpeg',
+      capacity: 2, width, height, bitrateMbps: video ? profile.bitrateMbps : null, targetFps: video ? fps : 24, video: nativeVideo ? 'h264-native-nvenc' : video ? 'h264-nvenc' : 'jpeg',
       seats: seats.map(s => ({ seat: s.id + 1, resolution:s.resolution, requestedResolution:s.requestedResolution, width:s.profile.width, height:s.profile.height, bitrateMbps:video?s.profile.bitrateMbps:null, nativeConnected: !!s.native, frameAgeMs: s.frameAt ? Date.now() - s.frameAt : null, occupied: !!s.lease,
         encodedFps: s.frameTimes.length > 1 && Date.now()-s.frameAt < 1000 ? Math.round((s.frameTimes.length-1)*10000/Math.max(1,s.frameTimes.at(-1)-s.frameTimes[0]))/10 : 0,
         rawFps: s.rawTimes.length > 1 && Date.now()-s.rawTimes.at(-1) < 1000 ? Math.round((s.rawTimes.length-1)*10000/Math.max(1,s.rawTimes.at(-1)-s.rawTimes[0]))/10 : 0,
@@ -261,7 +262,26 @@ export async function createGateway(options = {}) {
     if (seat.lease) { seat.lease.videoWindow.reset(); seat.lease.codec = null; }
     let encoder = null;
     let encoderGeneration = 0;
+    let nativeCodec = null;
     const parser = new FrameParser(frame => {
+      if (nativeVideo) {
+        const picture = nativeVideoFrame(frame, fps);
+        if (picture.resolution !== seat.resolution) {
+          seat.resolution = picture.resolution; seat.profile = picture.profile;
+          seat.frameTimes = []; seat.rawTimes = []; nativeCodec = null;
+          seat.videoFrame = null;
+          if (seat.lease) {seat.lease.codec = null; seat.lease.videoWindow.reset();}
+        }
+        if (picture.codec) nativeCodec = picture.codec;
+        const now = Date.now(); seat.rawTimes.push(now);
+        while (seat.rawTimes.length > 240 || seat.rawTimes[0] < now - 2000) seat.rawTimes.shift();
+        applyResolution(seat);
+        if (nativeCodec) {
+          const metadata = {codec:nativeCodec,key:picture.key,capturedAt:now,seq:0,data:videoPacket(picture.data,0,now,picture.key)};
+          publish(seat,metadata.data,metadata);
+        }
+        return;
+      }
       if (video) {
         const actualResolution = Object.keys(profiles).find(name => profiles[name].rawBytes === frame.length);
         if (!encoder || actualResolution !== seat.resolution) {
@@ -286,7 +306,7 @@ export async function createGateway(options = {}) {
       const now=Date.now(); seat.rawTimes.push(now);
       while(seat.rawTimes.length>240 || seat.rawTimes[0]<now-2000) seat.rawTimes.shift();
       if (encoder) encoder.push(frame); else publish(seat,frame);
-    }, video ? rawSizes : 0);
+    }, nativeVideo ? 'h264' : video ? rawSizes : 0);
     socket.on('error', () => {});
     socket.on('data', chunk => { try { parser.push(chunk); } catch { socket.destroy(); } });
     socket.on('close', () => {
@@ -356,7 +376,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   };
   try {
     const gateway = await createGateway({
-      ffmpegPath: process.env.FFMPEG_PATH, fps: Number(process.env.STREAM_FPS ?? 120), resolution: process.env.STREAM_RESOLUTION,
+      nativeVideo: process.env.NATIVE_GPU_VIDEO === '1', ffmpegPath: process.env.FFMPEG_PATH, fps: Number(process.env.STREAM_FPS ?? 120), resolution: process.env.STREAM_RESOLUTION,
       port: portFromEnv('PORT', 8890), publicOrigin: process.env.PUBLIC_ORIGIN,
       extraOrigins: process.env.EXTRA_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean),
       nativePorts: [portFromEnv('SEAT0_FRAME_PORT', 9001), portFromEnv('SEAT1_FRAME_PORT', 9002)],

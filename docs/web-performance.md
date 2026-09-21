@@ -1,5 +1,30 @@
 # Browser stream performance — September 21, 2026
 
+## Direct GPU encoding: 1080p and 1440p at approximately 120 FPS
+
+![1440p gameplay on the final GPU encoder](../evidence/gpu-1440p.png)
+
+The live host now pairs native `-GpuVideo` with `NATIVE_GPU_VIDEO=1`. The old path read the whole GPU backbuffer into CPU memory, converted this build's 10-bit RGB image to 8-bit pixels, sent raw frames to Node/FFmpeg, then converted/uploaded them for NVENC. Increasing resolution amplified that work. A baseline immediately before this change measured 49.2 FPS at 1080p and 28.7 FPS at 1440p; the older resolution-selection measurements below show the same limitation.
+
+The new original integration registers a private D3D11 GPU texture with NVENC, copies the game backbuffer GPU-to-GPU, and returns only compressed H.264 access units to the gateway. RGB10A2 conversion stays on the GPU. FFmpeg and full raw image transfers are removed from the live path. Rendering, textures, movement, H.264 High/P3 quality, bitrate targets and selected native resolution remain unchanged. Capture is bounded to one in-flight job; packets, network credit and browser decoder queues remain bounded. Errors produce native diagnostics and reconnect attempts, not an automatic resolution downgrade. An opt-in `-TournamentStreamStats` command-line flag reports capture/encode timings without production log flushing every five seconds.
+
+Windows host: RTX 5090, driver 616.56, recovered UE4.15 D3D11 offscreen clients and one authoritative deathmatch server. Two isolated Chrome 153 contexts on the M4 Pro Mac received the public HTTPS stream simultaneously. Each profile was sampled for approximately 32 seconds, with alternating player movement/fire and menu/capture checks; both seats used the listed resolution.
+
+| Native size (both seats) | Seat 1 draw FPS | Seat 2 draw FPS | Seat 1 / 2 p95 gap | Seat 1 / 2 p99 gap |
+| --- | ---: | ---: | --- | --- |
+| 1920×1080 | 119.9 | 119.0 | 16.7 / 16.1 ms | 94.0 / 94.9 ms |
+| 2560×1440 | 119.0 | 119.3 | 15.4 / 16.2 ms | 94.5 / 94.1 ms |
+
+Both 1440p native feeds reported approximately 120 FPS. The initial single-1440p capture/encode sample averaged 3.7–4.9 ms on the render thread. Full decoded dimensions were asserted, and screenshots showed uncropped views with distinct PlayerOne/PlayerTwo standings. Saved 1440p survived disconnect/reload/rejoin; changing the other seat to 1080p did not alter it. No page errors occurred. Test seats were released.
+
+The Mac route still had 9–16 gaps above 100 ms per sample and maximum gaps of 108–199 ms. The average FPS improvement does **not** remove those network pauses or demonstrate physical panel scanout at 120 Hz. Video age now starts at compressed receipt after native encoding, so it excludes more upstream work than the previous raw-receipt measurement. It is not input-to-photon latency. A second run on the final build kept both menus closed, with one player moving, jumping and firing for 30 seconds while both high-resolution streams continued. At 1080p the seats measured **118.1 / 119.7 FPS** (p95 17.7 / 16.9 ms); at 1440p **117.8 / 119.1 FPS** (p95 17.0 / 18.4 ms). Native ingress stayed about 120 FPS. This run had 13–20 gaps above 100 ms per seat/profile, with maximum gaps of 109–177 ms. Screenshots show the full first-person HUD, visible bot characters and the independent player's death/respawn screen. Rejoin, saved resolution and independent resizing passed again with zero page errors.
+
+A separate Windows Edge headless run on the wired game host tested 720p → 1080p → 1440p while the other browser remained at 720p. It measured 120.0 / 119.7 / 59.4 FPS respectively, with maximum gaps 27.3 / 25.2 / 100.7 ms. The 1080p wired sample had no gap above 100 ms. This hosting-session browser uses software decoding; at 1440p its displayed frames lagged the native source, and the final mixed 1440p/1080p health sample also showed host-source rates falling to 106.8/111.1 FPS under the extra local browser load. Thus the Mac result is **not** a promise of 120 FPS on every decoder/device. After the test browsers closed, both native feeds returned to approximately 120 FPS. Settings/arrow navigation, rapid Escape/recapture, independent dimensions, reload persistence, disconnect/rejoin and zero page errors passed on Edge too.
+
+Native compilation completed with MSVC v140, with no encoder header macro warnings. All 63 browser/transport tests, eight event-contract tests, and Windows launcher syntax/INI/consent checks passed. New tests cover native compressed framing, malformed envelope/profile rejection, fragmentation, two-seat isolation, resolution reconfiguration, and bypassing FFmpeg. The permissively licensed NVIDIA API 13.0 header is pinned; no driver or game binaries are redistributed.
+
+The sections below preserve prior measurements for comparison; their old CPU-readback limits no longer describe the live GPU path.
+
 ## Per-player resolution selection (2026-09-21)
 
 The live page now offers 720p, 1080p and 1440p. The chosen resolution persists in browser local storage, is reapplied after reconnect/reload, and is never automatically lowered. Native rendering remains at 100% scale. Each browser changes only its leased native client's viewport and encoder; the authoritative multiplayer server and other player's resolution remain unchanged. Health reports actual and requested resolution separately.
@@ -102,11 +127,11 @@ Toolbar RTT was commonly 17–30 ms. “Video age” estimates gateway raw recei
 
 ## Reproduce and interpret
 
-1. Start the paired native `-HardwareVideo` and gateway `FFMPEG_PATH` modes using [the hosting instructions](browser-hosting.md). Confirm the correct GPU in both native logs.
-2. Warm both maps. Confirm both `/api/health` seats are fresh and report about 60 encoded FPS.
+1. Start the paired native `-GpuVideo` and gateway `NATIVE_GPU_VIDEO=1` modes using [the hosting instructions](browser-hosting.md). Confirm the correct GPU in both native logs.
+2. Warm both maps. Confirm both `/api/health` seats are fresh and report about 120 encoded FPS.
 3. Join from two independent desktop browser profiles. Exercise aiming, movement, fire, respawn, Menu/Resume, Disconnect/Play Again and automatic map travel.
 4. Measure canvas `drawImage` callbacks over a fixed interval after first-frame startup. Report average FPS plus p50/p95/p99/max gaps; average FPS alone hides bursts.
 5. Compare binary packet arrival intervals against each packet's raw-receipt timestamp to separate native and delivery stalls. Check `encoderDropped`, `videoDropped` and `unacknowledgedFrames` in health. Drops during connection startup/keyframe synchronization are expected; increasing counts during steady play require investigation.
 6. Repeat on the actual player's network. A fast desktop wired test does not establish smoothness on a different Wi-Fi connection.
 
-This remains a two-seat native-game streaming demo at 960×540. It is not a downloadable browser/WASM engine. Audio, Tournament accounts, monetary rewards and private anti-cheat ingestion remain unavailable. Firefox and Safari gameplay/performance have not been verified. Reliable WebSocket transport can still pause under packet loss; moving to managed GPU hosting with a media transport such as WebRTC remains a future option if broader WAN testing requires it.
+This remains a two-seat native-game streaming demo with selectable resolution. It is not a downloadable browser/WASM engine. Audio, Tournament accounts, monetary rewards and private anti-cheat ingestion remain unavailable. Firefox and Safari gameplay/performance have not been verified. Reliable WebSocket transport can still pause under packet loss; moving to managed GPU hosting with a media transport such as WebRTC remains a future option if broader WAN testing requires it.

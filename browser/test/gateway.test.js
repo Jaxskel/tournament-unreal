@@ -456,3 +456,25 @@ test('variable raw parser accepts exact profiles and rejects invalid sizes befor
   }
   assert.throws(()=>new FrameParser(()=>{},[14_000_000]),/profile/);assert.throws(()=>new FrameParser(()=>{},[]),/profile/);
 });
+
+test('direct GPU video bypasses raw encoders, preserves seat isolation and changes resolution live',async t=>{
+  const {videoProfile}=await import('../video.js');
+  const packet=(resolution,marker)=>{
+    const {width,height}=videoProfile(resolution),p=Buffer.alloc(25);
+    p.writeUInt32BE(0x544e5601);p.writeUInt16BE(width,4);p.writeUInt16BE(height,6);p.writeUInt16BE(120,8);
+    Buffer.from([0,0,0,1,0x67,0x64,0,0x33,0,0,1,0x65,marker]).copy(p,12);return frame(p);
+ };
+ const f=await fixture(t,{nativeVideo:true,ffmpegPath:'/nonexistent-unused',Encoder:class{constructor(){assert.fail('Raw encoder created');}}});
+ const a=await f.native(0,packet('1080p',11));await f.native(1,packet('1440p',22));
+ const wa=await f.ws((await f.join()).body.token),wb=await f.ws((await f.join()).body.token);
+ await until(()=>wa.packets.some(Buffer.isBuffer)&&wb.packets.some(Buffer.isBuffer));
+ assert.equal(wa.packets.find(p=>p.type==='joined').height,1080);assert.equal(wb.packets.find(p=>p.type==='joined').height,1440);
+ assert.equal(wa.packets.find(Buffer.isBuffer).at(-1),11);assert.equal(wb.packets.find(Buffer.isBuffer).at(-1),22);
+ assert.equal(f.gateway.status().video,'h264-native-nvenc');
+ wa.socket.send(JSON.stringify({type:'resolution',resolution:'1440p'}));
+ a.write(packet('1440p',33));await until(()=>wa.packets.some(p=>p.type==='video-config'&&p.height===1440));
+ assert.equal(f.gateway.status().players,2);assert.equal(wb.packets.filter(Buffer.isBuffer).length,1);
+ const bad=packet('1440p',44);bad[4]=0;a.write(bad);
+ await until(()=>!f.gateway.status().seats[0].nativeConnected);
+ assert.equal(f.gateway.status().seats[1].nativeConnected,true);
+});

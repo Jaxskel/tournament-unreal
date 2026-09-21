@@ -26,9 +26,10 @@ export function validateControl(value) {
 // A bounded streaming parser: four header bytes and at most one allocated frame.
 export class FrameParser {
   constructor(onFrame, rawBytes = 0) {
+    this.nativeVideo = rawBytes === 'h264';
     const allowed = [960*540*4,1280*720*4,1920*1080*4,2560*1440*4];
-    const sizes = Array.isArray(rawBytes) ? rawBytes : rawBytes ? [rawBytes] : [];
-    if (rawBytes !== 0 && (!sizes.length || sizes.some(size => !allowed.includes(size)))) throw new Error('Invalid raw frame profile');
+    const sizes = Array.isArray(rawBytes) ? rawBytes : rawBytes && !this.nativeVideo ? [rawBytes] : [];
+    if (rawBytes !== 0 && !this.nativeVideo && (!sizes.length || sizes.some(size => !allowed.includes(size)))) throw new Error('Invalid raw frame profile');
     this.rawSizes = sizes;
     this.rawBytes = rawBytes;
     this.onFrame = onFrame;

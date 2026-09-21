@@ -26,7 +26,9 @@ Read and accept the Epic agreement for your own installation with the existing e
 
 On the demo PC, DXGI adapter 0 is AMD integrated graphics and adapter 1 is the RTX 5090. UE4.15's automatic heuristic picked the AMD GPU. `-GraphicsAdapter 1` writes `r.GraphicsAdapter=1` to `[Startup]` in `Engine/Config/ConsoleVariables.ini` before launching. Adapter indices are machine-specific: verify `Chosen D3D11 Adapter` and `Adapter Name` in both native client logs. Omit the option (default -1) for automatic selection on another host. No global Windows display preference is changed.
 
-Install a Windows FFmpeg build linked from [FFmpeg's download page](https://ffmpeg.org/download.html), including `h264_nvenc`. The demo uses Gyan essentials 9.0.2, verified against its published SHA-256 before extraction. The executable is host-local and is not redistributed in this repository. Verify `ffmpeg -encoders` lists `h264_nvenc` and run a short encoder smoke test on the hosting account. Set the gateway's `FFMPEG_PATH` and the native supervisor's `-HardwareVideo` together. An incorrect pairing is rejected as invalid frame sizes, not silently interpreted as a different codec.
+The live fast path uses the original integration's D3D11/NVENC adapter. Pair native **`-GpuVideo`** with gateway **`NATIVE_GPU_VIDEO=1`**. It requires an NVIDIA driver exposing NVENC API 13.0; the tested host is RTX 5090 / driver 616.56. Only a permissively licensed API declaration header is bundled; the encoder DLL is loaded from the Windows system directory. The direct path encodes the GPU backbuffer without CPU image readback or FFmpeg. A failed driver/session produces an explicit native log error and retry; it does not silently lower resolution.
+
+For legacy diagnostics, install an FFmpeg build with `h264_nvenc`, set `FFMPEG_PATH`, omit `NATIVE_GPU_VIDEO`, and use native `-HardwareVideo` without `-GpuVideo`. This route retains CPU readback/conversion and is substantially slower at high resolutions. Pair matching native/gateway modes; invalid packet formats are rejected.
 
 ## Run
 
@@ -36,17 +38,17 @@ The components can run separately while debugging:
 # Terminal 1: gateway (configure the exact public origin if publishing).
 cd browser
 $env:PUBLIC_ORIGIN = 'https://YOUR-HOST.trycloudflare.com'
-$env:FFMPEG_PATH = 'F:\TournamentUT4\work\ffmpeg\ffmpeg-9.0.2-essentials_build\bin\ffmpeg.exe'
+$env:NATIVE_GPU_VIDEO = '1'
 npm start
 
 # Terminal 2: supervisor owns a server plus two offscreen clients.
-./scripts/start-web-game.ps1 -GraphicsAdapter 1 -HardwareVideo -StreamFPS 120
+./scripts/start-web-game.ps1 -GraphicsAdapter 1 -GpuVideo -StreamFPS 120
 ```
 
 For a quick public demo, install `cloudflared` from Cloudflare's official release and run the combined supervisor instead:
 
 ```powershell
-./scripts/start-web-demo.ps1 -Cloudflared F:\TournamentUT4\work\cloudflared.exe -GraphicsAdapter 1 -FFmpeg F:\TournamentUT4\work\ffmpeg\ffmpeg-9.0.2-essentials_build\bin\ffmpeg.exe
+./scripts/start-web-demo.ps1 -Cloudflared F:\TournamentUT4\work\cloudflared.exe -GraphicsAdapter 1 -GpuVideo
 ```
 
 It starts a loopback tunnel, reads its generated HTTPS origin, configures the gateway to accept exactly that origin, and starts the native server and clients. The current address is written to `UnrealTournament/Saved/Tournament/Web/current-demo.local.json`. Wait until both seats in `/api/health` have fresh frames before sharing. Initial texture/shader cache preparation can take several minutes; a reachable landing page alone does not prove the game is playable.
@@ -57,14 +59,14 @@ HTTP 8890, frame TCP 9001/9002 and control UDP 9101/9102 bind to loopback only. 
 
 ## Diagnose
 
-- `/api/health`: seat availability, native connection, latest-frame age, rolling encoded FPS, raw FPS, raw/video drops, and outstanding acknowledgements. No frames means the page cannot admit a player.
+- `/api/health`: seat availability, native connection, latest-frame age, rolling encoded FPS, native ingress FPS (`rawFps` is the legacy field name), raw/video drops, and outstanding acknowledgements. No frames means the page cannot admit a player.
 - Native `Saved/Logs/Tournament/client-BrowserOne.log`, `client-BrowserTwo.log`, and `server.log`: asset preparation, join errors, crashes.
 - `Saved/Tournament/Web/gateway-error.log` and tunnel log: browser/transport startup failures.
-- Browser toolbar: decoded frame rate, WebSocket RTT, H.264 mode, and estimated video age. Age starts at raw receipt in the gateway and excludes native capture; neither metric is input-to-photon latency.
+- Browser toolbar: decoded frame rate, WebSocket RTT, H.264 mode, and estimated video age. Age starts at compressed-frame receipt in GPU mode and excludes native capture/encoding; neither metric is input-to-photon latency.
 - Escape/Menu: native Tournament menu. Settings, diagnostics, and reconnect belong to the game; browser fullscreen belongs to the web toolbar.
 - Disconnect/blur releases held controls. Native input also has a three-second watchdog. Each seat has exclusive control; a third browser gets an arena-full response.
 
-The optimized mode targets 120 FPS at 1280×720 and approximately 12 Mbit/s per seat. Rendering uses the RTX, capture completion is asynchronous to the game thread, and NVENC replaces CPU JPEG compression. Raw-frame queues, WebSocket acknowledgements, and WebCodecs decode queues are bounded. Keyframes every ten pictures shorten recovery after a dropped prediction. Omitting both video options preserves the old 24 FPS JPEG diagnostic mode. See [measured performance](web-performance.md); transport tests are separate from live gameplay evidence.
+The optimized mode targets 120 FPS at the chosen native resolution, up to 2560×1440; the initial default remains 1280×720 at approximately 12 Mbit/s per seat. Rendering uses the RTX, capture completion is asynchronous to the game thread, and NVENC replaces CPU JPEG compression. GPU capture, compressed packets, WebSocket acknowledgements, and WebCodecs decode queues are bounded. Keyframes every ten pictures shorten recovery after a dropped prediction. Omitting both video options preserves the old 24 FPS JPEG diagnostic mode. See [measured performance](web-performance.md); transport tests are separate from live gameplay evidence.
 
 ## Keeping the arena ready
 
@@ -82,7 +84,7 @@ When updating a Scheduled Task wrapper, verify that its old Node child actually 
 
 `STREAM_FPS=120` is the gateway default and `-StreamFPS 120` is the native launcher default. The combined launcher passes the selected rate to both. To select the lower-bandwidth profile, set both `STREAM_FPS=60` and `-StreamFPS 60`; never change only one. The gateway advertises FPS to the browser so decode timestamps match the selected cadence.
 
-At 120 FPS the clients render with a 240 FPS ceiling, providing capture scheduling headroom; capture and encoder output remain limited to 120. The launcher disables this game's legacy smooth-frame-rate cap. Mouse forwarding is capped at 120 Hz and the authenticated control budget covers simultaneous video receipts and mouse movement. Encoder conversion uses one CPU filter thread and NV12 input to NVENC; at most three pictures may be in flight through the encoder.
+At 120 FPS the clients render with a 240 FPS ceiling, providing capture scheduling headroom; capture and encoder output remain limited to 120. The launcher disables this game's legacy smooth-frame-rate cap. Mouse forwarding is capped at 120 Hz and the authenticated control budget covers simultaneous video receipts and mouse movement. Direct GPU mode keeps capture/conversion/encoding on the GPU with one capture in flight. The legacy FFmpeg route uses one CPU filter thread and at most three encoder pictures.
 
 A 120 Hz display/browser presentation path is needed to see 120 distinct frames per second. Canvas draw/stream FPS is not a measurement of panel refresh. Higher capture cadence can still reduce frame age on a 60 Hz display. Network pauses cannot be eliminated by an FPS setting.
 
@@ -91,7 +93,7 @@ A 120 Hz display/browser presentation path is needed to see 120 distinct frames 
 
 Players choose **720p, 1080p or 1440p** from the Resolution selector below the game, before joining or while playing. The preference is saved in browser local storage, reapplied after reconnect/reload, and never automatically reduced. Each selection resizes only the owning native client and encoder, preserving the multiplayer server, match and other player. Higher resolution can reduce measured FPS. Escape releases the cursor to reach the selector.
 
-`STREAM_RESOLUTION` and native `-StreamResolution` set the startup/default profile (`720p` by default; `540p`, `720p`, `1080p`, `1440p` supported). The gateway detects each actual native size from the allowlisted raw frame length. Runtime changes need no process restart. The launcher reserves 2560×1440 maximum window bounds at creation, then selects the actual startup size. This is necessary because UE4 otherwise caps the hidden window at its launch dimensions. The native window's Slate geometry and independent GPU viewport resize together; only the old frame connection/encoder is recycled. Legacy JPEG stays at 540p and disables the picker during play. A released seat returns to the host default, while the browser retains its owner's preference.
+`STREAM_RESOLUTION` and native `-StreamResolution` set the startup/default profile (`720p` by default; `540p`, `720p`, `1080p`, `1440p` supported). The gateway validates actual dimensions from the native compressed envelope (or the exact raw length in legacy FFmpeg mode). Runtime changes need no process restart. The launcher reserves 2560×1440 maximum window bounds at creation, then selects the actual startup size. This is necessary because UE4 otherwise caps the hidden window at its launch dimensions. The native window's Slate geometry and independent GPU viewport resize together; only the old frame connection/encoder is recycled. Legacy JPEG stays at 540p and disables the picker during play. A released seat returns to the host default, while the browser retains its owner's preference.
 
 | Profile | Native size | 120 FPS bitrate target | 60 FPS bitrate target |
 | --- | --- | --- | --- |
@@ -100,4 +102,4 @@ Players choose **720p, 1080p or 1440p** from the Resolution selector below the g
 | 1080p | 1920x1080 | 24 Mbit/s | 16 Mbit/s |
 | 1440p | 2560x1440 | 40 Mbit/s | 28 Mbit/s |
 
-These are targets, not measured frame-rate guarantees. On this host, two-seat gameplay measured about 103-109 FPS at 720p; the 1080p test delivered about 50 FPS. Source rendering is 100% scale with motion blur/depth of field disabled, FXAA and 16x anisotropic filtering. H.264 High uses NVENC P3 with zero B-frames and lookahead; the VBV buffer represents about 32 ms of target bitrate. The 720p default preserves more detail than the old 540p profile while avoiding the larger 1080p speed regression. See the latest performance report before changing it.
+These are targets, not measured frame-rate guarantees. The earlier CPU-readback path delivered about 50 FPS at 1080p and 29 FPS at 1440p; direct GPU measurements are recorded in the performance report. Source rendering is 100% scale with motion blur/depth of field disabled, FXAA and 16x anisotropic filtering. H.264 High uses NVENC P3 with zero B-frames and lookahead; the VBV buffer represents about 32 ms of target bitrate. 720p remains the initial default; players can explicitly select and retain 1080p or 1440p. See the latest performance report before changing it.

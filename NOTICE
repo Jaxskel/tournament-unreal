@@ -1,6 +1,7 @@
 Tournament — Unreal development integration
 
-Original integration code, launch scripts, and documentation only.
+Original integration code, launch scripts, documentation, and the separately
+licensed NVIDIA encoder API declaration header.
 Unreal Tournament and Unreal Engine belong to Epic Games, Inc. Their source,
 engine binaries, game assets, and associated rights are not included here.
 Game screenshots document development verification and depict Epic content;
@@ -12,3 +13,9 @@ content, create a separate commercial UT game, or operate platform rewards.
 
 Tournament branding and styling are used for the user's requested integration
 prototype. No live account, wallet, payout, or anti-cheat service is connected.
+
+Third-party declaration header:
+Plugins/TournamentBridge/Source/ThirdParty/NVENC/nvEncodeAPI.h
+Copyright NVIDIA Corporation. Its permissive license is retained in the file;
+provenance and pinned upstream revision are in the adjacent README.md.
+The NVIDIA driver and encoder binaries are not redistributed.

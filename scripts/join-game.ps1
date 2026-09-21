@@ -4,6 +4,7 @@ param(
     [ValidatePattern('^[A-Za-z0-9.-]+:[0-9]{1,5}$')][string]$Server='127.0.0.1:7787',
     [ValidatePattern('^[A-Za-z0-9_-]{1,20}$')][string]$Name='Player',
     [switch]$HardwareVideo,
+    [switch]$GpuVideo,
     [ValidateSet(60,120)][int]$StreamFPS=120,
     [ValidateSet('540p','720p','1080p','1440p')][string]$StreamResolution='720p',
     [switch]$Headless,
@@ -12,6 +13,7 @@ param(
     [switch]$ValidateOnly
 )
 . "$PSScriptRoot\runtime-common.ps1"
+if ($GpuVideo) { $HardwareVideo = $true }
 if ([int]($Server.Split(':')[-1]) -lt 1 -or [int]($Server.Split(':')[-1]) -gt 65535) { throw 'Invalid server port.' }
 $layout=Get-TournamentLayout $SourceRoot
 if ($ValidateOnly) { $layout; return }
@@ -31,5 +33,6 @@ if ($StreamSeat -ge 0) {
     $arguments+=@(("-TournamentFramePort="+(9001+$StreamSeat)),("-TournamentInputPort="+(9101+$StreamSeat)),("-TournamentServer="+$Server),
         '-LogCmds="LogD3D11RHI Log"',('-ResX='+$windowSize[0]),('-ResY='+$windowSize[1]),'-ForceRes','-TournamentOffscreen','-nosound','-unattended',('-TournamentStreamFPS='+$StreamFPS),('-ExecCmds="'+$initialResolution+'t.MaxFPS '+$renderFPS+',r.VSync 0,t.IdleWhenNotForeground 0,r.OneFrameThreadLag 0,r.ScreenPercentage 100,r.MotionBlurQuality 0,r.DepthOfFieldQuality 0,r.DefaultFeature.AntiAliasing 1,r.MaxAnisotropy 16"'))
     if ($HardwareVideo) { $arguments+='-TournamentRawFrames' }
+    if ($GpuVideo) { $arguments+='-TournamentGpuVideo' }
 } else { $arguments+=@('-ResX=1280','-ResY=720') }
 Start-TournamentNative $layout $arguments ('client-'+$Name)

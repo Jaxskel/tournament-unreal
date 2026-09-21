@@ -1,5 +1,6 @@
 #include "TournamentBridgeMutator.h"
 #include "TournamentBrowserStream.h"
+#include "TournamentGpuEncoder.h"
 #include "TournamentPlayerController.h"
 #include "TournamentHUD.h"
 #include "Sockets.h"
@@ -23,12 +24,17 @@ struct FTournamentCapture
     TArray<FColor> Pixels;
     FIntPoint Size;
     FThreadSafeBool Ready;
+    TArray<uint8> Encoded;
+    FString Error;
+    int32 FPS = 120;
+    TSharedPtr<FTournamentGpuEncoder, ESPMode::ThreadSafe> Encoder;
+    double ReadbackMs = 0;
     FTournamentCapture(FIntPoint InSize) : Size(InSize), Ready(false) {}
 };
 
 FTournamentBrowserStream::FTournamentBrowserStream(int32 InFramePort, int32 InInputPort)
     : Frames(nullptr), Input(nullptr), FramePort(InFramePort), InputPort(InInputPort), Sent(0),
-      LastConnect(-10), LastCapture(0), bRawFrames(FParse::Param(FCommandLine::Get(), TEXT("TournamentRawFrames"))), CaptureFPS(120), LastInput(0), LastReconnect(0)
+      LastConnect(-10), LastCapture(0), bRawFrames(FParse::Param(FCommandLine::Get(), TEXT("TournamentRawFrames")) || FParse::Param(FCommandLine::Get(), TEXT("TournamentGpuVideo"))), bGpuFrames(FParse::Param(FCommandLine::Get(), TEXT("TournamentGpuVideo"))), CaptureFPS(120), LastInput(0), LastReconnect(0)
 {
     FParse::Value(FCommandLine::Get(), TEXT("TournamentStreamFPS="), CaptureFPS);
     CaptureFPS = FMath::Clamp(CaptureFPS, 60, 120);
@@ -63,6 +69,7 @@ FTournamentBrowserStream::~FTournamentBrowserStream()
     FlushRenderingCommands();
     Release(LastController.Get());
     CloseFrames();
+    GpuEncoder.Reset();
     if (Input) { Input->Close(); ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Input); }
 }
 
@@ -195,7 +202,7 @@ void FTournamentBrowserStream::PumpFrames()
         if (!Frames || !Frames->Connect(*Address)) { CloseFrames(); return; }
         Frames->SetNonBlocking(true);
         int32 BufferSize = 0;
-        Frames->SetSendBufferSize(16 * 1024 * 1024, BufferSize);
+        Frames->SetSendBufferSize(bGpuFrames ? 1024 * 1024 : 16 * 1024 * 1024, BufferSize);
         UE_LOG(LogTemp, Log, TEXT("Tournament browser: framebuffer gateway connected"));
     }
     if (!Frames) return;
@@ -214,12 +221,33 @@ void FTournamentBrowserStream::PumpFrames()
     }
     if (Capture.IsValid() && Capture->Ready)
     {
-        if (Capture->Pixels.Num() == Capture->Size.X * Capture->Size.Y)
+        if (!Capture->Error.IsEmpty())
         {
-            const uint8* Data = reinterpret_cast<const uint8*>(Capture->Pixels.GetData());
-            int32 Length = Capture->Pixels.Num() * sizeof(FColor);
+            UE_LOG(LogTemp, Warning, TEXT("Tournament GPU capture: %s"), *Capture->Error);
+            CloseFrames(); LastConnect = Now + 4.0; return;
+        }
+        static const bool bProfile = FParse::Param(FCommandLine::Get(), TEXT("TournamentStreamStats"));
+        if (bProfile)
+        {
+            static double ProfileStart = Now, ReadbackTotal = 0, ReadbackMax = 0;
+            static int32 ProfileFrames = 0;
+            ReadbackTotal += Capture->ReadbackMs;
+            ReadbackMax = FMath::Max(ReadbackMax, Capture->ReadbackMs);
+            ++ProfileFrames;
+            if (Now - ProfileStart >= 5.0)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Tournament capture profile %dx%d: %.1f FPS, capture/encode avg %.2f ms max %.2f ms"),
+                    Capture->Size.X, Capture->Size.Y, ProfileFrames / (Now - ProfileStart), ReadbackTotal / ProfileFrames, ReadbackMax);
+                GLog->FlushThreadedLogs(); GLog->Flush();
+                ProfileStart = Now; ProfileFrames = 0; ReadbackTotal = ReadbackMax = 0;
+            }
+        }
+        if (bGpuFrames ? Capture->Encoded.Num() > 0 : Capture->Pixels.Num() == Capture->Size.X * Capture->Size.Y)
+        {
+            const uint8* Data = bGpuFrames ? Capture->Encoded.GetData() : reinterpret_cast<const uint8*>(Capture->Pixels.GetData());
+            int32 Length = bGpuFrames ? Capture->Encoded.Num() : Capture->Pixels.Num() * sizeof(FColor);
             IImageWrapperPtr JPEG;
-            if (!bRawFrames)
+            if (!bRawFrames && !bGpuFrames)
             {
                 IImageWrapperModule& Module = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
                 JPEG = Module.CreateImageWrapper(EImageFormat::JPEG);
@@ -227,7 +255,7 @@ void FTournamentBrowserStream::PumpFrames()
                 const TArray<uint8>& Encoded = JPEG->GetCompressed(65);
                 Data = Encoded.GetData(); Length = Encoded.Num();
             }
-            if (Length < 4 || Length > (bRawFrames ? 2560 * 1440 * 4 : 4 * 1024 * 1024)) { Capture.Reset(); return; }
+            if (Length < 4 || Length > (bRawFrames && !bGpuFrames ? 2560 * 1440 * 4 : 4 * 1024 * 1024)) { Capture.Reset(); return; }
             Pending.SetNumUninitialized(Length + 4);
             Pending[0] = uint8(uint32(Length) >> 24); Pending[1] = uint8(uint32(Length) >> 16);
             Pending[2] = uint8(uint32(Length) >> 8); Pending[3] = uint8(Length);
@@ -254,15 +282,28 @@ void FTournamentBrowserStream::PumpFrames()
     const FViewportRHIRef RHIViewport = Viewport->GetViewportRHI();
     if (!RHIViewport.IsValid()) return;
     Capture = MakeShareable(new FTournamentCapture(Size));
+    if (bGpuFrames)
+    {
+        if (!GpuEncoder.IsValid()) GpuEncoder = MakeShareable(new FTournamentGpuEncoder());
+        Capture->Encoder = GpuEncoder;
+        Capture->FPS = CaptureFPS;
+    }
     typedef TSharedPtr<FTournamentCapture, ESPMode::ThreadSafe> FCapturePtr;
     ENQUEUE_UNIQUE_RENDER_COMMAND_TWOPARAMETER(
         TournamentReadGameBackbuffer,
         FViewportRHIRef, Target, RHIViewport,
         FCapturePtr, Job, Capture,
         {
+            const double ReadStart = FPlatformTime::Seconds();
             FTexture2DRHIRef Texture = RHICmdList.GetViewportBackBuffer(Target);
-            if (Texture.IsValid()) RHICmdList.ReadSurfaceData(Texture,
+            if (Job->Encoder.IsValid())
+            {
+                RHICmdList.ImmediateFlush(EImmediateFlushType::FlushRHIThread);
+                Job->Encoder->Encode(Texture, Job->FPS, Job->Encoded, Job->Error);
+            }
+            else if (Texture.IsValid()) RHICmdList.ReadSurfaceData(Texture,
                 FIntRect(0, 0, Job->Size.X, Job->Size.Y), Job->Pixels, FReadSurfaceDataFlags(RCM_UNorm));
+            Job->ReadbackMs = (FPlatformTime::Seconds() - ReadStart) * 1000.0;
             FPlatformMisc::MemoryBarrier();
             Job->Ready = true;
         });

@@ -81,3 +81,30 @@ test('HD raw frames accept only the selected bounded profile, without widening J
   const header=Buffer.alloc(4);header.writeUInt32BE(1920*1080*4);
   assert.throws(()=>new FrameParser(()=>{}).push(header));
 });
+
+test('direct GPU envelopes preserve resolution and Annex B without accepting arbitrary dimensions',async()=>{
+  const {nativeVideoFrame,videoProfile}=await import('../video.js');
+  for(const resolution of ['540p','720p','1080p','1440p']) {
+    const {width,height}=videoProfile(resolution),p=Buffer.alloc(12+idr.length);
+    p.writeUInt32BE(0x544e5601);p.writeUInt16BE(width,4);p.writeUInt16BE(height,6);p.writeUInt16BE(120,8);idr.copy(p,12);
+    const parsed=nativeVideoFrame(p,120);
+    assert.equal(parsed.resolution,resolution);assert.equal(parsed.profile.width,width);
+    assert.equal(parsed.key,true);assert.equal(parsed.codec,'avc1.42c020');assert.deepEqual(parsed.data,idr);
+    for(const offset of [0,3,4,6,8,10,12]){const invalid=Buffer.from(p);invalid[offset]^=0xff;assert.throws(()=>nativeVideoFrame(invalid,120));}
+    assert.throws(()=>nativeVideoFrame(p,60));
+  }
+  assert.throws(()=>nativeVideoFrame(Buffer.alloc(16),120));
+  assert.throws(()=>nativeVideoFrame(Buffer.alloc(4*1024*1024),120));
+});
+
+test('direct GPU framing remains bounded and handles fragmented compressed packets',()=>{
+  const envelope=Buffer.alloc(12+idr.length);envelope.writeUInt32BE(0x544e5601);idr.copy(envelope,12);
+  const size=Buffer.alloc(4);size.writeUInt32BE(envelope.length);
+  const stream=Buffer.concat([size,envelope,size,envelope]),seen=[];
+  const parser=new FrameParser(p=>seen.push(p),'h264');
+  for(let offset=0;offset<stream.length;offset+=7)parser.push(stream.subarray(offset,offset+7));
+  assert.deepEqual(seen,[envelope,envelope]);
+  size.writeUInt32BE(4*1024*1024+1);
+  assert.throws(()=>new FrameParser(()=>assert.fail(),'h264').push(size));
+  assert.throws(()=>new FrameParser(()=>{},'arbitrary-codec'));
+});

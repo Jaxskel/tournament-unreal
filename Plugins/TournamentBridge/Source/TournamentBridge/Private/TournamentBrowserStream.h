@@ -5,6 +5,7 @@
 class FSocket;
 class ATournamentPlayerController;
 struct FTournamentCapture;
+class FTournamentGpuEncoder;
 
 // Captures this Unreal viewport only. Never captures or controls the desktop.
 class FTournamentBrowserStream : public FTickerObjectBase
@@ -22,6 +23,8 @@ private:
     double LastConnect;
     double LastCapture;
     bool bRawFrames;
+    bool bGpuFrames;
+    TSharedPtr<FTournamentGpuEncoder, ESPMode::ThreadSafe> GpuEncoder;
     int32 CaptureFPS;
     FIntPoint RequestedSize = FIntPoint::ZeroValue;
     TSharedPtr<FTournamentCapture, ESPMode::ThreadSafe> Capture;
