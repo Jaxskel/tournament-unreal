@@ -109,14 +109,35 @@ function activateBrowserAudio() {
     Promise.resolve(result).then(state => report({ state }), rejected);
   } catch (error) { rejected(error); }
 }
+function pointerDenied(error) {
+  if (failed || disposed) return;
+  send('pointer-error', 'Mouse capture denied' + (error?.message ? ': ' + error.name + ' — ' + error.message : '') + '; click the viewport to retry');
+}
+// Legacy JSEvents also requests capture from deferred keyboard handlers and
+// discards the browser promise. Handle rejection at this canvas only, before
+// engine scripts load; unrelated unhandled rejections must still fail normally.
+const browserRequestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock
+  || canvas.webkitRequestPointerLock || canvas.msRequestPointerLock;
+function guardedPointerLock(...args) {
+  try {
+    // Stay synchronous to preserve transient activation and the native receiver.
+    const result = browserRequestPointerLock.apply(this, args);
+    result?.then(undefined, pointerDenied);
+    return result;
+  } catch (error) { pointerDenied(error); }
+}
+if (typeof browserRequestPointerLock === 'function') canvas.requestPointerLock = guardedPointerLock;
 window.captureUT4Pointer = function() {
   if (!initialized || failed) return;
   resume();
   activateBrowserAudio();
   if (!canvas.requestPointerLock) { send('pointer-error', 'Pointer lock is unavailable'); return; }
-  const denied = error => send('pointer-error', 'Mouse capture denied' + (error?.message ? ': ' + error.name + ' — ' + error.message : '') + '; click the viewport to retry');
-  try { canvas.requestPointerLock()?.catch(denied); }
-  catch (error) { denied(error); }
+  try {
+    const request = canvas.requestPointerLock;
+    const result = request.call(canvas);
+    // Retain launcher protection if a support script replaces the method later.
+    if (request !== guardedPointerLock) result?.catch(pointerDenied);
+  } catch (error) { pointerDenied(error); }
 };
 canvas.addEventListener('click', () => { if (!inMenu) window.captureUT4Pointer(); });
 canvas.addEventListener('contextmenu', event => event.preventDefault());
