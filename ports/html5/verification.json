@@ -171,7 +171,7 @@
       "twoClients": "Passed bounded late-join/reconnect probe on lineup build: A and B Ready with bidirectional packets, 40-second simultaneous observation, then A reconnected to Ready without forced GC. Old iframe weak reference cleared. Gameplay inputs, full combat and map travel not tested.",
       "transport": "Explicit packageFiles bypasses eager Blob duplication; declared same-origin ArrayBuffer requests retain progress/error checks and synchronous teardown. Enabled on private operator manifest."
     },
-    "remainingMultiplayerCrash": "Prior Array.h:633 intro-delay bounds assertion did not recur in the new stable-artifact two-client test: both reached Ready, remained connected for a 40-second late-join observation, then client A reconnected while B remained connected. No page/game errors; broader combat coverage pending.",
+    "remainingMultiplayerCrash": "Prior Array.h:633 intro-delay bounds assertion did not recur in the new stable-artifact two-client test: both reached Ready, remained connected for a 40-second late-join observation, then client A reconnected while B remained connected. No native assertion or page error; broader combat coverage pending.",
     "canvasTileLighting": {
       "cause": "Actual crash trace enters FRendererModule::DrawTileMesh from a Canvas HUD tile. The temporary mobile view lacks the default directional-light buffer at slot zero; the bound pixel shader reads its light color and direction.",
       "patch": "Browser-only, feature level below SM4, initialize the typed default buffer at slot zero only if absent. Existing valid buffer and native behavior preserved.",
@@ -207,9 +207,10 @@
       "tests": 17,
       "buildSeconds": 353.56,
       "wasmSha256": "3d98c4da38a3d72929ba06247f927195447024e0c0ec3f686b15f2a39a175e81",
-      "runtime": "Both clients remained Ready for eight five-second samples after B joined, with no game errors. A reconnected successfully; final gateway players zero after owned browser cleanup. Engine and asset fingerprints unchanged throughout.",
+      "runtime": "Both clients remained Ready for eight five-second samples after B joined, with no native assertion or page error. A reconnected successfully; final gateway players zero after owned browser cleanup. Engine and asset fingerprints unchanged throughout.",
       "limits": "Menu remained open; this is a lifecycle/crash regression test, not interactive combat or a representative FPS benchmark. Obsolete Epic analytics requests failed separately."
-    }
+    },
+    "transitionalEntryDiagnostics": "Initial and reconnect logs still report Failed to enter UT-Entry and missing reflection-capture data for its SphereReflectionCapture_1.NewReflectionComponent. Both clients later reach match readiness; connection regression passing does not clear these asset/load errors. They predate the analytics override."
   },
   "limitations": [
     "Private Deck/Outpost package integrity passes. Initial tile-light crash check and bounded two-client late-join/reconnect test pass, but confirmed browser fall-through at a BSP floor blocks gameplay. 65 distinct material fallbacks need scoped review. Combat, travel and performance remain unverified.",
