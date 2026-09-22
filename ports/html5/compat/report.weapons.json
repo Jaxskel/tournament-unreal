@@ -1,0 +1,32 @@
+{
+  "schema": "ut4-weapon-report-v1",
+  "read_only": true,
+  "targets": [
+    "/Game/RestrictedAssets/Weapons/Enforcer/Materials/M_Enforcer_Gun",
+    "/Game/RestrictedAssets/Weapons/Enforcer/Materials/Material_Custom/M_Enforcer_Gun_Pattern_test_Inst",
+    "/Game/RestrictedAssets/Weapons/Enforcer/Materials/Materials_thirdPerson/M_Enforcer_Gun_3rdPerson_Inst",
+    "/Game/RestrictedAssets/Weapons/Flak/Materials/M_Flak_Gun_Inst",
+    "/Game/RestrictedAssets/Weapons/Flak/Materials/Materials_thirdPerson/M_Flak_Gun_3P_Inst",
+    "/Game/RestrictedAssets/Weapons/Global/Material/M_WeaponsBase",
+    "/Game/RestrictedAssets/Weapons/GrenadeLauncher/Materials/MIC_Grenade_Launcher",
+    "/Game/RestrictedAssets/Weapons/GrenadeLauncher/Materials/Material_ThirdPerson/MIC_Grenade_Launcher_3P",
+    "/Game/RestrictedAssets/Weapons/LightningRifle/Material/MIC_Lighting_Gun_Partone",
+    "/Game/RestrictedAssets/Weapons/LightningRifle/Material/MIC_Lighting_Gun_Parttwo_Inst",
+    "/Game/RestrictedAssets/Weapons/LightningRifle/Material/Material_ThirdPerson/MIC_Lighting_Gun_Partone_3P_Inst",
+    "/Game/RestrictedAssets/Weapons/LightningRifle/Material/Material_ThirdPerson/MIC_Lighting_Gun_Parttwo_3P_Inst",
+    "/Game/RestrictedAssets/Weapons/LinkGun/Materials/MIC_LinkGun_Inst",
+    "/Game/RestrictedAssets/Weapons/LinkGun/Materials/Material_ThirdPerson/MIC_LinkGun_3P_Inst",
+    "/Game/RestrictedAssets/Weapons/RocketLauncher/Materials/MIC_Rocket_Launcher_Inst",
+    "/Game/RestrictedAssets/Weapons/RocketLauncher/Materials/Material_ThirdPerson/MIC_Rocket_Launcher_3P_Inst",
+    "/Game/RestrictedAssets/Weapons/RocketLauncher/Materials/Material_ThirdPerson/MIC_Rocket_Launcher_3P_Inst2",
+    "/Game/RestrictedAssets/Weapons/Sniper/Materials/M_Sniper_Rifle_Inst",
+    "/Game/RestrictedAssets/Weapons/Sniper/Materials/Materials_thridperson/M_Sniper_Rifle_3P_Inst"
+  ],
+  "meshes": [
+    "/Game/RestrictedAssets/Character/Malcom_New/Meshes/malcolm_1p",
+    "/Game/RestrictedAssets/Character/Malcom_New/Meshes/malcolm_3p",
+    "/Game/RestrictedAssets/Weapons/Enforcer/Meshes/Enforcer_1p",
+    "/Game/RestrictedAssets/Weapons/Enforcer/Meshes/Enforcer_3p"
+  ],
+  "purpose": "Original package view only. Nineteen weapon materials; Enforcer slots plus bounded all-LOD skinning facts for Enforcer/Malcolm first/third-person meshes. No Apply authorization."
+}

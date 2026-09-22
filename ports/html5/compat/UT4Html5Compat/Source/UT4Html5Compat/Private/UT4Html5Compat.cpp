@@ -19,6 +19,7 @@
 #include "UObject/LinkerLoad.h"
 #include "UObject/UObjectGlobals.h"
 #include "Engine/SkeletalMesh.h"
+#include "RHIDefinitions.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
 #include "Materials/Material.h"
@@ -342,6 +343,8 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
     UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_REPORT %s"), *Text);
 }
 #include "MaterialPreflightReport.h"
+#include "BlobShadowPreflightReport.h"
+#include "WeaponPreflightReport.h"
 #include "PhysicsPreflightReport.h"
 static bool ReportMeshes(const TArray<FString>& Meshes)
 {
@@ -486,6 +489,17 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
     // A separate read-only entry point: its spec cannot enter Apply/Verify or COW.
     if (Mode.Equals(TEXT("MaterialReport"), ESearchCase::IgnoreCase))
         return MaterialPreflightReport(Params);
+    if (Mode.Equals(TEXT("BlobShadowReport"), ESearchCase::IgnoreCase))
+        return BlobShadowPreflightReport(Params);
+    if (Mode.Equals(TEXT("WeaponReport"), ESearchCase::IgnoreCase))
+        return WeaponPreflightReport(Params);
+    if (Mode.Equals(TEXT("FidelityReport"), ESearchCase::IgnoreCase))
+    {
+        // Both fixed scopes report independently; neither can enter Apply.
+        const int32 WeaponResult = WeaponPreflightReport(Params);
+        const int32 BlobResult = BlobShadowPreflightReport(Params);
+        return WeaponResult == 0 && BlobResult == 0 ? 0 : 1;
+    }
     if (Mode.Equals(TEXT("PhysicsReport"), ESearchCase::IgnoreCase))
         return PhysicsPreflightReport(Params);
     const bool Apply = Mode.Equals(TEXT("Apply"), ESearchCase::IgnoreCase);

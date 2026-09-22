@@ -4,7 +4,7 @@
   "liveSiteChanged": false,
   "localGameReady": false,
   "checks": {
-    "legacyHTML5CompileAndLink": "Passed: corrected-optimizer fresh link exit0 in320.28s (327.33s wrapper). JS/BC/mem/symbol quartet forcibly regenerated; exact corrected native executable invocation verified; source and tool hashes pinned; parent environment restored.",
+    "legacyHTML5CompileAndLink": "Passed latest public wrapper: UBT334.91s / wrapper339.556556s, exit0; fresh matching JS/BC/mem/symbol outputs, selected guarded optimizer889927c5... invocation verified, parent environment restored.",
     "legacyPacketTestsInChrome": "passed",
     "newerLinkerProbe": "passed for packet test only; full engine rejected due C library ABI mismatch",
     "matchingRuntimeWasmConversion": "full module validates; asynchronous Chrome runtime initialization and allocator smoke passed",
@@ -20,7 +20,7 @@
     "existingBrowserRegressionTests": 70,
     "eventTests": 8,
     "legacyAssetPreloader": "passed in Chrome with real matching file_packager fixture; not a cooked map",
-    "browserControlExports": "All nine exports present. Actual 1080p probe reached Ready=1 and SessionEpoch=1; resolution, sensitivity, volume and input-release calls returned success. Complete control behavior remains under verification.",
+    "browserControlExports": "Eleven exports present, including optional standalone pause setter/status. Actual practice pause/resume and1080p\u21921440p whilepaused passed; older nine-export compatibility retained.",
     "launcherTests": {
       "passed": 89,
       "skipped": 1,
@@ -192,10 +192,10 @@
       "scope": "Diagnostic tick observation only. Sky-only final scene invalidates a representative gameplay benchmark; not presented FPS or evidence that target performance is achieved."
     },
     "browserFloorCollision": {
-      "status": "blocking",
+      "status": "targeted-fix-verified; historical diagnostic evidence below",
       "browser": "No-keyboard diagnostic at exact native PlayerStart_3 (4600,4670,633.230103) falls through floor into sky; actor collision flag reported true. Other spawn observations retain working floor/water interactions.",
       "native": "Read-only native report enumerates 13 actual PlayerStarts. At PlayerStart_3, simple and complex Pawn lines/capsules hit BSP ModelComponent_65 at Z525. BodySetup_15 has one native triangle mesh, BlockAll/Pawn blocking; no simple collision shapes. All 13 native start anchors hit floors.",
-      "scope": "Native collision evidence does not validate cooked HTML5 collision. No map repair or browser collision fix applied.",
+      "scope": "Earlier miss diagnostics below are historical. Corrected optimizer full-game rays and walking/jump/landing are verified in optimizerSourceFix; no map or physics-library repair used.",
       "package": "Exact cooked floor triangle and original face remap identified; packaged Deck SHA256 6e53b71d1f866b9c44a21a2b11a4511b01296703a482ce598ce78e996386eeda matches cooked snapshot. Full served backing data archive hash verified. The subsequent runtime diagnostic confirms the exact body and collision shape are loaded.",
       "runtime": "Four bounded native reports: exact BodySetup_15 loaded with 495 vertices / 710 triangles; one triangle shape in expected scene with query and simulation flags enabled, identity pose/unit scale. Pawn capsule has collision enabled and blocks WorldStatic. Simple and complex downward lines/capsules still miss the BSP floor.",
       "originalControl": "Matching original full asm.js reproduces the same miss, with all four reports accepted and no custom WASM module, memory or adapter. Original asm body matches after CRLF-to-LF normalization, with compatibility changes outside it; private V8 4096 KiB stack enabled startup. Custom Binaryen conversion/adapter is not necessary to reproduce the defect. V8 may internally compile asm.js.",
@@ -226,14 +226,29 @@
       "freshGeneratedTraversal": "Both variants extracted from fresh game pass8 cooked-tree controls",
       "actualBrowserFloor": "Four direct/targetScene rays and simple/complex lines/capsules block the correct BSP floor; initial3samplesWalking. No page/cleanup error, ownedexit0. Later sample has unpossessed pawn; cause unconfirmed in that probe.",
       "actualBrowserMovement": "Private BotFill=1 fixture uses real W500ms+Space after fixed initial diagnostic anchor: walking changesX4600\u21924218.97, jump mode3 positiveZ405.18, landWalkingZ735.29 zeroV onModel65. Four reports; errors[],ownedexit0. Default6bots unchanged.",
-      "publicBuildWrapper": "New cache/provenance/fresh-link wrapper under independent review; descendant cleanup blocker found, not yet accepted or executed onWindows."
+      "publicBuildWrapper": "Checkpoint6 unattended Windows57tests, prepare, exactowned VCTIP retirement/jobzero/semanticprobes and subsequent full publicwrappergamebuild all pass. LocalPOSIX early-failure fixture intermittent EPERM retains unsafelease; not claimedfixed."
     },
     "fpsMeasurementScope": "Short fixed1080p/1440p Chrome headless six-bot runs around60 median engine callbacks/s; user reports around100 in interactive play with dips. Neither sustained120 nor presented-frame targets accepted. Firefox short1080p around18 median engineFPS.",
-    "multiplayerInputReconnect": "Two independent Chrome contexts joined native server, moved/fired, B remained while A reconnected; authoritative server events recorded incoming human deaths, no pageerrors. Precise PvP aim/kill and full-round multiplayer acceptance pending.",
+    "multiplayerInputReconnect": "Latest canonicalpause build:2independentChromecontexts joined/resumed, moved/fired throughlatejoin; Areconnected whileBstayedconnected, no pageerrors/assetsunchanged/finalgateway0. KnownEntry/reflectionerrors andseparateanalyticsfailure remain. PrecisePvP aim/kill/fullround pending.",
     "automaticRotation": "Shortened one-frag rounds repeatedly loaded Deck\u2192Outpost\u2192Deck with visible Outpost winner screen. Outpost overexposed; default-round acceptance pending.",
     "startupOverlap": "Implemented ordered support/data scripts concurrently with WASM compile, engine gated onboth.6unit+1browser ordering test, broader65pass1skip. Actual6bot Ready14.5115s packagecomplete1.577s; no meaningful speedup vsprior14.5345s claimed.",
-    "practiceMenuPause": "Native scoped standalone ownership/epoch exports + frame-fenced JS resume implemented; independent source/API review and36focusedtests pass. New native build and actualgamepause stillpending.",
-    "guardedOptimizerPreparation": "New publichelper checkpoint6 executed unattended on Windows:57tests pass; configure+nativebuild exit0, exact pinned owned VCTIP helpers retired, jobzero proven; native/simple+tail/fallback semantic regressionpass. Fullnewwrappergamebuild in progress. LocalPOSIX early-failure fixture has intermittent EPERM with retained unsafelease (independent56pass1error); not hidden."
+    "practiceMenuPause": {
+      "sourceAndFixtureChecks": 36,
+      "actualBrowser": "Native status1,1,0,1,1,0; same epoch1, Ready1. Initial paused nativeframes5\u2192186 across3006.6ms. Settings changed canvas1080p\u21921440p whilepaused; resumed twice. No pageerrors, ownedexit0.",
+      "limits": "No separate worldtime/bot-position freeze or actualpointerlock proof. Private matchingengine routes followed by canonical exacthash install.",
+      "wasmSha256": "b83867784434fb734d66e7a3edda7841d8ca9128bb38880b2c11112bf1ed33d1"
+    },
+    "guardedOptimizerPreparation": "Checkpoint6 unattended Windows57tests, prepare, exactowned VCTIP retirement/jobzero/semanticprobes and subsequent full publicwrappergamebuild all pass. LocalPOSIX early-failure fixture intermittent EPERM retains unsafelease; not claimedfixed.",
+    "nativeFidelityReport": {
+      "nativeBuildExit": 0,
+      "reportExit": 0,
+      "original21PackageHashesUnchanged": true,
+      "materials": 19,
+      "skeletalMeshes": 4,
+      "shadowTemplates": 2,
+      "findings": "Malcolm1p palette51/8influences;3p max66/8 across4LODs, extra vertexstreams agree. Enforcer max6/1 noextra. Both miniCylinder templates use failing blobshadow materials. Original weapon parameter bags/hierarchy captured for scoped restoration.",
+      "repairStatus": "Report only; no material repair or GPUcandidate applied."
+    }
   },
   "limitations": [
     "Private Deck/Outpost package integrity and the targeted floor collision, walking/jump/landing checks pass. 65 distinct material fallbacks need scoped review. Sustained combat, travel, cross-browser gameplay and target performance remain unverified.",
