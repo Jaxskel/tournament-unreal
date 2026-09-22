@@ -34,7 +34,7 @@ CAPABILITY_JS = '''try {
         typeof uniforms === 'number' && isFinite(uniforms) && uniforms >= 1024 ? 1 : 0;
 } catch (error) { return 0; }'''
 RUNTIME_OLD = 'return (MaxBonesPerChunk > MaxGPUSkinBones) || (HasExtraBoneInfluences() && FeatureLevel < ERHIFeatureLevel::ES3_1);'
-RUNTIME_NEW = '''// TOURNAMENT_BROWSER_GPU_SKIN_V1
+RUNTIME_PREVIOUS = '''// TOURNAMENT_BROWSER_GPU_SKIN_V1
 #if PLATFORM_HTML5_BROWSER
     if (MaxBonesPerChunk > MaxGPUSkinBones) return true;
     if (HasExtraBoneInfluences() && FeatureLevel < ERHIFeatureLevel::ES3_1)
@@ -47,12 +47,15 @@ CAPABILITY
 #else
     ORIGINAL
 #endif'''.replace('CAPABILITY', '\n'.join('            '+line for line in CAPABILITY_JS.splitlines())).replace('ORIGINAL', RUNTIME_OLD)
+# Legacy EM_ASM_INT forwards __VA_ARGS__ without removing an empty comma.
+RUNTIME_NEW = RUNTIME_PREVIOUS.replace('        });', '        }, 0);')
 CACHE_OLD = 'if (bExtraBoneInfluencesT && GetMaxSupportedFeatureLevel(Platform) < ERHIFeatureLevel::ES3_1)'
 CACHE_NEW = '// '+MARKER+'\n\t'+CACHE_OLD[:-1]+' && Platform != SP_OPENGL_ES2_WEBGL)'
 SPECS = (
  dict(name='runtime', path=Path('Engine/Source/Runtime/Engine/Private/SkeletalMesh.cpp'),
       signature='bool FSkeletalMeshResource::RequiresCPUSkinning(ERHIFeatureLevel::Type FeatureLevel) const',
-      body_sha256='4e542bf79222bba45aa5b618a637d408d5a0ca302b7fdb37c3d008b35fdf850d', old=RUNTIME_OLD, new=RUNTIME_NEW),
+      body_sha256='4e542bf79222bba45aa5b618a637d408d5a0ca302b7fdb37c3d008b35fdf850d',
+      previous_body_sha256='340da2ed7f854ebc3f0d50625f5da0535bb2acc8e0b816219fd1ca4a8306d0fa', old=RUNTIME_OLD, new=RUNTIME_NEW),
  dict(name='cache', path=Path('Engine/Source/Runtime/Engine/Private/GPUSkinVertexFactory.cpp'),
       signature='bool TGPUSkinVertexFactory<bExtraBoneInfluencesT>::ShouldCache(EShaderPlatform Platform, const class FMaterial* Material, const FShaderType* ShaderType)',
       body_sha256='56cf090ad61470e54753dca39255287c662473600af78e27e7c685880bdbb432', old=CACHE_OLD, new=CACHE_NEW),
@@ -81,10 +84,15 @@ def transform(data,spec):
     text=data.decode(encoding); nl='\r\n' if '\r\n' in text else '\n'
     if nl=='\r\n' and '\n' in text.replace('\r\n',''):raise ValueError('Mixed line endings')
     normalized=text.replace('\r\n','\n'); marked=MARKER in normalized
-    clean=normalized
+    clean=normalized; previous=False
     if marked:
-        if clean.count(spec['new'])!=1:raise ValueError('Altered candidate block')
-        clean=clean.replace(spec['new'],spec['old'],1)
+        block=spec['new']
+        if spec['name']=='runtime' and clean.count(RUNTIME_PREVIOUS)==1:
+            a,b=body_span(clean,spec)
+            if digest(clean[a:b].encode())!=spec['previous_body_sha256']:raise ValueError('Altered previous candidate body')
+            block=RUNTIME_PREVIOUS;previous=True
+        if clean.count(block)!=1:raise ValueError('Altered candidate block')
+        clean=clean.replace(block,spec['old'],1)
         if spec['name']=='runtime':
             if clean.count(INCLUDE)!=1:raise ValueError('Missing or altered browser include')
             clean=clean.replace(INCLUDE,'',1)
@@ -97,7 +105,8 @@ def transform(data,spec):
         if clean.count(INCLUDE_ANCHOR)!=1:raise ValueError('Unexpected include boundary')
         out=out.replace(INCLUDE_ANCHOR+'\n',INCLUDE_ANCHOR+'\n'+INCLUDE,1)
         if INCLUDE not in out:raise ValueError('Missing include newline')
-    if marked and normalized!=out:raise ValueError('Misplaced candidate block')
+    expected=out.replace(spec['new'],RUNTIME_PREVIOUS,1) if previous else out
+    if marked and normalized!=expected:raise ValueError('Misplaced candidate block')
     return out.replace('\n',nl).encode(encoding)
 
 def physical(path,missing=False):
@@ -119,8 +128,12 @@ def inspect(root,spec):
     saved=backup.read_bytes() if backup.exists() else None
     if saved is not None:
         if MARKER.encode() in saved or transform(saved,spec)!=updated:raise ValueError('Conflicting original backup')
-        if original!=updated and original!=saved:raise ValueError('Original backup does not match source')
-    elif original==updated:raise ValueError('Patched state requires original backup')
+        # A migrating source must be the exact previous full file derived from
+        # this original backup, including unrelated bytes, BOM and newlines.
+        nl='\r\n' if b'\r\n' in updated else '\n'
+        previous=updated.replace(RUNTIME_NEW.replace('\n',nl).encode(),RUNTIME_PREVIOUS.replace('\n',nl).encode(),1) if spec['name']=='runtime' else updated
+        if original not in (updated,saved,previous):raise ValueError('Original backup does not match source')
+    elif MARKER.encode() in original:raise ValueError('Patched state requires original backup')
     return dict(path=path,source=original,updated=updated,backup=backup,saved=saved)
 
 def recheck(item):

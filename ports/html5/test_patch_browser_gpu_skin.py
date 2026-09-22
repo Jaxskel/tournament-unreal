@@ -1,12 +1,13 @@
 """Original bounded fixtures; optional private actual-body compile/roundtrip."""
 import argparse, contextlib, hashlib, importlib.util, io, json, os
 from pathlib import Path
-import shutil, subprocess, sys, tempfile, unittest
+import re, shutil, subprocess, sys, tempfile, unittest
 from unittest.mock import patch
 SPEC=importlib.util.spec_from_file_location('gpu_skin',Path(__file__).with_name('patch-browser-gpu-skin.py'))
 M=importlib.util.module_from_spec(SPEC);SPEC.loader.exec_module(M)
 PRIVATE=None
 PRODUCTION_SPECS=M.SPECS
+LEGACY_MACRO='#define EM_ASM_INT(code, ...) emscripten_asm_const_int(#code, __VA_ARGS__)'
 RUNTIME_FIXTURE='''{
  const int32 MaxGPUSkinBones = GetFeatureLevelMaxNumberOfBones(FeatureLevel);
  const int32 MaxBonesPerChunk = GetMaxBonesPerSection();
@@ -28,7 +29,9 @@ class Case(unittest.TestCase):
   self.specs=[];self.sources=[]
   for spec in M.SPECS:
    source=fixture(spec);start,end=M.body_span(source.decode(),spec)
-   self.specs.append(dict(spec,body_sha256=M.digest(source[start:end])));self.sources.append(source)
+   item=dict(spec,body_sha256=M.digest(source[start:end]))
+   if spec['name']=='runtime':item['previous_body_sha256']=M.digest(source[start:end].decode().replace(M.RUNTIME_OLD,M.RUNTIME_PREVIOUS).encode())
+   self.specs.append(item);self.sources.append(source)
   self.scope=patch.object(M,'SPECS',tuple(self.specs));self.scope.start();self.addCleanup(self.scope.stop)
  def tree(self,crlf=False):
   (self.root/'.tournament-browser-port').touch();v=self.root/'Engine/Build/Build.version';v.parent.mkdir(parents=True)
@@ -62,6 +65,40 @@ class Case(unittest.TestCase):
   self.tree();p=self.root/self.specs[1]['path'];p.write_bytes(p.read_bytes().replace(b'return false',b'return true'))
   with self.assertRaises(ValueError):self.run_patch(True)
   self.assertEqual((self.root/self.specs[0]['path']).read_bytes(),self.sources[0]);self.assertFalse(list(self.root.rglob('*'+M.BACKUP_SUFFIX)))
+ def previous_tree(self,crlf=False):
+  self.tree(crlf);self.run_patch(True)
+  p=self.root/self.specs[0]['path'];new=p.read_bytes();nl='\r\n' if crlf else '\n'
+  previous=new.replace(M.RUNTIME_NEW.replace('\n',nl).encode(),M.RUNTIME_PREVIOUS.replace('\n',nl).encode(),1)
+  self.assertNotEqual(previous,new);p.write_bytes(previous)
+  return p,previous,new
+ def test_previous_migration_readonly_exact_backup_and_idempotence(self):
+  for crlf in [False,True]:
+   with self.subTest(crlf=crlf):
+    # Separate physical fixture roots for each byte format.
+    self.root=self.root/('crlf' if crlf else 'lf');self.root.mkdir()
+    p,previous,new=self.previous_tree(crlf)
+    backup=Path(str(p)+M.BACKUP_SUFFIX);saved=backup.read_bytes()
+    cache=self.root/self.specs[1]['path'];cache_bytes=cache.read_bytes();stamp=cache.stat().st_mtime_ns
+    self.assertTrue(self.run_patch()['files'][0]['changed']);self.assertEqual(p.read_bytes(),previous)
+    self.run_patch(True);self.assertEqual(p.read_bytes(),new);self.assertEqual(backup.read_bytes(),saved)
+    self.assertEqual(cache.read_bytes(),cache_bytes);self.assertEqual(cache.stat().st_mtime_ns,stamp)
+    self.assertFalse(self.run_patch(True)['files'][0]['changed'])
+ def test_previous_missing_wrong_backup_and_changed_body_refused(self):
+  p,previous,new=self.previous_tree();backup=Path(str(p)+M.BACKUP_SUFFIX);saved=backup.read_bytes()
+  for altered in [None,saved+b'// outside drift\n',saved.replace(b'const int32',b'const  int32',1)]:
+   if altered is None:backup.unlink()
+   else:backup.write_bytes(altered)
+   with self.assertRaises(ValueError):self.run_patch(True)
+   self.assertEqual(p.read_bytes(),previous)
+  backup.write_bytes(saved)
+  for altered in [previous+b'// outside drift\n',previous.replace(b'return false;',b'return true;',1),previous.replace(b'        });',b'        }, 1);',1)]:
+   p.write_bytes(altered)
+   with self.assertRaises(ValueError):self.run_patch(True)
+   self.assertEqual(p.read_bytes(),altered)
+ def test_previous_migration_bad_second_source_prevents_runtime_write(self):
+  p,previous,new=self.previous_tree();cache=self.root/self.specs[1]['path'];cache.write_bytes(cache.read_bytes()+b'// drift\n')
+  with self.assertRaises(ValueError):self.run_patch(True)
+  self.assertEqual(p.read_bytes(),previous)
  def test_bad_second_backup_prevents_all_writes(self):
   self.tree();Path(str(self.root/self.specs[1]['path'])+M.BACKUP_SUFFIX).write_bytes(b'unknown')
   with self.assertRaises(ValueError):self.run_patch(True)
@@ -120,7 +157,7 @@ m.ctx=context();delete m.ctx.isContextLost;assert.equal(check(m),0);
 m.ctx=context();assert.equal(check(m),1);m.ctx=context(8,128);assert.equal(check(m),0);m.ctx=context();assert.equal(check(m),1);
 '''.replace('BODY',M.CAPABILITY_JS)
   result=subprocess.run([node,'-e',code],capture_output=True,text=True);self.assertEqual(result.returncode,0,result.stderr)
- def compile_bodies(self,sources,specs):
+ def compile_bodies(self,sources,specs,macro=LEGACY_MACRO):
   compiler=shutil.which('c++')
   if not compiler:self.skipTest('C++ compiler unavailable')
   bodies=[]
@@ -136,7 +173,8 @@ ERHIFeatureLevel::Type GetMaxSupportedFeatureLevel(EShaderPlatform p){return p<=
 int GetFeatureLevelMaxNumberOfBones(ERHIFeatureLevel::Type f){return f==ERHIFeatureLevel::ES2?75:256;}
 int palette=0,queries=0;bool extra=false,cap=false;
 int GetMaxBonesPerSection(){return palette;}bool HasExtraBoneInfluences(){return extra;}
-#define EM_ASM_INT(...) (++queries,cap?1:0)
+int emscripten_asm_const_int(const char*,int dummy){assert(dummy==0);++queries;return cap?1:0;}
+LEGACY_MACRO
 bool originalRuntime(ERHIFeatureLevel::Type FeatureLevel) RUNTIME_OLD_BODY
 bool changedRuntime(ERHIFeatureLevel::Type FeatureLevel) RUNTIME_NEW_BODY
 struct FMaterial{bool used,special;bool IsUsedWithSkeletalMesh()const{return used;}bool IsSpecialEngineMaterial()const{return special;}};
@@ -157,12 +195,18 @@ int main(){
   assert(changedCache<true>(platform,&mat,nullptr)==expected);
  }
 }
-'''.replace('#include <cassert>','#include <cassert>\n#include <initializer_list>')
+'''.replace('#include <cassert>','#include <cassert>\n#include <initializer_list>').replace('LEGACY_MACRO',macro)
   for key,body in zip(['RUNTIME_OLD_BODY','RUNTIME_NEW_BODY','CACHE_OLD_BODY','CACHE_NEW_BODY'],bodies):code=code.replace(key,body)
   source=self.root/'compiled.cpp';source.write_text(code)
   for browser in [0,1]:
    exe=self.root/('compiled'+str(browser));p=subprocess.run([compiler,'-std=c++11','-Wall','-Wextra','-Werror','-Wno-unused-parameter','-DPLATFORM_HTML5_BROWSER='+str(browser),str(source),'-o',str(exe)],capture_output=True,text=True)
    self.assertEqual(p.returncode,0,p.stderr);subprocess.run([str(exe)],check=True)
+  # The actual old macro must reject the prior empty-argument browser body.
+  old_code=code.replace(M.RUNTIME_NEW,M.RUNTIME_PREVIOUS,1)
+  self.assertNotEqual(old_code,code);source.write_text(old_code)
+  p=subprocess.run([compiler,'-std=c++11','-DPLATFORM_HTML5_BROWSER=1','-fsyntax-only',str(source)],capture_output=True,text=True)
+  self.assertNotEqual(p.returncode,0,'Previous empty-varargs body unexpectedly compiled')
+  self.assertRegex(p.stderr,r'expected (expression|primary-expression)')
  def test_compiled_positive_negative_native_and_browser_fixture_bodies(self):self.compile_bodies(self.sources,self.specs)
  def test_private_actual_bodies_roundtrip_and_compiled_semantics(self):
   if not PRIVATE:self.skipTest('Supply --private-source-dir for pinned engine bodies')
@@ -173,7 +217,14 @@ int main(){
    out=M.transform(source,spec);self.assertEqual(M.transform(out,spec),out)
    clean=out.decode('utf-8-sig').replace('\r\n','\n').replace(spec['new'],spec['old'],1).replace(M.INCLUDE,'',1)
    self.assertEqual(clean,source.decode('utf-8-sig').replace('\r\n','\n'))
-  self.compile_bodies(sources,specs)
+  header=(PRIVATE/'emscripten.h').read_bytes()
+  self.assertEqual(M.digest(header),'b1e58d8f7de04889e6abbed369420898d20154bd76166fe3d8bf4efde4edd2f4')
+  macros=re.findall(r'^#define EM_ASM_INT\(code, \.\.\.\)[^\r\n]*',header.decode(),re.M)
+  self.assertEqual(macros,[LEGACY_MACRO])
+  previous=M.transform(sources[0],specs[0]).decode('utf-8-sig').replace('\r\n','\n').replace(M.RUNTIME_NEW,M.RUNTIME_PREVIOUS,1)
+  a,b=M.body_span(previous,specs[0]);self.assertEqual(M.digest(previous[a:b].encode()),specs[0]['previous_body_sha256'])
+  self.assertEqual(M.transform(previous.encode(),specs[0]).decode(),M.transform(sources[0],specs[0]).decode('utf-8-sig').replace('\r\n','\n'))
+  self.compile_bodies(sources,specs,macros[0])
 
 if __name__=='__main__':
  parser=argparse.ArgumentParser(add_help=False);parser.add_argument('--private-source-dir',type=Path);args,rest=parser.parse_known_args();PRIVATE=args.private_source_dir

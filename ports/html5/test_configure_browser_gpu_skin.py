@@ -35,7 +35,10 @@ class ExperimentGate(unittest.TestCase):
         version.write_text(json.dumps(dict(MajorVersion=4, MinorVersion=15, PatchVersion=0, Changelist=3228288)))
         for item, body in zip(self.module.SPECS, [runtime, cache]):
             body = body.replace('OLD', item['old'])
-            self.specs.append(dict(item, body_sha256=self.module.digest(body.encode())))
+            pinned = dict(item, body_sha256=self.module.digest(body.encode()))
+            if item['name'] == 'runtime':
+                pinned['previous_body_sha256'] = self.module.digest(body.replace(item['old'], self.module.RUNTIME_PREVIOUS).encode())
+            self.specs.append(pinned)
             source = (self.module.INCLUDE_ANCHOR + '\n' if item['name'] == 'runtime' else '') + item['signature'] + '\n' + body + '\n'
             path = self.root / item['path']
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -98,6 +101,38 @@ class ExperimentGate(unittest.TestCase):
         Path(str(self.root / self.specs[0]['path']) + self.module.BACKUP_SUFFIX).unlink()
         with self.assertRaises(ValueError):
             C.configure(self.root, True, True)
+
+    def previous_runtime_only(self):
+        item = self.specs[0]
+        path = self.root / item['path']
+        original = path.read_bytes()
+        Path(str(path) + self.module.BACKUP_SUFFIX).write_bytes(original)
+        corrected = self.module.transform(original, item)
+        path.write_bytes(corrected.replace(self.module.RUNTIME_NEW.encode(), self.module.RUNTIME_PREVIOUS.encode(), 1))
+        return path, original, corrected
+
+    def test_previous_runtime_only_requires_flag_and_exact_backup(self):
+        path, original, corrected = self.previous_runtime_only()
+        before = self.snapshot()
+        for phase in ['native-editor', 'html5']:
+            with self.assertRaisesRegex(ValueError, 'already present'):
+                C.configure(self.root, False, True, phase)
+            self.assertEqual(before, self.snapshot())
+        result = C.configure(self.root, True)
+        self.assertFalse(result['sourceApplied'])
+        self.assertEqual(before, self.snapshot())
+        result = C.configure(self.root, True, True)
+        self.assertTrue(result['sourceApplied'])
+        self.assertEqual(path.read_bytes(), corrected)
+        self.assertEqual(Path(str(path) + self.module.BACKUP_SUFFIX).read_bytes(), original)
+
+    def test_previous_runtime_missing_backup_cannot_be_adopted(self):
+        path, original, corrected = self.previous_runtime_only()
+        Path(str(path) + self.module.BACKUP_SUFFIX).unlink()
+        before = self.snapshot()
+        with self.assertRaisesRegex(ValueError, 'requires original backup'):
+            C.configure(self.root, True, True)
+        self.assertEqual(before, self.snapshot())
 
     def test_unknown_phase_and_missing_marker_refused(self):
         with self.assertRaises(ValueError):

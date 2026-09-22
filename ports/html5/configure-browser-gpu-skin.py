@@ -13,7 +13,7 @@ from pathlib import Path
 
 HERE=Path(__file__).resolve().parent
 PATCHER=HERE/'patch-browser-gpu-skin.py'
-PATCHER_SHA256='297c46bb4a4f5cee308ce5432dbae5323216fb54eb2787177e5627e097b37215'
+PATCHER_SHA256='852f2a676cc670c1dc21e030aaac2a068248bb91345b8f0170425886eef9f5ea'
 
 def load_patcher():
     if hashlib.sha256(PATCHER.read_bytes()).hexdigest()!=PATCHER_SHA256:
@@ -32,7 +32,7 @@ def configure(root,experimental=False,apply=False,phase='html5'):
     if phase not in ('html5','native-editor'):raise ValueError('Unknown build phase')
     module=load_patcher();root=root_path(root,module)
     items=[module.inspect(root,s) for s in module.SPECS]
-    if not experimental and any(i['source']==i['updated'] for i in items):
+    if not experimental and any(module.MARKER.encode() in i['source'] for i in items):
         raise ValueError('GPU skin experiment source already present: use -ExperimentalGpuSkin8 for BOTH builds or a separate unpatched checkout; default does not undo source')
     if apply and experimental:
         with contextlib.redirect_stdout(io.StringIO()):module.patch(root,apply=True)
