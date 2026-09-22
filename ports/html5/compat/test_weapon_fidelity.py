@@ -106,6 +106,7 @@ class Diagnostics(unittest.TestCase):
 
     def test_diagnostic_inverse_recovers_frozen_repair_byte_exact(self):
         text = HEADER.read_text()
+        text = re.sub(r'                // WFR_REBIND_BEGIN\n.*?                // WFR_REBIND_END\n', '', text, flags=re.S)
         text, count = re.subn(r'// WFR_DIAGNOSTICS_BEGIN\n.*?// WFR_DIAGNOSTICS_END\n', '', text, flags=re.S)
         self.assertEqual(count, 1)
         text, count = re.subn(r'    WFRStage\(TEXT\("[^"\n]+"\)\); // WFR_DIAGNOSTIC_STAGE\n', '', text)
@@ -115,11 +116,26 @@ class Diagnostics(unittest.TestCase):
         self.assertEqual(hashlib.sha256(text.encode()).hexdigest(),
                          '7aa3e67cf02200e0357736d4a11f93e38d58eb8758c4078828491b175df5cf9f')
 
+    def test_rebind_only_delta_to_reviewed_diagnostic_header(self):
+        text, count = re.subn(r'                // WFR_REBIND_BEGIN\n.*?                // WFR_REBIND_END\n', '', HEADER.read_text(), flags=re.S)
+        self.assertEqual(count, 1)
+        self.assertEqual(hashlib.sha256(text.encode()).hexdigest(),
+                         '920496faf814a183396c65d6fda5f7f84e3759b955f4434a249d1850a1fb4809')
+        body = HEADER.read_text()
+        block = body.split('// WFR_REBIND_BEGIN')[1].split('// WFR_REBIND_END')[0]
+        self.assertIn('if (Dest)', block)
+        self.assertIn('Call->UpdateFromFunctionResource(false);', block)
+        self.assertIn('R.Same(MRValue(Before), MRValue(MRProperties(Call, true)))', block)
+        self.assertIn('!Input.ExpressionInput', block)
+        self.assertIn('!Output.ExpressionOutput', block)
+        self.assertLess(body.index('Call->UpdateFromFunctionResource(false)'), body.index('Call->SetMaterialFunction('))
+        self.assertLess(body.index('if (!Verify)\n    {\n        for (const auto& KV : R.Clones)'), body.index('// WFR_REBIND_BEGIN'))
+
     def test_every_main_failure_has_bounded_diagnostic_context(self):
         text = HEADER.read_text()
         body = text[text.index('static int32 WeaponFidelityRepair('):]
         self.assertNotIn('return 1;', body)
-        self.assertEqual(body.count('return WFRStop('), 28)
+        self.assertEqual(body.count('return WFRStop('), 31)
         for gate in ('original-already-loaded', 'clone-loaded-or-existing', 'baseline-duplicate',
                      'recipe-hash', 'baseline-hash', 'original-master-snapshot', 'save-policy', 'save-package'):
             self.assertIn('TEXT("' + gate + '")', body)
@@ -272,6 +288,110 @@ class PinnedEvidence(unittest.TestCase):
         for signature in ('void UMaterialInterface::PostDuplicate(', 'void UMaterialInterface::PostEditChangeProperty('):
             self.assertIn('SetLightingGuid();', method(text, signature))
         self.assertIn('Skip.Add(TEXT("LightingGuid"))', HEADER.read_text())
+
+
+    def test_actual_guid_rebind_then_name_remap_preserves_connections(self):
+        if PRIVATE_SOURCE is None:
+            self.skipTest('pass --private-source-dir for pinned rebind/remap bodies')
+        raw = (PRIVATE_SOURCE / 'MaterialExpressions.cpp').read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), 'aabf83778c557f3e68ff9a8ee003443b42ae12262fb2e87b406244e91f763d27')
+        header = (PRIVATE_SOURCE / 'MaterialExpressionMaterialFunctionCall.h').read_text(encoding='utf-8-sig')
+        self.assertIn('ENGINE_API void UpdateFromFunctionResource(bool bRecreateAndLinkNode = true);', header)
+        text = raw.decode('utf-8-sig')
+        signatures = (
+            'static const FFunctionExpressionInput* FindInputById(',
+            'static const FFunctionExpressionInput* FindInputByName(',
+            'static int32 FindOutputIndexById(', 'static int32 FindOutputIndexByName(',
+            'static void FixupReferencingInputs(',
+            'void UMaterialExpressionMaterialFunctionCall::FixupReferencingExpressions(',
+            'void UMaterialExpressionMaterialFunctionCall::UpdateFromFunctionResource(',
+            'bool UMaterialExpressionMaterialFunctionCall::SetMaterialFunction(')
+        actual = '\n'.join(method(text, signature) for signature in signatures)
+        stub = r'''
+#include <cassert>
+#include <vector>
+#include <string>
+#include <cstdio>
+using int32=int; using FGuid=int; using FString=std::string;
+#define WITH_EDITOR 1
+#define check(x) assert(x)
+#define NSLOCTEXT(...) 0
+constexpr int INDEX_NONE=-1,MP_MAX=2;
+using EMaterialProperty=int;
+namespace EAppMsgType {enum Type {Ok};}
+struct FMessageDialog {static void Open(EAppMsgType::Type,int){assert(false);}};
+template<class T> struct TArray:std::vector<T> {using std::vector<T>::vector;
+ int Num()const{return this->size();} void Empty(int=0){this->clear();}
+ void Add(const T&x){this->push_back(x);} bool IsValidIndex(int i)const{return i>=0&&i<Num();}};
+struct UMaterialExpression;
+struct FExpressionInput {UMaterialExpression* Expression=nullptr;int OutputIndex=-1,Mask=0,MaskR=0,MaskG=0,MaskB=0,MaskA=0;FString InputName;};
+struct FExpressionOutput {FString OutputName;};
+struct UMaterialExpressionFunctionInput {FString InputName;};
+struct UMaterialExpressionFunctionOutput {FString OutputName;};
+struct FFunctionExpressionInput {UMaterialExpressionFunctionInput* ExpressionInput=nullptr;FGuid ExpressionInputId=0;FExpressionInput Input;};
+struct FFunctionExpressionOutput {UMaterialExpressionFunctionOutput* ExpressionOutput=nullptr;FGuid ExpressionOutputId=0;FExpressionOutput Output;};
+struct UMaterialExpression {virtual TArray<FExpressionInput*> GetInputs(){return {};}};
+struct UMaterialGraphNode {void RecreateAndLinkNode(){assert(false);}};
+template<class T>T* CastChecked(void*p){return static_cast<T*>(p);}
+struct UMaterial {TArray<UMaterialExpression*> Expressions;FExpressionInput roots[MP_MAX];FExpressionInput* GetExpressionInputForProperty(int i){return &roots[i];}};
+struct UMaterialFunction {TArray<UMaterialExpression*> FunctionExpressions;TArray<FFunctionExpressionInput> inputs;TArray<FFunctionExpressionOutput> outputs;
+ bool IsDependent(UMaterialFunction*){return false;} void UpdateFromFunctionResource(){}
+ void GetInputsAndOutputs(TArray<FFunctionExpressionInput>&i,TArray<FFunctionExpressionOutput>&o){i=inputs;o=outputs;}};
+struct UMaterialExpressionMaterialFunctionCall:UMaterialExpression {
+ TArray<FFunctionExpressionInput> FunctionInputs;TArray<FFunctionExpressionOutput> FunctionOutputs;TArray<FExpressionOutput> Outputs;
+ UMaterialFunction* MaterialFunction=nullptr;UMaterialFunction* Function=nullptr;UMaterial* Material=nullptr;void* GraphNode=nullptr;
+ TArray<FExpressionInput*> GetInputs()override{TArray<FExpressionInput*> result;for(auto&i:FunctionInputs)result.Add(&i.Input);return result;}
+ void UpdateFromFunctionResource(bool=true);bool SetMaterialFunction(UMaterialFunction*,UMaterialFunction*,UMaterialFunction*);
+ void FixupReferencingExpressions(const TArray<FFunctionExpressionOutput>&,const TArray<FFunctionExpressionOutput>&,TArray<UMaterialExpression*>&,TArray<FExpressionInput*>&,bool);
+};
+struct Consumer:UMaterialExpression {FExpressionInput input;TArray<FExpressionInput*> GetInputs()override{return {&input};}};
+bool samePin(const FExpressionInput&a,const FExpressionInput&b){return a.Expression==b.Expression&&a.OutputIndex==b.OutputIndex&&a.Mask==b.Mask&&a.MaskR==b.MaskR&&a.MaskG==b.MaskG&&a.MaskB==b.MaskB&&a.MaskA==b.MaskA&&a.InputName==b.InputName;}
+'''
+        harness = r'''
+int main(){for(bool materialOwner:{false,true}){
+ UMaterialExpression upstream;UMaterialExpressionFunctionInput oldInput{"In"},newInput{"In"};
+ UMaterialExpressionFunctionOutput old0{"Result"},old1{"WPO Only"},new0{"Result"},new1{"WPO Only"};
+ UMaterialFunction original,clone,owner;UMaterial material;Consumer consumer;
+ original.inputs={{&oldInput,10,{}}};original.inputs[0].Input.InputName="In";
+ clone.inputs={{&newInput,10,{}}};clone.inputs[0].Input.InputName="In";
+ original.outputs={{&old0,20,{"Result"}},{&old1,21,{"WPO Only"}}};
+ clone.outputs={{&new0,20,{"Result"}},{&new1,21,{"WPO Only"}}};
+ UMaterialExpressionMaterialFunctionCall call;call.MaterialFunction=&original;
+ call.FunctionInputs=original.inputs;call.FunctionOutputs=original.outputs;
+ call.FunctionInputs[0].ExpressionInput=nullptr;
+ for(auto&o:call.FunctionOutputs)o.ExpressionOutput=nullptr;
+ auto&pin=call.FunctionInputs[0].Input;pin.Expression=&upstream;pin.OutputIndex=3;pin.Mask=1;pin.MaskR=1;pin.MaskB=1;pin.MaskA=1;
+ FExpressionInput before=pin;consumer.input.Expression=&call;consumer.input.OutputIndex=1;consumer.input.Mask=1;consumer.input.MaskG=1;
+ FExpressionInput consumerBefore=consumer.input;
+ if(materialOwner){call.Material=&material;material.Expressions={&call,&consumer};material.roots[0]=consumer.input;}
+ else {call.Function=&owner;owner.FunctionExpressions={&call,&consumer};}
+ call.UpdateFromFunctionResource(false);
+ assert(call.MaterialFunction==&original&&call.FunctionInputs[0].ExpressionInput==&oldInput);
+ assert(call.FunctionOutputs[0].ExpressionOutput==&old0&&call.FunctionOutputs[1].ExpressionOutput==&old1);
+ assert(call.FunctionInputs[0].ExpressionInputId==10&&call.FunctionOutputs[1].ExpressionOutputId==21);
+ assert(samePin(before,call.FunctionInputs[0].Input)&&samePin(consumerBefore,consumer.input));
+ assert(call.SetMaterialFunction(materialOwner?nullptr:&owner,&original,&clone));
+ assert(call.MaterialFunction==&clone&&call.FunctionInputs[0].ExpressionInput==&newInput);
+ assert(call.FunctionOutputs[1].ExpressionOutput==&new1);
+ assert(samePin(before,call.FunctionInputs[0].Input)&&samePin(consumerBefore,consumer.input));
+ if(materialOwner)assert(samePin(consumerBefore,material.roots[0]));
+ // Missing GUIDs really can break connections: the repair must retain its strict snapshot/graph gates.
+ call.FunctionOutputs[1].ExpressionOutputId=999;
+ call.UpdateFromFunctionResource(false);
+ assert(consumer.input.Expression==nullptr&&consumer.input.OutputIndex==INDEX_NONE);
+ }
+ puts("actual GUID rebind/name remap preserves pins; missing GUID rejected by structural boundary");}
+'''
+        compiler = shutil.which('clang++') or shutil.which('g++')
+        self.assertIsNotNone(compiler)
+        with tempfile.TemporaryDirectory() as tmp:
+            source, exe = Path(tmp) / 'rebind.cpp', Path(tmp) / 'rebind'
+            source.write_text(stub + actual + harness)
+            result = subprocess.run([compiler, '-std=c++14', str(source), '-o', str(exe)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            result = subprocess.run([str(exe)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('actual GUID rebind', result.stdout)
 
     def test_actual_set_and_feature_compile_demand(self):
         if PRIVATE_SOURCE is None:

@@ -6,6 +6,7 @@ stubs, and the actual input-mask predicate. This is not HLSLcc/GLSL/UE compilati
 Private native evidence is optional; pass --private-baseline for all checks.
 """
 import argparse
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -35,6 +36,9 @@ def shader(): return source().split('R"SHADER(', 1)[1].split(')SHADER"', 1)[0]
 
 
 def diagnostics_inverse(text):
+    text = re.sub(r'// BSX_DERIVED_POLICY_BEGIN\n.*?// BSX_DERIVED_POLICY_END\n', '', text, flags=re.S)
+    for name in ('FACTS', 'AFTERMATH'):
+        text = re.sub(r'    // BSX_DERIVED_' + name + r'_BEGIN[^\n]*\n.*?    // BSX_DERIVED_' + name + r'_END\n', '', text, flags=re.S)
     text = re.sub(r'// BSX_DIAGNOSTICS_BEGIN:.*?// BSX_DIAGNOSTICS_END\n\n', '', text, flags=re.S)
     text = re.sub(r'^\s*BSXDiagnosticLines = 0; // diagnostic-only per invocation\n', '', text, flags=re.M)
     text = re.sub(r'^ *BSXStage\(TEXT\("[a-z_]+"\)\);\n', '', text, flags=re.M)
@@ -63,6 +67,64 @@ def diagnostics_inverse(text):
 
 
 class ExperimentTests(unittest.TestCase):
+    def test_actual_derived_cache_key_policy_is_narrow(self):
+        compiler = shutil.which('clang++') or shutil.which('g++')
+        if not compiler: self.fail('Host C++ compiler required')
+        policy = 'bool BSXDerivedCacheField(const FString& Key,bool Primary,bool Inverse)\n' + body(source(), 'BSXDerivedCacheField')
+        cpp_text = r'''
+#include <cassert>
+#include <string>
+#define TEXT(x) L##x
+using FString=std::wstring;
+POLICY
+int main(){
+ for(bool Primary : {false,true}) for(bool Inverse : {false,true}) {
+  assert(BSXDerivedCacheField(L"MaterialFunctionInfos",Primary,Inverse)==Primary);
+  assert(BSXDerivedCacheField(L"ReferencedTextureGuids",Primary,Inverse)==(Primary||Inverse));
+  for(const auto* K : {L"BlendMode",L"StateId",L"LightingGuid",L"bUseFullPrecision",L"TextureParameterValues",L"FunctionInputs",L"MaterialFunctionInfosExtra"})
+   assert(!BSXDerivedCacheField(K,Primary,Inverse));
+ }
+}
+'''.replace('POLICY', policy)
+        with tempfile.TemporaryDirectory(prefix='ut4-blob-cache-policy-') as temp:
+            root=Path(temp); cpp=root/'policy.cpp'; exe=root/'policy'
+            cpp.write_text(cpp_text)
+            result=subprocess.run([compiler,'-std=c++14','-Wall','-Wextra','-Werror',str(cpp),'-o',str(exe)],capture_output=True,text=True,timeout=30)
+            self.assertEqual(result.returncode,0,result.stderr)
+            subprocess.run([str(exe)],check=True,timeout=10)
+        facts=body(source(),'BSXFacts')
+        self.assertIn('Asset->GetClass() == UMaterial::StaticClass() && Asset->GetPathName() == ObjectPath(BSXPackage())',facts)
+        self.assertIn('Asset->GetClass() == UMaterialInstanceConstant::StaticClass() && Asset->GetPathName() == ObjectPath(BSXInverse())',facts)
+        self.assertIn('X->RemoveField(K); Y->RemoveField(K);',facts)
+        self.assertIn('Entry->SetStringField(TEXT("expected"), Before)',facts)
+        self.assertIn('Entry->SetStringField(TEXT("actual"), After)',facts)
+        self.assertIn('primary_derived_cache_observations',source())
+        self.assertIn('inverse_derived_cache_observations',source())
+
+    def test_private_rendered_cache_deltas_and_visual_property_rejection(self):
+        if PRIVATE is None: self.skipTest('pass --private-baseline for licensed native evidence')
+        root=PRIVATE.parent.parent
+        for file,expected in [('Material.cpp','27f5d20155727fb637179de3f6d638acd28eb9ba091c4a34c88b9d4294f8511b'),
+                              ('MaterialInstance.cpp','28d2409e0c7c7e30c42a7e8b9b9f56605962d5bbac5629e882c45bcf2f3b4668')]:
+            self.assertEqual(hashlib.sha256((root/'weapon-fidelity-source'/file).read_bytes()).hexdigest(),expected)
+        previous=json.loads(PRIVATE.read_text())['materials']
+        rendered=json.loads((root/'fidelity-rendering-report-1/records.json').read_text())
+        observed=0
+        for a in previous:
+            b=next(row for row in rendered if row.get('material')==a['material'])
+            x=copy.deepcopy(a['properties']); y=copy.deepcopy(b['properties'])
+            excluded={'ReferencedTextureGuids'}
+            if a['class']=='Material': excluded.add('MaterialFunctionInfos')
+            for key in excluded:
+                self.assertIsInstance(x[key],str); self.assertIsInstance(y[key],str)
+                observed+=int(x[key]!=y[key]); del x[key]; del y[key]
+            self.assertEqual(x,y)  # No other property is ignored.
+            for key in ('BlendMode','OpacityMaskClipValue') if a['class']=='Material' else ('ScalarParameterValues','TextureParameterValues'):
+                self.assertIn(key,y)
+                changed=copy.deepcopy(y); changed[key]=str(changed[key])+'VISUAL_MUTATION'
+                self.assertNotEqual(x,changed)
+        self.assertEqual(observed,3)
+
     def test_diagnostic_inverse_is_exact_previously_compiled_header(self):
         restored = diagnostics_inverse(source())
         self.assertEqual(hashlib.sha256(restored.encode()).hexdigest(),

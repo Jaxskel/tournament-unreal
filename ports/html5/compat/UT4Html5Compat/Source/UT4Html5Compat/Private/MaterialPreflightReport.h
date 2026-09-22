@@ -114,10 +114,13 @@ static bool MRGraph(const TArray<UMaterialExpression*>& Expressions, TArray<TSha
         N->SetObjectField(TEXT("properties"), MRProperties(E, true));
         TArray<TSharedPtr<FJsonValue>> Inputs;
         const auto Pins = E->GetInputs();
+        const auto* InputFunction = Cast<UMaterialExpressionMaterialFunctionCall>(E);
         for (int32 I = 0; I < Pins.Num(); ++I)
         {
             auto P = MRPin(Pins[I]);
-            P->SetNumberField(TEXT("index"), I); P->SetStringField(TEXT("name"), E->GetInputName(I));
+            // Function-call GetInputs enumerates FunctionInputs in the same order.
+            // GetInputName adds transient editor type suffixes; report the serialized name.
+            P->SetNumberField(TEXT("index"), I); P->SetStringField(TEXT("name"), InputFunction ? InputFunction->FunctionInputs[I].Input.InputName : E->GetInputName(I));
             Inputs.Add(MRValue(P));
         }
         N->SetArrayField(TEXT("inputs"), Inputs);

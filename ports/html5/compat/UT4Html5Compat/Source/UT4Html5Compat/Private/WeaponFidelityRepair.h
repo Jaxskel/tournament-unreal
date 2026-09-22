@@ -335,6 +335,21 @@ static int32 WeaponFidelityRepair(const FString& Params, bool Verify)
             {
                 if (!Call->MaterialFunction) return WFRStop(TEXT("function-call-null"), E->GetPathName());
                 const FString* Dest = R.Clones.Find(Call->MaterialFunction->GetOutermost()->GetName());
+                // WFR_REBIND_BEGIN
+                if (Dest)
+                {
+                    // Duplication clears transient function-interface pointers. Rebind by
+                    // serialized IDs before SetMaterialFunction's name-based fixup dereferences them.
+                    const auto Before = MRProperties(Call, true);
+                    Call->UpdateFromFunctionResource(false);
+                    if (!R.Same(MRValue(Before), MRValue(MRProperties(Call, true))))
+                        return WFRStop(TEXT("function-rebind-record-drift"), E->GetPathName());
+                    for (const auto& Input : Call->FunctionInputs) if (!Input.ExpressionInput)
+                        return WFRStop(TEXT("function-rebind-input-null"), E->GetPathName());
+                    for (const auto& Output : Call->FunctionOutputs) if (!Output.ExpressionOutput)
+                        return WFRStop(TEXT("function-rebind-output-null"), E->GetPathName());
+                }
+                // WFR_REBIND_END
                 if (Dest && !Call->SetMaterialFunction(Cast<UMaterialFunction>(O), Call->MaterialFunction,
                     CastChecked<UMaterialFunction>(R.Objects.FindChecked(*Dest)))) return WFRStop(TEXT("function-remap"), E->GetPathName());
             }

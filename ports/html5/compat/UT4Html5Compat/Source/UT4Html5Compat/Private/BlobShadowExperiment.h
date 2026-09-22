@@ -179,6 +179,15 @@ static bool BSXEdit(UMaterial* M)
     M->bUseFullPrecision = true;
     return BSXGood(BSXShape(M, true), TEXT("BSXEdit.final_shape"));
 }
+// BSX_DERIVED_POLICY_BEGIN
+// Pinned RebuildMaterialFunctionInfo / UpdateLightmassTextureTracking rebuild
+// these cache identities. This does not exclude any expression or texture value.
+static bool BSXDerivedCacheField(const FString& Key, bool Primary, bool Inverse)
+{
+    return (Primary && Key == TEXT("MaterialFunctionInfos")) ||
+        ((Primary || Inverse) && Key == TEXT("ReferencedTextureGuids"));
+}
+// BSX_DERIVED_POLICY_END
 static bool BSXFacts(UMaterialInterface* Asset, const TSharedPtr<FJsonObject>& Expected, IAssetRegistry& Registry, bool Delta,
     TSharedPtr<FJsonObject>& Actual)
 {
@@ -192,6 +201,31 @@ static bool BSXFacts(UMaterialInterface* Asset, const TSharedPtr<FJsonObject>& E
         if (BSXBad((Expected->HasField(K) && !BSXField(Expected, Actual, K)), TEXT("BSXFacts:L162.1"))) return false;
     TSharedPtr<FJsonObject> X = MakeShareable(new FJsonObject); X->Values = Expected->GetObjectField(TEXT("properties"))->Values;
     TSharedPtr<FJsonObject> Y = MakeShareable(new FJsonObject); Y->Values = Actual->GetObjectField(TEXT("properties"))->Values;
+    // BSX_DERIVED_FACTS_BEGIN: remove only from comparison copies, never UObject state.
+    const bool Primary = Asset->GetClass() == UMaterial::StaticClass() && Asset->GetPathName() == ObjectPath(BSXPackage());
+    const bool Inverse = Asset->GetClass() == UMaterialInstanceConstant::StaticClass() && Asset->GetPathName() == ObjectPath(BSXInverse());
+    TSharedPtr<FJsonObject> Cache = MakeShareable(new FJsonObject);
+    for (const TCHAR* K : {TEXT("MaterialFunctionInfos"), TEXT("ReferencedTextureGuids")})
+    {
+        if (!BSXDerivedCacheField(K, Primary, Inverse)) continue;
+        FString Before, After;
+        if (!X->TryGetStringField(K, Before) || !Y->TryGetStringField(K, After))
+            return Fail(FString(TEXT("Blob derived cache missing/string type mismatch: ")) + K);
+        TSharedPtr<FJsonObject> Entry = MakeShareable(new FJsonObject);
+        Entry->SetStringField(TEXT("expected"), Before); Entry->SetStringField(TEXT("actual"), After);
+        Entry->SetBoolField(TEXT("changed"), Before != After); Cache->SetObjectField(K, Entry);
+        X->RemoveField(K); Y->RemoveField(K);
+    }
+    Actual->SetObjectField(TEXT("derived_cache_observations"), Cache);
+    FString CacheText;
+    if (!FJsonSerializer::Serialize(Cache.ToSharedRef(), TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&CacheText)) || CacheText.Len() > 64 * 1024)
+        return Fail(TEXT("Blob derived cache diagnostic serialization/budget failed."));
+    if (BSXDiagnosticLines < 64)
+    {
+        ++BSXDiagnosticLines;
+        UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_BLOB_DERIVED_CACHES material=%s values=%s"), *Asset->GetPathName(), *CacheText);
+    }
+    // BSX_DERIVED_FACTS_END
     if (Delta)
     {
         for (const TCHAR* K : {TEXT("StateId"), TEXT("LightingGuid"), TEXT("Expressions"), TEXT("bUseFullPrecision")}) { X->RemoveField(K); Y->RemoveField(K); }
@@ -331,6 +365,10 @@ static int32 BlobShadowExperiment(const FString& Params)
     Out->SetBoolField(TEXT("requires_fresh_paired_cook"), true); Out->SetNumberField(TEXT("saved_packages"), Apply ? 1 : 0);
     Out->SetStringField(TEXT("limitation"), TEXT("Approximate geometric receiver normal from quantized alpha-copy depth; edge/precision artifacts remain possible. Shader link alone is not visual acceptance."));
     Out->SetObjectField(TEXT("original_roots"), MasterBase->GetObjectField(TEXT("roots")));
+    // BSX_DERIVED_AFTERMATH_BEGIN
+    Out->SetObjectField(TEXT("primary_derived_cache_observations"), Facts->GetObjectField(TEXT("derived_cache_observations")));
+    Out->SetObjectField(TEXT("inverse_derived_cache_observations"), InverseFacts->GetObjectField(TEXT("derived_cache_observations")));
+    // BSX_DERIVED_AFTERMATH_END
     for (const auto& V : MasterBase->GetArrayField(TEXT("nodes")))
         if (Str(V->AsObject(), TEXT("path")) == ObjectPath(BSXPackage()) + TEXT(":MaterialExpressionComponentMask_4"))
             Out->SetObjectField(TEXT("input_before"), V->AsObject()->GetArrayField(TEXT("inputs"))[0]->AsObject());
