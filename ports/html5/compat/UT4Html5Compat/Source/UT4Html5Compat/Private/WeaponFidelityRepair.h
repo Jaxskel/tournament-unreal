@@ -37,6 +37,7 @@ struct FWeaponRepair
     TSharedPtr<FJsonObject> Pins;
     FSavePolicy Policy;
     bool Verify = false;
+    bool UV0 = false; // Explicit fresh Apply/Verify variant; never adopts existing clones.
 
     FString Normal(FString Text) const
     {
@@ -148,6 +149,32 @@ struct FWeaponRepair
         for (int32 I = 1; I < ERHIFeatureLevel::Num; ++I) if (Switch->Inputs[I].Expression) return false;
         return true;
     }
+    // WFR_UV0_NODE_BEGIN
+    UMaterialExpression* UV0Node(UMaterial* M)
+    {
+        // Exact reflected class avoids a new generated-header/NO_API dependency.
+        UClass* Class = FindObject<UClass>(nullptr, TEXT("/Script/Engine.MaterialExpressionTextureCoordinate"));
+        if (!Class || !Class->IsChildOf(UMaterialExpression::StaticClass())) return nullptr;
+        auto* E = Node(M, TEXT("TournamentES2UV0"), TEXT("MaterialExpressionTextureCoordinate"));
+        if (!Verify)
+        {
+            if (FindObject<UObject>(M, TEXT("TournamentES2UV0"))) return nullptr;
+            E = NewObject<UMaterialExpression>(M, Class, FName(TEXT("TournamentES2UV0")));
+            if (!E || E->GetClass() != Class) return nullptr;
+            E->Material = M; E->Function = nullptr; M->Expressions.Add(E);
+        }
+        if (!E || E->GetClass() != Class || E->Material != M || E->Function || E->GetInputs().Num() != 0) return nullptr;
+        const auto P = MRProperties(E, true);
+        const TCHAR* Keys[] = { TEXT("CoordinateIndex"), TEXT("UTiling"), TEXT("VTiling"), TEXT("UnMirrorU"), TEXT("UnMirrorV") };
+        const TCHAR* Values[] = { TEXT(""), TEXT("1.000000"), TEXT("1.000000"), TEXT(""), TEXT("") };
+        for (int32 I = 0; I < 5; ++I)
+        {
+            FString Value;
+            if (!P->TryGetStringField(Keys[I], Value) || Value != Values[I]) return nullptr;
+        }
+        return E;
+    }
+    // WFR_UV0_NODE_END
     bool WPO(UMaterial* M)
     {
         auto* Old = Node(M, TEXT("MaterialExpressionSetMaterialAttributes_0"), TEXT("MaterialExpressionSetMaterialAttributes"));
@@ -157,6 +184,8 @@ struct FWeaponRepair
             Call->FunctionOutputs[1].Output.OutputName != TEXT("WPO Only")) return false;
         auto* Set = Cast<UMaterialExpressionSetMaterialAttributes>(Node(M, TEXT("TournamentES2WPO"), TEXT("MaterialExpressionSetMaterialAttributes")));
         auto* Switch = Cast<UMaterialExpressionFeatureLevelSwitch>(Node(M, TEXT("TournamentES2Attributes"), TEXT("MaterialExpressionFeatureLevelSwitch")));
+        UMaterialExpression* UV = UV0 ? UV0Node(M) : nullptr;
+        if (UV0 && !UV) return false;
         if (!Verify)
         {
             if (Root->Expression != Old || Root->OutputIndex != 0) return false;
@@ -166,13 +195,21 @@ struct FWeaponRepair
             Set->Inputs.SetNum(2); Set->Inputs[0] = *Root;
             Set->Inputs[1].Expression = Call; Set->Inputs[1].OutputIndex = 1;
             Set->AttributeSetTypes.Add(FMaterialAttributeDefinitionMap::GetID(MP_WorldPositionOffset));
+            // WFR_UV0_PIN_BEGIN
+            if (UV0)
+            {
+                Set->Inputs.SetNum(3); Set->Inputs[2].Expression = UV;
+                Set->AttributeSetTypes.Add(FMaterialAttributeDefinitionMap::GetID(MP_CustomizedUVs0));
+            }
+            // WFR_UV0_PIN_END
             Switch->Default = *Root; Switch->Inputs[ERHIFeatureLevel::ES2].Expression = Set;
             Root->Expression = Switch; Root->OutputIndex = 0;
         }
         if (!Set || !Switch || !Pin(*Root, Switch) || !Pin(Switch->Default, Old) ||
-            !Pin(Switch->Inputs[ERHIFeatureLevel::ES2], Set) || Set->Inputs.Num() != 2 ||
+            !Pin(Switch->Inputs[ERHIFeatureLevel::ES2], Set) || Set->Inputs.Num() != (UV0 ? 3 : 2) ||
             !Pin(Set->Inputs[0], Old) || !Pin(Set->Inputs[1], Call, 1) ||
-            Set->AttributeSetTypes.Num() != 1 || Set->AttributeSetTypes[0] != FMaterialAttributeDefinitionMap::GetID(MP_WorldPositionOffset)) return false;
+            Set->AttributeSetTypes.Num() != (UV0 ? 2 : 1) || Set->AttributeSetTypes[0] != FMaterialAttributeDefinitionMap::GetID(MP_WorldPositionOffset)) return false;
+        if (UV0 && (!Pin(Set->Inputs[2], UV) || Set->AttributeSetTypes[1] != FMaterialAttributeDefinitionMap::GetID(MP_CustomizedUVs0))) return false;
         for (int32 I = 1; I < ERHIFeatureLevel::Num; ++I) if (Switch->Inputs[I].Expression) return false;
         return true;
     }
@@ -195,7 +232,7 @@ struct FWeaponRepair
             ByPath.Add(Path, N);
         }
         const auto& OldNodes = Expected->GetArrayField(TEXT("nodes"));
-        if (Added != 6 || ByPath.Num() != OldNodes.Num()) return false;
+        if (Added != (UV0 ? 7 : 6) || ByPath.Num() != OldNodes.Num()) return false;
         for (const auto& V : OldNodes)
         {
             auto N = V->AsObject(); auto* Actual = ByPath.Find(Str(N, TEXT("path")));
@@ -273,6 +310,7 @@ static int32 WeaponFidelityRepair(const FString& Params, bool Verify)
         Str(Base, TEXT("report_sha256")) != Str(Spec, TEXT("report_sha256"))) return WFRStop(TEXT("recipe-baseline"));
     WFRStage(TEXT("recipe-baseline-passed")); // WFR_DIAGNOSTIC_STAGE
     FWeaponRepair R; R.Verify = Verify; R.Pins = Spec->GetObjectField(TEXT("original_sha1"));
+    R.UV0 = FParse::Param(*Params, TEXT("WeaponUV0"));
     TSet<FString> Destinations;
     for (const auto& KV : Spec->GetObjectField(TEXT("clones"))->Values)
     { R.Clones.Add(KV.Key, KV.Value->AsString()); R.Canonical.Add(ObjectPath(KV.Value->AsString()), ObjectPath(KV.Key)); Destinations.Add(KV.Value->AsString().ToLower()); }
@@ -408,6 +446,7 @@ static int32 WeaponFidelityRepair(const FString& Params, bool Verify)
             *HashFile(R.Policy.Files.FindChecked(P.ToLower())), Verify ? 0 : 1);
     }
     R.Verify = true; if (!R.DiskPins()) return WFRStop(TEXT("post-save-disk-pins"));
+    UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_REPAIR variant=%s"), R.UV0 ? TEXT("es2-uv0-passthrough") : TEXT("original-six-node"));
     UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_REPAIR complete mode=%s destinations=23 saves=%d untouchedMICs=14; shader/runtime validation still required"), Verify ? TEXT("verify") : TEXT("apply"), Verify ? 0 : 9);
     return 0;
 }
