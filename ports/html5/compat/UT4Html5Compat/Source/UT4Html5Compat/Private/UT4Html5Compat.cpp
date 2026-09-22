@@ -351,6 +351,7 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
 #include "MaterialPreflightReport.h"
 #include "BlobShadowPreflightReport.h"
 #include "WeaponPreflightReport.h"
+#include "WeaponSupplementReport.h"
 #include "PhysicsPreflightReport.h"
 #include "WeaponFidelityRepair.h"
 #include "BlobShadowExperiment.h"
@@ -501,6 +502,8 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
         return BlobShadowPreflightReport(Params);
     if (Mode.Equals(TEXT("WeaponReport"), ESearchCase::IgnoreCase))
         return WeaponPreflightReport(Params);
+    if (Mode.Equals(TEXT("WeaponSupplementReport"), ESearchCase::IgnoreCase))
+        return WeaponSupplementReport(Params);
     if (Mode.Equals(TEXT("FidelityReport"), ESearchCase::IgnoreCase))
     {
         // Both fixed scopes report independently; neither can enter Apply.
