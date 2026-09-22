@@ -1,0 +1,3 @@
+# Browser build receipts pin exact bytes. Keep checked-out integration text
+# identical on Windows, macOS and Linux; binary game outputs stay private.
+ports/html5/** text=auto eol=lf
