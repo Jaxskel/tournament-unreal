@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "description": "Metadata only: original Emscripten 1.36.13 optimizer inputs; guarded hashes are checked by the source patcher.",
+  "nativeSources": {
+    "CMakeLists.txt": "2dd2ca0a38e912dd525685de343764ca95602f81b127b071e17606fccacfacb9",
+    "istring.h": "e641011b1ffe2cfd1c0d2db8aba042a0d97293391dbcef028bfd26a625d0c7e6",
+    "optimizer-main.cpp": "232e0716c8248980d528a9270a2eb95a6e79bfaa6e93be99c7fc23c736177bf3",
+    "optimizer-shared.cpp": "725b2455064ae49e6e0a7040ae3bdd9cb5a75232c90fa9e5be991eac6efff5ff",
+    "optimizer.cpp": "a05337b4e7261eef15927713edc8854f57f53eaeba6b5227c46b894ee6ff6a3b",
+    "optimizer.h": "8450848299002f739458c794f117665f77586fbf1cba6008ccbfa537f3515da7",
+    "parser.cpp": "3d4245f90aa0443d949c46593b665ee410e7087740a11e487db3c5b6e9f47b7f",
+    "parser.h": "c3d27aa3969ad0e3675e3d05f249eb9c9dceadd2f9c44d10a619b93c23c1a6af",
+    "simple_ast.cpp": "799adf2aca9131104960d95c071d8e4fe4d65dd320fb6a8a7bfdde9e986294c5",
+    "simple_ast.h": "b6f0df80d53089f76187f0ebb071d054dd877b22161f7d42307c0259b3fadc3f",
+    "snprintf.h": "fe311fac3d2cd75b83c768c390eac9b79c3872c181302eb7607dfe518121f6e3"
+  },
+  "generator": "Visual Studio 17 2022",
+  "architecture": "x64",
+  "configuration": "Release",
+  "workers": 2,
+  "cmakePolicyMinimum": "3.5",
+  "cxxStandard": "14",
+  "cxxFlags": "/FIfunctional"
+}

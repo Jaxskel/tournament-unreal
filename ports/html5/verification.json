@@ -232,7 +232,8 @@
     "multiplayerInputReconnect": "Two independent Chrome contexts joined native server, moved/fired, B remained while A reconnected; authoritative server events recorded incoming human deaths, no pageerrors. Precise PvP aim/kill and full-round multiplayer acceptance pending.",
     "automaticRotation": "Shortened one-frag rounds repeatedly loaded Deck\u2192Outpost\u2192Deck with visible Outpost winner screen. Outpost overexposed; default-round acceptance pending.",
     "startupOverlap": "Implemented ordered support/data scripts concurrently with WASM compile, engine gated onboth.6unit+1browser ordering test, broader65pass1skip. Actual6bot Ready14.5115s packagecomplete1.577s; no meaningful speedup vsprior14.5345s claimed.",
-    "practiceMenuPause": "Native scoped standalone ownership/epoch exports + frame-fenced JS resume implemented; independent source/API review and36focusedtests pass. New native build and actualgamepause stillpending."
+    "practiceMenuPause": "Native scoped standalone ownership/epoch exports + frame-fenced JS resume implemented; independent source/API review and36focusedtests pass. New native build and actualgamepause stillpending.",
+    "guardedOptimizerPreparation": "New publichelper checkpoint6 executed unattended on Windows:57tests pass; configure+nativebuild exit0, exact pinned owned VCTIP helpers retired, jobzero proven; native/simple+tail/fallback semantic regressionpass. Fullnewwrappergamebuild in progress. LocalPOSIX early-failure fixture has intermittent EPERM with retained unsafelease (independent56pass1error); not hidden."
   },
   "limitations": [
     "Private Deck/Outpost package integrity and the targeted floor collision, walking/jump/landing checks pass. 65 distinct material fallbacks need scoped review. Sustained combat, travel, cross-browser gameplay and target performance remain unverified.",
