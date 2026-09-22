@@ -1,8 +1,18 @@
 # Tournament — Unreal
 
+The active work is the **UT4 beta / UE4.15 local browser port**: game rendering and simulation run on the player's computer through WebAssembly/WebGL, with a native authoritative server for multiplayer. It preserves fixed 1080p/1440p and the Tournament launcher. This branch is still experimental.
+
+[Local browser build and release gates](ports/html5/README.md) · [Verification evidence](ports/html5/verification.json) · [Tournament integration boundary](docs/integration.md)
+
+The corrected compiler build has passed bounded floor-collision, walking, jumping, landing, six-bot practice, and automatic Deck/Outpost rotation checks. Two browser contexts resumed into the same native match, sent movement/fire inputs and passed reconnect while the other stayed connected. Native events recorded damage/deaths for both browser players. These checks do not establish full release readiness: Outpost lighting is overexposed, real aiming and longer multiplayer play need verification, and performance varies by browser. Short Chrome checks measured roughly60 median engine callbacks per second at both selected resolutions, with dips;120FPS and stutter-free presented frames are not proven.
+
+The licensed game/content/build artifacts are private and are not downloaded from this repository. The local browser build is **not yet deployed at the public Vercel address**. That address continues to serve the older streaming prototype described below.
+
+## Older public streaming prototype
+
 Real Unreal Tournament 4, streamed into a desktop browser with a Tournament game menu. Two independent native players join one authoritative deathmatch server, with bots and automatic arena rotation. The browser controls its own game instance; it cannot control the Windows desktop.
 
-**[Open the live development demo](https://tournament-unreal.vercel.app/)** · [Host/build instructions](docs/browser-hosting.md) · [Vercel deployment](deploy/vercel/README.md)
+**[Open the older streaming demo](https://tournament-unreal.vercel.app/)** · [Host/build instructions](docs/browser-hosting.md) · [Vercel deployment](deploy/vercel/README.md)
 
 This is a free demo, with **no audio stream or platform rewards**. The Windows GPU host must remain awake and online. The Vercel website address is stable; its game connection still uses a temporary tunnel that needs a configuration update if restarted. Two browser seats are available; another browser sees an arena-full message. No Unreal game download is required in the browser.
 
@@ -14,7 +24,7 @@ Open the demo link in two separate browsers/computers and choose **Play Now**. C
 
 Settings adjusts sensitivity. Disconnect releases a browser seat; Play Again requests a free seat. The host keeps the native players connected between browser sessions, so these are shared demo seats rather than authenticated Tournament accounts. The server fills seven total player slots with bots: six bots with one native human client, five with two.
 
-## What has actually been checked
+## Streaming-prototype verification
 
 - Both native clients joined the same Deck server and supplied separate live browser streams.
 - Browser mouse capture, movement, Tournament Escape menu, sensitivity adjustment, deaths, and respawning were exercised.
@@ -30,10 +40,6 @@ The performance panel remains visible while aiming. **FPS** counts refresh-align
 Both arena caches have been prepared on the current host. A fresh installation still needs first-run texture and shader preparation. The stream now uses **direct GPU H.264 encoding**, removing full-frame CPU readback and colour conversion. Two simultaneous Mac browser seats measured about **118–120 FPS at 1080p** and **118–119 FPS at 1440p** in approximately 30-second public-URL samples. Both native feeds ran at about 120 FPS. Those earlier measurements counted decoded canvas draws, including multiple draws between browser refreshes. They do not establish 120 visibly distinct frames per second. A newer 60 Hz headless-browser comparison measured about 50 refreshes with new pictures per second before and after presentation changes, with recurring network gaps.
 
 Use the **Resolution** selector for **720p, 1080p or 1440p**. Your choice is saved, applies only to your stream, and is never automatically lowered; 720p remains the initial default. Native rendering stays at 100% scale, with motion blur disabled and 24/40 Mbit/s targets for 1080p/1440p. The Mac network path still showed occasional pauses above 100 ms, so these results do not establish zero-lag play. This remains compressed game streaming. See [performance measurements](docs/web-performance.md), [runtime verification](docs/multiplayer-verification.md), and [browser transport details](browser/README.md).
-
-## Local browser port in development
-
-The [experimental HTML5 port](ports/html5/README.md) is working toward running this same UT4 beta on the player's device with game-packet multiplayer. It is separate from the live streaming demo. Engine compilation and transport tests are progressing; local gameplay, visuals and FPS are not yet validated.
 
 ## Windows development setup
 

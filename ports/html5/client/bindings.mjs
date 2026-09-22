@@ -12,14 +12,21 @@ export const BINDINGS = Object.freeze({
   TournamentBrowserSetSensitivity: ['number'],
   TournamentBrowserSetVolume: ['number'],
   TournamentBrowserReleaseInput: [],
-  TournamentBrowserFrame: []
+  TournamentBrowserFrame: [],
+  // Optional standalone menu controls; older nine-export builds keep working.
+  TournamentBrowserSetMenuPaused: ['number', 'number'],
+  TournamentBrowserMenuPauseStatus: ['number']
 });
+export const REQUIRED_BINDINGS = Object.freeze(Object.keys(BINDINGS).filter(name =>
+  name !== 'TournamentBrowserSetMenuPaused' && name !== 'TournamentBrowserMenuPauseStatus'));
 
 export class EngineBindings {
   constructor(module, names) {
     this.module = module; this.names = names; this.functions = {}; this.applied = {};
     this.disabled = new Set(); this.pendingRelease = false; this.ready = false;
     this.epoch = null;
+    this.pause = { available:false, state:'unavailable', pending:false };
+    this.practice = false; this.inMenu = false; this.pausedFrame = null;
   }
   discover() {
     if (typeof this.module?.cwrap !== 'function') return;
@@ -48,14 +55,65 @@ export class EngineBindings {
     this.pendingRelease = false;
     this.ready = false;
     this.epoch = null;
+    this.practice = false; this.inMenu = false; this.pausedFrame = null;
+    this.pause = { available:false, state:'unavailable', pending:false };
   }
-  poll(settings, inMenu = false) {
+  syncPause(inMenu, practice) {
+    this.inMenu = inMenu; this.practice = practice;
+    const available = !!this.epoch && !!this.functions.TournamentBrowserSetMenuPaused
+      && !!this.functions.TournamentBrowserMenuPauseStatus && !!this.functions.TournamentBrowserFrame;
+    let status = -1;
+    // Even the getter is excluded in multiplayer. Native independently checks
+    // the actual world's net mode and pending connection on every request.
+    if (practice && available) {
+      status = this.call('TournamentBrowserMenuPauseStatus', this.epoch);
+      if (inMenu && status === 0) {
+        this.release();
+        this.call('TournamentBrowserSetMenuPaused', 1, this.epoch);
+        status = this.call('TournamentBrowserMenuPauseStatus', this.epoch);
+      }
+    }
+    const pending = practice && !inMenu && (status === 1 || status === 3);
+    if (!pending) this.pausedFrame = null;
+    const state = !practice ? 'live' : !this.ready ? 'waiting'
+      : status === 1 ? (inMenu ? 'paused' : 'resuming')
+      : status === 3 ? (inMenu ? 'pausing' : 'resuming')
+      : status === 2 ? 'external' : status === 0 && !inMenu ? 'running' : 'unavailable';
+    this.pause = { available:practice && available && status >= 0, state, pending };
+  }
+  pauseFrame() {
+    if (!this.practice || this.inMenu || !this.pause.pending ||
+        this.call('TournamentBrowserReady') !== 1) return null;
+    const epoch = this.call('TournamentBrowserSessionEpoch');
+    if (epoch !== this.epoch || !Number.isSafeInteger(epoch) || epoch <= 0 ||
+        this.call('TournamentBrowserMenuPauseStatus', epoch) !== 1) return null;
+    const frame = this.call('TournamentBrowserFrame');
+    return Number.isSafeInteger(frame) && frame >= 0 ? { epoch, frame } : null;
+  }
+  beforeFrame() {
+    // Observe an effective pause BEFORE this engine callback. A post-hook alone
+    // cannot prove the callback consumed a long background delta while paused.
+    this.pausedFrame = this.pauseFrame();
+  }
+  afterFrame() {
+    const before = this.pausedFrame;
+    this.pausedFrame = null;
+    if (!before) return false;
+    const after = this.pauseFrame();
+    if (!after || after.epoch !== before.epoch || after.frame <= before.frame) return false;
+    this.release();
+    this.call('TournamentBrowserSetMenuPaused', 0, after.epoch);
+    this.syncPause(this.inMenu, this.practice);
+    return true;
+  }
+  poll(settings, inMenu = false, practice = false) {
     this.discover();
     this.ready = this.call('TournamentBrowserReady') === 1;
     const epoch = this.ready ? this.call('TournamentBrowserSessionEpoch') : null;
     const validEpoch = Number.isSafeInteger(epoch) && epoch > 0;
     if (!validEpoch || epoch !== this.epoch) {
       this.applied = {};
+      this.pausedFrame = null;
       if (validEpoch && inMenu) this.pendingRelease = true;
     }
     this.epoch = validEpoch ? epoch : null;
@@ -79,6 +137,8 @@ export class EngineBindings {
       const frame = this.call('TournamentBrowserFrame');
       if (Number.isFinite(frame) && frame >= 0) nativeFrame = frame;
     }
-    return { ready:this.ready, epoch:this.epoch, available, applied:{ ...this.applied }, actual, nativeFrame, unavailable:[...this.disabled] };
+    this.syncPause(inMenu, practice);
+    return { ready:this.ready, epoch:this.epoch, available, applied:{ ...this.applied }, actual, nativeFrame,
+      pause:{ ...this.pause }, unavailable:[...this.disabled] };
   }
 }

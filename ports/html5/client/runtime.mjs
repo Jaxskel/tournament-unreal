@@ -1,5 +1,6 @@
 import { RESOLUTIONS, resolutionKey, engineArguments, argumentsForMode, validateManifest, validateGraphicsLimits, FrameMetrics } from './core.mjs';
 import { EngineBindings } from './bindings.mjs';
+import { prepareEngine } from './startup.mjs';
 
 const canvas = document.getElementById('canvas');
 const metrics = new FrameMetrics();
@@ -21,6 +22,7 @@ let pausedByMenu = false;
 let requested = RESOLUTIONS['1080p'];
 let reportTimer;
 let lastResolution = '';
+let lastPauseState = '';
 let engineDiagnostic = '';
 const pressedKeys = new Map();
 const send = (type, detail) => { if (!disposed) parent.postMessage({ channel: 'ut4-runtime', type, detail }, location.origin); };
@@ -84,6 +86,7 @@ function menu() {
   pressedKeys.clear();
   bridge?.release();
   release();
+  pollBindings();
   // Only use a matched exported pair. Do not pretend a menu pauses a live server.
   const module = window.Module;
   if (launchMode === 'practice' && !bridge?.names.length && initialized && !pausedByMenu && typeof module?.pauseMainLoop === 'function' && typeof module?.resumeMainLoop === 'function') {
@@ -91,8 +94,10 @@ function menu() {
   }
 }
 function resume() {
+  if (failed || disposed) return;
   inMenu = false;
   if (pausedByMenu) { pausedByMenu = false; window.Module.resumeMainLoop(); }
+  pollBindings();
   canvas.focus();
 }
 let audioCaptureAttempt = 0;
@@ -153,10 +158,13 @@ document.addEventListener('pointerlockerror', () => send('pointer-error', 'Mouse
 window.addEventListener('keydown', event => {
   if (event.key === 'Escape') {
     event.preventDefault(); event.stopImmediatePropagation(); menu(); send('menu');
-  } else if (inMenu) { event.stopImmediatePropagation(); }
+  } else if (inMenu || bridge?.pause.pending) { event.preventDefault(); event.stopImmediatePropagation(); }
   else pressedKeys.set(event.code, { key: event.key, keyCode: event.keyCode, which: event.which, location: event.location });
 }, true);
 window.addEventListener('keyup', event => pressedKeys.delete(event.code), true);
+for (const type of ['mousedown', 'wheel']) canvas.addEventListener(type, event => {
+  if (inMenu || bridge?.pause.pending) { event.preventDefault(); event.stopImmediatePropagation(); }
+}, { capture:true, passive:false });
 window.addEventListener('blur', () => {
   // Moving from the frame to a launcher button is not app focus loss. Sending
   // an asynchronous menu event there can cancel a new capture gesture.
@@ -283,9 +291,17 @@ function updateSettings(settings = {}) {
   if (Number.isFinite(settings.volume)) desiredSettings.volume = Math.max(0,Math.min(1,settings.volume));
   if (Number.isFinite(settings.sensitivity)) desiredSettings.sensitivity = Math.max(.005,Math.min(.5,settings.sensitivity));
 }
+function beforeEngineFrame() {
+  metrics.begin(performance.now());
+  bridge?.beforeFrame();
+}
+function afterEngineFrame() {
+  metrics.end(performance.now());
+  if (bridge?.afterFrame()) pollBindings();
+}
 function pollBindings() {
   if (!bridge || !runtimeInitialized) return;
-  bridgeReport = bridge.poll(desiredSettings, inMenu);
+  bridgeReport = bridge.poll(desiredSettings, inMenu, launchMode === 'practice');
   const dimensions = RESOLUTIONS[desiredSettings.resolution];
   if (bridgeReport.applied.resolution === desiredSettings.resolution && bridgeReport.actual?.every((size,index) => size === dimensions[index])) {
     requested = dimensions;
@@ -294,6 +310,14 @@ function pollBindings() {
     if (canvas.height !== requested[1]) canvas.height = requested[1];
   }
   send('bindings', bridgeReport);
+  const pauseState = bridgeReport.pause.state;
+  if (launchMode === 'practice' && lastPauseState !== pauseState) {
+    lastPauseState = pauseState;
+    const message = { paused:'Practice paused.', pausing:'Pausing practice…', resuming:'Resuming practice…',
+      running:'Practice running.', external:'Game paused outside the browser menu.',
+      unavailable:'Settings open; native practice pause is unavailable in this build.' }[pauseState];
+    if (message && (inMenu || pauseState === 'running' || pauseState === 'resuming' || pauseState === 'external')) send('status', message);
+  }
 }
 async function start(resolution, settings, mode) {
   if (started || disposed) return;
@@ -361,8 +385,8 @@ async function start(resolution, settings, mode) {
       releaseAssetUrls();
       initialized = true; resolutionReport(); send('initialized');
     }],
-    preMainLoop: () => { metrics.begin(performance.now()); },
-    postMainLoop: () => { metrics.end(performance.now()); },
+    preMainLoop: beforeEngineFrame,
+    postMainLoop: afterEngineFrame,
     onRuntimeInitialized: () => { runtimeInitialized = true; send('status', 'Runtime initialized; waiting for engine postRun…'); },
     onAbort: reason => fail('Engine aborted: ' + reason),
     onExit: code => fail('Engine exited with status ' + code + '.'),
@@ -380,29 +404,31 @@ async function start(resolution, settings, mode) {
   send('initializing', { timeout: manifest.initializationTimeoutMs });
   if (manifest.memoryInitializer) module.memoryInitializerRequest = { status: 200, response: await assets.get(manifest.memoryInitializer).arrayBuffer() };
   if (manifest.wasmBinary) module.wasmBinary = new Uint8Array(await assets.get(manifest.wasmBinary).arrayBuffer());
-  if (manifest.wasmModule) {
-    send('progress', { loaded: 0, total: 0, label: 'Downloads complete · compiling converted WASM asynchronously' });
-    module.wasmModule = await WebAssembly.compile(await assets.get(manifest.wasmModule).arrayBuffer());
-  }
-  if (failed || disposed) return;
-  assets.clear();
-  send('progress', { loaded: 0, total: 0, label: 'Downloads complete · compiling and mounting engine assets' });
   reportTimer = setInterval(() => { pollBindings(); send('metrics', metrics.snapshot(performance.now())); resolutionReport(); }, 500);
-  for (const name of scripts) {
-    if (failed || disposed) return;
-    await new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = blobs.get(name);
-      script.onload = resolve;
-      script.onerror = () => reject(new Error(name + ': script could not execute. Check syntax, browser support and CSP blob: permissions.'));
-      document.body.append(script);
-    });
-    if (name === manifest.engine && module.gameRuntimeReady?.then) {
-      // Completion/rejection belongs to the async legacy wrapper. Its fulfillment
-      // is NOT evidence of postRun or gameplay (run dependencies can remain).
-      module.gameRuntimeReady.catch(fail);
+  await prepareEngine({
+    supportScripts: manifest.supportScripts, dataScripts: manifest.dataScripts, engine: manifest.engine,
+    stopped: () => failed || disposed,
+    compile: async () => {
+      if (!manifest.wasmModule) return;
+      send('progress', { loaded: 0, total: 0, label: 'Compiling game while arena assets download…' });
+      module.wasmModule = await WebAssembly.compile(await assets.get(manifest.wasmModule).arrayBuffer());
+    },
+    loadScript: async name => {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = blobs.get(name);
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(name + ': script could not execute. Check syntax, browser support and CSP blob: permissions.'));
+        document.body.append(script);
+      });
+      if (name === manifest.engine && module.gameRuntimeReady?.then) {
+        // Completion/rejection belongs to the async legacy wrapper. Its fulfillment
+        // is NOT evidence of postRun or gameplay (run dependencies can remain).
+        module.gameRuntimeReady.catch(fail);
+      }
     }
-  }
+  });
+  assets.clear();
 }
 window.addEventListener('message', event => {
   if (disposed) return;

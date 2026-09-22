@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { validateManifest, argumentsForMode } from './core.mjs';
-import { BINDINGS } from './bindings.mjs';
+import { REQUIRED_BINDINGS } from './bindings.mjs';
 
 const repo = realpathSync(fileURLToPath(new URL('../../../', import.meta.url)));
 const help = `Real UT4 launcher verification (never part of npm test)
@@ -456,7 +456,7 @@ async function verifyResolution(config,resolution,directory,report) {
       frame=page.frames().find(item=>item.url()===new URL('./runtime.html',config.url).href);
       // Never call C exports while the async runtime is still initializing.
       if (frame && await startup(()=>page.locator('#resume').isVisible(),'postRun readiness')) {
-        state=await startup(()=>frame.evaluate(snapshot,Object.keys(BINDINGS)),'World/control read');
+        state=await startup(()=>frame.evaluate(snapshot,REQUIRED_BINDINGS),'World/control read');
         result.lastReadiness=state;
         if (state.missing?.length) throw Error('Missing native control exports after postRun: '+state.missing.join(', '));
         if (state.ready) break;
@@ -474,7 +474,7 @@ async function verifyResolution(config,resolution,directory,report) {
     await op(page.locator('#resume').click(),'Return to actual engine');
     for (const viewport of [{width:960,height:900},{width:1600,height:1000}]) {
       await op(page.setViewportSize(viewport),'Window resize'); await op(delay(300),'Resize settle');
-      assertState(await op(frame.evaluate(snapshot,Object.keys(BINDINGS)),'Fixed framebuffer check'));
+      assertState(await op(frame.evaluate(snapshot,REQUIRED_BINDINGS),'Fixed framebuffer check'));
     }
     await screenshot('world');
     if (config.webglSampleSeconds>0) {
@@ -485,14 +485,14 @@ async function verifyResolution(config,resolution,directory,report) {
     }
     const warmupEnd=Date.now()+config.warmupSeconds*1000;
     while (Date.now()<warmupEnd) {
-      assertState(await op(frame.evaluate(snapshot,Object.keys(BINDINGS)),'Warmup health'));
+      assertState(await op(frame.evaluate(snapshot,REQUIRED_BINDINGS),'Warmup health'));
       await op(delay(250),'Warmup');
     }
     await op(frame.evaluate(beginMeasurement,config.seconds),'Install engine tick observer');
     let progress;
     do {
       await op(delay(250),'Measurement poll');
-      assertState(await op(frame.evaluate(snapshot,Object.keys(BINDINGS)),'Measured world/framebuffer health'));
+      assertState(await op(frame.evaluate(snapshot,REQUIRED_BINDINGS),'Measured world/framebuffer health'));
       progress=await op(frame.evaluate(readMeasurement),'Native tick health');
       result.lastMeasurement=progress;
       if (progress.issues.length) throw Error(progress.issues.join('; '));
@@ -500,7 +500,7 @@ async function verifyResolution(config,resolution,directory,report) {
     } while (progress.now<progress.deadline);
     result.metrics=await op(frame.evaluate(finishMeasurement),'Read engine tick samples');
     if (result.metrics.nativeTicks<3 || result.metrics.p95TickIntervalMs===null || result.metrics.issues.length) throw Error('Insufficient valid native tick samples; metrics remain uninitialized.');
-    result.final=await op(frame.evaluate(snapshot,Object.keys(BINDINGS)),'Final world/framebuffer read'); assertState(result.final);
+    result.final=await op(frame.evaluate(snapshot,REQUIRED_BINDINGS),'Final world/framebuffer read'); assertState(result.final);
     await screenshot('measured');
     if (fatal) throw fatal;
     result.status='passed';
@@ -567,7 +567,7 @@ async function main() {
     if (bytes.length>1048576) throw Error('Manifest exceeds 1 MiB.');
     const manifest=validateManifest(JSON.parse(bytes),config.manifestURL);
     argumentsForMode(manifest,config.mode);
-    if (Object.keys(BINDINGS).some(name=>!manifest.bindings.includes(name))) throw Error('Manifest must list all nine control exports, including TournamentBrowserSessionEpoch.');
+    if (REQUIRED_BINDINGS.some(name=>!manifest.bindings.includes(name))) throw Error('Manifest must list all nine control exports, including TournamentBrowserSessionEpoch.');
     if (Object.entries(manifest.files).some(([name,url])=>/fixture|\/tests\//i.test(name+' '+url))) throw Error('Fixture asset detected; refused.');
     report.manifestSha256=createHash('sha256').update(bytes).digest('hex');
     for (const resolution of config.resolution==='both'?['1080p','1440p']:[config.resolution]) {

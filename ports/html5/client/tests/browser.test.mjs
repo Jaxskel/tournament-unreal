@@ -29,9 +29,10 @@ function manifest() {
     value.format = 'wasm'; value.wasmBinary = 'fixture.wasm';
     value.files['fixture.wasm'] = 'fixture.wasm'; delete value.memoryInitializer; delete value.files['fixture.mem'];
   }
-  if (mode === 'converted' || mode === 'bad-wasm') {
+  if (mode === 'converted' || mode === 'bad-wasm' || mode === 'converted-overlap') {
     value.format = 'wasm'; value.wasmModule = 'fixture.wasm'; value.files['fixture.wasm'] = 'fixture.wasm';
     value.files['engine.js'] = 'tests/fixtures/converted.js';
+    if (mode === 'converted-overlap') value.packageFiles = ['fixture.data'];
   }
   if (mode === 'async-fail') value.files['engine.js'] = 'fault.js';
   if (mode === 'bindings') {
@@ -107,6 +108,29 @@ async function session(t, scenario='normal', graphics={}) {
 async function waitVisible(page, selector) { await page.locator(selector).waitFor({ state:'visible' }); }
 async function launch(page) { await page.locator('#launch').click(); await waitVisible(page,'#resume'); }
 const runtime = page => page.frames().find(frame => frame.url().endsWith('/runtime.html'));
+
+test('direct package starts while WASM compilation is pending; glue still waits for compiled module', async t => {
+  const page = await session(t, 'converted-overlap');
+  await page.context().addInitScript(() => {
+    if (location.pathname !== '/runtime.html') return;
+    const compile = WebAssembly.compile.bind(WebAssembly);
+    WebAssembly.compile = bytes => new Promise((resolve, reject) => {
+      window.finishFixtureCompile = () => compile(bytes).then(resolve, reject);
+    });
+  });
+  await page.locator('#launch').click();
+  await page.waitForFunction(() => {
+    const child = document.querySelector('#viewport iframe')?.contentWindow;
+    return !!child?.finishFixtureCompile && child?.fixture?.order?.includes('data-script');
+  });
+  assert.ok(requests.includes('/fixture.data'), 'package transfer did not wait for compilation');
+  assert.deepEqual(await runtime(page).evaluate(() => fixture.order), ['support', 'data-script']);
+  assert.equal(await page.locator('#resume').isVisible(), false);
+  await runtime(page).evaluate(() => finishFixtureCompile());
+  await waitVisible(page, '#resume');
+  assert.equal(await runtime(page).evaluate(() => Module.wasmModule instanceof WebAssembly.Module), true);
+  assert.equal(await page.locator('#error').isVisible(), false);
+});
 
 test('audio capture runs in the gesture before pointer lock, never waits, and retries nonfatal failures', async t => {
   const page = await session(t, 'audio');

@@ -2,7 +2,7 @@
 
 This work targets the recovered **UT4 beta, UE4.15 CL3228288**. It does not substitute another game. It is not a production release and is not the client currently served by the public Vercel demo. That demo still streams from Windows.
 
-The engine and game compile and link successfully with their bundled Emscripten 1.36.13 toolchain. Its output is asm.js/WebGL, not WebAssembly. A newer-linker experiment passed the standalone packet tests but exposed C library ABI differences in the full game. The current converter instead translates optimized asm.js using Binaryen while preserving the matching legacy JS runtime. The full engine now initializes as WebAssembly in Chrome and passes an allocator smoke test with 1.5 GiB memory. The map has not loaded yet; this is not evidence of game FPS or working gameplay. See [verification status](verification.json).
+The engine and game compile and link successfully with their bundled Emscripten 1.36.13 toolchain. Its output is asm.js/WebGL, not WebAssembly. A newer-linker experiment passed the standalone packet tests but exposed C library ABI differences in the full game. The current converter instead translates optimized asm.js using Binaryen while preserving the matching legacy JS runtime. The full engine now initializes as WebAssembly in Chrome and passes an allocator smoke test with 1.5 GiB memory. The corrected compiler build now loads Deck and Outpost. Bounded checks verify floor collision, real keyboard walking/jumping/landing, six-bot match activity, shortened-round automatic rotation, and two-context multiplayer input/reconnect. Outpost is overexposed; aiming, longer sessions and browser-specific frame pacing remain release gates. See [verification status](verification.json).
 
 ## Original changes in this directory
 
@@ -29,7 +29,7 @@ New-Item -ItemType File "$port\.tournament-browser-port"
 
 The marker and exact engine version are checked. The standalone browser target replaces discovery of the desktop Game target in this isolated checkout, preserving it as `.cs.before-tournament-browser`; UE4.15 AutomationTool cannot package a project with two Game targets. Patches preserve `.before-tournament-html5` originals. Reapplication regenerates patched files from those originals; keep unrelated edits elsewhere. Do not run the scripts while another compiler is reading the checkout. Build logs go to `UnrealTournament/Saved/Logs/BrowserPort`. The wrapper fails if unresolved symbols remain even if the old linker only warns.
 
-The engine's hard-coded asm.js heap is 256 MiB. A successful link alone does **not** establish enough memory for Deck or a suitable runtime configuration. The current WebAssembly adapter uses a fixed configurable memory allocation (1.5 GiB in the smoke test); it still needs full-game runtime validation.
+The engine's hard-coded asm.js heap is 256 MiB. A successful link alone does **not** establish enough memory for Deck or a suitable runtime configuration. The current WebAssembly adapter uses a fixed configurable memory allocation (1.5 GiB in the tested full-game build). Current validation and remaining limits are recorded in verification.json.
 
 For the first asset conversion after shader/compiler changes, omit `-iterate` so stale cooked shaders cannot survive. The engine's normal shader workers are substantially faster than `-NoShaderWorker`:
 
@@ -46,7 +46,7 @@ An editor-only BoneWeightMaterial was removed from the browser startup packages 
 
 ## Browser launcher
 
-The original [local launcher](client/README.md) provides fixed 1080p/1440p, centered aspect ratio, real engine callback metrics, input release, settings and clean retry. Its fixture tests pass, including pointer capture in headed Chrome. The C control exports compile and are present in the full engine, but their in-game behavior still needs verification. Use a real completed asset package before treating the launcher as playable.
+The original [local launcher](client/README.md) provides fixed 1080p/1440p, centered aspect ratio, real engine callback metrics, input release, settings and clean retry. Its fixture tests pass, including pointer capture in headed Chrome. The C control exports are present in the full engine. Actual checks retained1080p/1440p through short matches; full mouse/settings behavior remains under verification. Use a complete matching asset package; the current private rotation package is about1.8GB.
 
 ## Packet gateway
 
@@ -59,7 +59,7 @@ BROWSER_ORIGINS=http://127.0.0.1:8000 GAME_HOST=127.0.0.1 GAME_PORT=7787 npm sta
 
 It listens only on `127.0.0.1:9080`. `/health` reports admission count, not game readiness. `/game` requires the `binary` WebSocket subprotocol. Emscripten's TCP-over-WebSocket stream uses a four-byte little-endian length before each game datagram; the gateway accepts fragmented/coalesced writes and sends one framed UDP reply per binary message. Browser-supplied destinations and query parameters are rejected.
 
-Set the browser runtime's `Module.websocket.url` to the game gateway URL before loading the engine. The legacy runtime expects a string. Real UE handshake, network version compatibility, travel, and reconnect still require gameplay verification against the native authoritative server. Do not expose the stock experimental UE HTML5 WebSocket server: this patch does not fix its server-side listener/disconnect and unbounded-buffer bugs.
+Set the browser runtime's `Module.websocket.url` to the game gateway URL before loading the engine. The legacy runtime expects a string. Bounded real UE handshake, two-context input and reconnect checks against the native server pass. Complete multiplayer combat/travel acceptance remains open. Do not expose the stock experimental UE HTML5 WebSocket server: this patch does not fix its server-side listener/disconnect and unbounded-buffer bugs.
 
 This local gateway has no Tournament identity/rewards contract. Public production admission requires Tournament-issued tickets and staging verification; no packets or browser UI messages award money.
 
