@@ -1,12 +1,18 @@
 param(
     [Parameter(Mandatory=$true)][string]$SourceRoot,
     [ValidateSet('Development','Shipping')][string]$Configuration='Development',
-    [ValidateRange(1,8)][int]$Workers=2
+    [ValidateRange(1,8)][int]$Workers=2,
+    [switch]$ExperimentalGpuSkin8
 )
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $root=(Resolve-Path -LiteralPath $SourceRoot).Path
 if(!(Test-Path "$root\.tournament-browser-port")){throw 'Use an isolated checkout marked .tournament-browser-port'}
+# Explicit on both native-editor and HTML5 builds; no persistent opt-in default.
+$gpuArgs=@($root,'--phase','html5')
+if($ExperimentalGpuSkin8){$gpuArgs+='--experimental-gpu-skin8'}
+$gpuPreflight=& py -3 "$PSScriptRoot\configure-browser-gpu-skin.py" @gpuArgs
+if($LASTEXITCODE){throw 'GPU skin experiment preflight failed'}
 # Prepare validates the isolated SDK, both source guards and the cached native
 # optimizer before any other build setup. Child environments never change ours.
 $previousErrors=$ErrorActionPreference
@@ -18,6 +24,16 @@ try {
 if($prepareResult -ne 0){throw 'Guarded optimizer preparation failed'}
 $optimizer=($prepared -join "`n") | ConvertFrom-Json
 if(!$optimizer.selection){throw 'Guarded optimizer selection receipt missing'}
+# Check again immediately before the optional source mutation. Optimizer prepare's
+# narrower compiler check does not cover GUI editors/servers or MSBuild.
+# This admission snapshot is not a cross-process source lock.
+$admission=& py -3 "$PSScriptRoot\browser-build-admission.py" $root
+if($LASTEXITCODE){throw 'Editor/compiler admission failed; coordinate the selected source freeze first'}
+Write-Output $admission
+$gpuInputs=& py -3 "$PSScriptRoot\configure-browser-gpu-skin.py" @gpuArgs --apply
+if($LASTEXITCODE){throw 'GPU skin experiment source configuration failed'}
+$gpuReceipt=($gpuInputs -join "`n") | ConvertFrom-Json
+if($ExperimentalGpuSkin8){Write-Warning $gpuReceipt.notice}
 & py -3 "$PSScriptRoot\configure-legacy.py" $root
 if($LASTEXITCODE){throw 'Legacy toolchain configuration failed'}
 & "$PSScriptRoot\..\..\scripts\install-plugin.ps1" -SourceRoot $root
@@ -45,6 +61,8 @@ if($LASTEXITCODE){throw 'Browser canvas tile lighting patch failed'}
 if($LASTEXITCODE){throw 'Browser intro schedule bounds patch failed'}
 $logDir="$root\UnrealTournament\Saved\Logs\BrowserPort"
 New-Item -ItemType Directory -Force $logDir | Out-Null
+# This receipt records source inputs only, never successful shader/runtime proof.
+$gpuInputs | Set-Content -LiteralPath "$logDir\gpu-skin-html5-inputs.json" -Encoding UTF8
 $configDir="$root\Engine\Saved\UnrealBuildTool"
 New-Item -ItemType Directory -Force $configDir | Out-Null
 [IO.File]::WriteAllText("$configDir\BuildConfiguration.xml", @"

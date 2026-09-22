@@ -247,7 +247,27 @@
       "skeletalMeshes": 4,
       "shadowTemplates": 2,
       "findings": "Malcolm1p palette51/8influences;3p max66/8 across4LODs, extra vertexstreams agree. Enforcer max6/1 noextra. Both miniCylinder templates use failing blobshadow materials. Original weapon parameter bags/hierarchy captured for scoped restoration.",
-      "repairStatus": "Report only; no material repair or GPUcandidate applied."
+      "repairStatus": "Reviewed weapon repair and one-material shadow diagnostic implemented; native compilation, private asset Apply/Verify and shader/render checks pending. GPU8 source applied only in isolated experimental tree; full native editor build in progress. Current playable browser runtime remains unchanged."
+    },
+    "gpuSkinExperiment": {
+      "enabledByDefault": false,
+      "actualWindowsAdmissionTests": 21,
+      "negativeAdmission": "Blocked only the isolated 7797 server; original streaming server and two clients were independently classified as foreign physical projects. Main stopped only the isolated server with no gateway clients before a clear admission snapshot.",
+      "candidateTests": "14 actual pinned body/host and JavaScript capability checks passed; not GPU shader execution.",
+      "state": "Isolated source applied; full native editor build in progress. No experimental runtime or package promoted.",
+      "limits": "Requires fresh matching shader cook, actual GPU path/animation validation and measured frame pacing; no FPS improvement claimed."
+    },
+    "weaponFidelityRepair": {
+      "privateInputTests": 16,
+      "scope": "18 pristine material instances, five graph clones, four direct-parent changes; nine native saves, 14 restored MICs remain byte-identical.",
+      "state": "Independent source/API review passed; native helper compilation and asset Apply/Verify pending.",
+      "limits": "Host compile-demand tests do not prove UE module, shader compilation or native appearance."
+    },
+    "blobShadowExperiment": {
+      "privateBaselineTests": 13,
+      "scope": "One physical COW primary material; four appended nodes with native default branch retained.",
+      "state": "Independent source/API review passed; no asset Apply, shader or browser verification yet.",
+      "limits": "Geometric normal reconstruction from quantized depth is an explicit approximation, not native GBuffer parity."
     }
   },
   "limitations": [

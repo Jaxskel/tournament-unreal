@@ -28,6 +28,12 @@
 #include "Materials/MaterialExpressionTextureSampleParameter2D.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Materials/MaterialExpressionMultiply.h"
+#include "Materials/MaterialExpressionConstant.h"
+#include "Materials/MaterialExpressionFeatureLevelSwitch.h"
+#include "Materials/MaterialExpressionSetMaterialAttributes.h"
+#include "Materials/MaterialExpressionCustom.h"
+#include "Materials/MaterialExpressionSceneDepth.h"
+#include "Materials/MaterialExpressionCameraVectorWS.h"
 #include "Materials/MaterialExpressionMaterialFunctionCall.h"
 #include "Materials/MaterialFunction.h"
 #include "MaterialShared.h"
@@ -346,6 +352,8 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
 #include "BlobShadowPreflightReport.h"
 #include "WeaponPreflightReport.h"
 #include "PhysicsPreflightReport.h"
+#include "WeaponFidelityRepair.h"
+#include "BlobShadowExperiment.h"
 static bool ReportMeshes(const TArray<FString>& Meshes)
 {
     bool OK = true;
@@ -502,6 +510,12 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
     }
     if (Mode.Equals(TEXT("PhysicsReport"), ESearchCase::IgnoreCase))
         return PhysicsPreflightReport(Params);
+    if (Mode.Equals(TEXT("WeaponRepairApply"), ESearchCase::IgnoreCase))
+        return WeaponFidelityRepair(Params, false);
+    if (Mode.Equals(TEXT("WeaponRepairVerify"), ESearchCase::IgnoreCase))
+        return WeaponFidelityRepair(Params, true);
+    if (Mode.Equals(TEXT("BlobShadowExperiment"), ESearchCase::IgnoreCase))
+        return BlobShadowExperiment(Params);
     const bool Apply = Mode.Equals(TEXT("Apply"), ESearchCase::IgnoreCase);
     const bool Verify = Mode.Equals(TEXT("Verify"), ESearchCase::IgnoreCase);
     const bool Report = Mode.Equals(TEXT("Report"), ESearchCase::IgnoreCase);
