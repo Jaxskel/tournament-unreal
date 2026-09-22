@@ -1,10 +1,10 @@
 {
-  "date": "2026-09-21",
+  "date": "2026-09-22",
   "engine": "UT4 beta / UE4.15 CL3228288",
   "liveSiteChanged": false,
   "localGameReady": false,
   "checks": {
-    "legacyHTML5CompileAndLink": "Passed: latest intro schedule bounds build exit 0 in 353.56 seconds; all nine exports verified, no unresolved symbols. Converted runtime validates; all five transferred runtime hashes match.",
+    "legacyHTML5CompileAndLink": "Passed: corrected-optimizer fresh link exit0 in320.28s (327.33s wrapper). JS/BC/mem/symbol quartet forcibly regenerated; exact corrected native executable invocation verified; source and tool hashes pinned; parent environment restored.",
     "legacyPacketTestsInChrome": "passed",
     "newerLinkerProbe": "passed for packet test only; full engine rejected due C library ABI mismatch",
     "matchingRuntimeWasmConversion": "full module validates; asynchronous Chrome runtime initialization and allocator smoke passed",
@@ -202,8 +202,8 @@
       "diagnosticLimits": "Not a collision fix or performance result. Earlier converted diagnostic retained a cleanup timeout; process absence verified later. Original asm control and extended geometry run completed without page/cleanup error. Four-snapshot admission budget preserved.",
       "geometryDiagnostic": "Opt-in extension built successfully (338.73s). Four complete 35-row reports, no truncation, page error or cleanup error; owned browser exit0. Loaded triangle182 indices315/328/329, remap625 and all three vertices match the cooked native-hit floor. Direct PxGeometryQuery ray misses. Target-only static scene prefilter admits the exact floor once (7 calls total), but ray still misses. Scene admission and UE filtering are not required to reproduce the miss; internal mesh acceleration/intersection remains under investigation.",
       "emittedCodeEvidence": "The legacy simplifyExpressions assignment rule drops a nonzero outer OR operand when its left side is a sequence ending in an integer operation. Its intended |0-only rule lacks a right-operand zero check in both native and JavaScript optimizers. Both generated RTree ray variants consequently lose negative Z sign. Source, prebuilt and linked IR, and pre-optimizer JS preserve it. Actual tiny native/JS probes reproduce dropped masks and side effects; extracted traversal tests restore expected floor leaves when the sign is retained.",
-      "privateCounterfactual": "Private full-game comparison restored only the two reviewed Z-sign operations, preserving all other raw JavaScript bytes and reusing the same memory/assets/glue. All four direct and scene rays hit triangle182 at Z525; UE simple/complex lines and capsules block ModelComponent65 face625. First two samples show Walking on that floor at Z635.291382 with zero velocity. Four reports completed; browser exit0, no page/cleanup error. Later samples have no possessed pawn; exact death cause was not captured. Canonical runtime remains unchanged until a reproducible compiler fix is verified.",
-      "optimizerControl": "Standalone original-asm probe links the same 15 unmodified physics libraries and exact cooked mesh. Baseline reproduces DIRECT_MISS with valid mesh/box control. Fresh warm-cache build with only EMCC_JSOPT_BLACKLIST=simplifyExpressions produces DIRECT_HIT triangle182 Z525 distance364.230103. External memory initializer is identical. A precise guarded optimizer rebuild is pending; canonical full game is not yet fixed."
+      "privateCounterfactual": "Private full-game comparison restored only the two reviewed Z-sign operations, preserving all other raw JavaScript bytes and reusing the same memory/assets/glue. All four direct and scene rays hit triangle182 at Z525; UE simple/complex lines and capsules block ModelComponent65 face625. First two samples show Walking on that floor at Z635.291382 with zero velocity. Four reports completed; browser exit0, no page/cleanup error. Later samples have no possessed pawn; exact death cause was not captured. Historical private experiment; subsequent actual source/tool fix is verified separately in optimizerSourceFix.",
+      "optimizerControl": "Standalone original-asm probe links the same 15 unmodified physics libraries and exact cooked mesh. Baseline reproduces DIRECT_MISS with valid mesh/box control. Fresh warm-cache build with only EMCC_JSOPT_BLACKLIST=simplifyExpressions produces DIRECT_HIT triangle182 Z525 distance364.230103. External memory initializer is identical. Subsequent precise guarded optimizer build and actual full-game movement verification pass; see optimizerSourceFix."
     },
     "materialReadOnlyPreflight": {
       "tests": 27,
@@ -217,10 +217,20 @@
       "runtime": "Both clients remained Ready for eight five-second samples after B joined, with no native assertion or page error. A reconnected successfully; final gateway players zero after owned browser cleanup. Engine and asset fingerprints unchanged throughout.",
       "limits": "Menu remained open; this is a lifecycle/crash regression test, not interactive combat or a representative FPS benchmark. Obsolete Epic analytics requests failed separately."
     },
-    "transitionalEntryDiagnostics": "Source review indicates initial host-only connection returns Browse Pending with empty error, which GameInstance logs as Failed to enter UT-Entry because it tests != Success. Timeline then loads Entry and server Deck successfully. Pending classification is source-backed inference, not an instrumented enum. Separate missing encoded reflection-capture data in UT-Entry is a real cook/visual issue."
+    "transitionalEntryDiagnostics": "Source review indicates initial host-only connection returns Browse Pending with empty error, which GameInstance logs as Failed to enter UT-Entry because it tests != Success. Timeline then loads Entry and server Deck successfully. Pending classification is source-backed inference, not an instrumented enum. Separate missing encoded reflection-capture data in UT-Entry is a real cook/visual issue.",
+    "optimizerSourceFix": {
+      "patcherTests": 15,
+      "nativeToolTests": "8 OR and16 actual traversal cases pass; precise RHS numeric-zero guard in native+JS fallback retains simplifyExpressions",
+      "nativeExecutableSha256": "e7df7ec763d6cb9dc144d261c409cb925cf44ede74aad6a782fbed7781a6c2b2",
+      "wasmSha256": "b2da125f32b4abb59ce63b27d5bcad2d522baf38342ca85962d108036a876252",
+      "freshGeneratedTraversal": "Both variants extracted from fresh game pass8 cooked-tree controls",
+      "actualBrowserFloor": "Four direct/targetScene rays and simple/complex lines/capsules block the correct BSP floor; initial3samplesWalking. No page/cleanup error, ownedexit0. Later sample has unpossessed pawn; cause unconfirmed in that probe.",
+      "actualBrowserMovement": "Private BotFill=1 fixture uses real W500ms+Space after fixed initial diagnostic anchor: walking changesX4600\u21924218.97, jump mode3 positiveZ405.18, landWalkingZ735.29 zeroV onModel65. Four reports; errors[],ownedexit0. Default6bots unchanged.",
+      "publicBuildWrapper": "New cache/provenance/fresh-link wrapper under independent review; descendant cleanup blocker found, not yet accepted or executed onWindows."
+    }
   },
   "limitations": [
-    "Private Deck/Outpost package integrity passes. Initial tile-light crash check and bounded two-client late-join/reconnect test pass, but confirmed browser fall-through at a BSP floor blocks gameplay. 65 distinct material fallbacks need scoped review. Combat, travel and performance remain unverified.",
+    "Private Deck/Outpost package integrity and the targeted floor collision, walking/jump/landing checks pass. 65 distinct material fallbacks need scoped review. Sustained combat, travel, cross-browser gameplay and target performance remain unverified.",
     "WASM Binaryen optimization -O2 produced invalid i64 code in probe; converter does not run those passes",
     "Targets of 120FPS at1080p and60FPS at1440p are not measured results",
     "Tournament production identity, rewards, delayed spectators and anti-cheat require private staging contracts"
