@@ -127,6 +127,38 @@ Invoke-Checked "$port\Engine\Build\BatchFiles\Build.bat" @(
 ) "$scratch\shader-worker-build.log"
 ```
 
+### Native editor prerequisite: Swarm's NETFX SDK headers
+
+A full editor build can fail in `SwarmInterface.cpp:21` with missing `metahost.h`, followed by a missing `SwarmInterface.exp`. The verified recovery used the **official Microsoft-signed .NET Framework 4.8 Developer Pack**, with its SDK and targeting pack installed successfully (exit 0, no restart). This was an installation, not an archive extraction. Verify the installed header and x64 import library before retrying; a .NET runtime alone is not the required SDK evidence.
+
+The pinned engine's `Windows/VCEnvironment.cs:216–237` searches only `NETFXSDK\4.6` registry entries for `KitsInstallationFolder`, even with VS2015/2017. It does not automatically discover 4.8. Lines 682–685 and 787–797 select the SDK's `Include/um` and `Lib/um/x64`; lines 117–130, 706–710 and 824–828 preserve caller `INCLUDE`/`LIB` paths. `SwarmInterface.cpp:30` requests `mscoree.lib`. These references describe the privately inspected matching source; no engine source or SDK payload is distributed here.
+
+Use the actual installed SDK path and process-only environment values around the unchanged [native editor wrapper](build-browser-editor.ps1). Preserve the experiment selection already chosen for the coordinated build; [GPU8](GPU-SKIN-EXPERIMENT.md) remains explicitly opt-in and requires a matching fresh shader cook.
+
+```powershell
+$netfxSdk = 'C:\Program Files (x86)\Windows Kits\NETFXSDK\4.8' # Adjust to verified installation.
+$netfxInclude = Join-Path $netfxSdk 'Include\um'
+$netfxLib = Join-Path $netfxSdk 'Lib\um\x64'
+foreach ($required in @((Join-Path $netfxInclude 'metahost.h'), (Join-Path $netfxLib 'mscoree.lib'))) {
+    if (!(Test-Path -LiteralPath $required -PathType Leaf)) { throw "Missing NETFX SDK file: $required" }
+}
+$nativeBuildArgs = @{ SourceRoot = $port; Workers = 2 }
+# Only for the already coordinated GPU8 experiment:
+# $nativeBuildArgs.ExperimentalGpuSkin8 = $true
+$previousInclude = [Environment]::GetEnvironmentVariable('INCLUDE', 'Process')
+$previousLib = [Environment]::GetEnvironmentVariable('LIB', 'Process')
+try {
+    [Environment]::SetEnvironmentVariable('INCLUDE', (@($previousInclude, $netfxInclude) | Where-Object { $_ }) -join ';', 'Process')
+    [Environment]::SetEnvironmentVariable('LIB', (@($previousLib, $netfxLib) | Where-Object { $_ }) -join ';', 'Process')
+    & "$repo\ports\html5\build-browser-editor.ps1" @nativeBuildArgs
+} finally {
+    [Environment]::SetEnvironmentVariable('INCLUDE', $previousInclude, 'Process')
+    [Environment]::SetEnvironmentVariable('LIB', $previousLib, 'Process')
+}
+```
+
+The observed unchanged-wrapper retry reused compiled outputs: **four editor actions in 9.12 seconds**, then **ShaderCompileWorker in 0.70 seconds**, **10.728 seconds total**. Its makefile was regenerated because `BuildConfiguration.xml` was newer; this does not prove cached makefiles always consume a changed environment. No `-NoUBTMakefiles` addition, clean, global environment change, fabricated registry entry or source bypass was needed. Retain the official installation receipt and actual build logs. This result establishes the native prerequisite recovery, not a fresh end-to-end build/cook replay or browser shader validation.
+
 Explicitly rebuild **each consumer's ShaderFormatOpenGL DLL**, including the worker variant. A rebuilt editor alone can leave shader workers loading the old compiler module:
 
 ```powershell
