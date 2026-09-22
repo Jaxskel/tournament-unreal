@@ -126,7 +126,9 @@ class WindowPatchTests(unittest.TestCase):
     def test_build_integration(self):
         text=Path(__file__).with_name('build-legacy.ps1').read_text()
         self.assertEqual(text.count('patch-browser-window.py'),1)
-        self.assertLess(text.index('patch-browser-window.py'),text.index('UnrealBuildTool.exe'))
+        self.assertLess(text.index('patch-browser-window.py'), text.index('$root link --selection'))
+        helper = Path(__file__).with_name('prepare-browser-optimizer.py').read_text()
+        self.assertIn('Engine/Binaries/DotNET/UnrealBuildTool.exe', helper)
         self.assertIn('patch-browser-window.py" $root --apply',text)
 
 if __name__=='__main__':unittest.main()

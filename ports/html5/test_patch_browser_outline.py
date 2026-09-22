@@ -263,7 +263,9 @@ class OutlinePatchTests(unittest.TestCase):
         invocation='& py -3 "$PSScriptRoot\\patch-browser-outline.py" $root --apply'
         self.assertEqual(text.count('patch-browser-outline.py'),1)
         self.assertIn(invocation+"\nif($LASTEXITCODE){throw 'Browser Outline postprocess patch failed'}",text)
-        self.assertLess(text.index(invocation),text.index('UnrealBuildTool.exe'))
+        self.assertLess(text.index(invocation), text.index('$root link --selection'))
+        helper = Path(__file__).with_name('prepare-browser-optimizer.py').read_text()
+        self.assertIn('Engine/Binaries/DotNET/UnrealBuildTool.exe', helper)
 
 
 if __name__=='__main__': unittest.main(verbosity=2)
