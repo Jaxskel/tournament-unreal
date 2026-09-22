@@ -2,6 +2,32 @@
 // Required top-level includes: MaterialExpressionConstant, FeatureLevelSwitch, SetMaterialAttributes.
 // This separate operation requires pristine MIC copies and a 23-destination physical COW receipt.
 static const TCHAR* WFRRecipeHash = TEXT("11115c4f91274c90437aac5a1f783a16f3b14279");
+// WFR_DIAGNOSTICS_BEGIN
+// Diagnostic-only: no loading, hashing, saving, or predicate re-evaluation.
+// A short one-line context identifies the package/field without dumping baseline data.
+static FString WFRContext(FString Context)
+{
+    Context = Context.Left(320);
+    Context.ReplaceInline(TEXT("\r"), TEXT(" "));
+    Context.ReplaceInline(TEXT("\n"), TEXT(" "));
+    Context.ReplaceInline(TEXT("\t"), TEXT(" "));
+    return Context;
+}
+static bool WFRGate(bool Passed, const TCHAR* Gate, const FString& Context = FString())
+{
+    if (!Passed) UE_LOG(LogUT4Html5Compat, Error, TEXT("COMPAT_WEAPON_REPAIR_DIAG gate=%s context=%s"), Gate, *WFRContext(Context));
+    return Passed;
+}
+static int32 WFRStop(const TCHAR* Gate, const FString& Context = FString())
+{
+    WFRGate(false, Gate, Context);
+    return 1;
+}
+static void WFRStage(const TCHAR* Stage)
+{
+    UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_REPAIR_DIAG stage=%s"), Stage);
+}
+// WFR_DIAGNOSTICS_END
 struct FWeaponRepair
 {
     TMap<FString, FString> Clones, Canonical;
@@ -46,7 +72,7 @@ struct FWeaponRepair
     bool Field(const TSharedPtr<FJsonObject>& A, const TSharedPtr<FJsonObject>& B, const TCHAR* Key) const
     {
         const auto* X = A->Values.Find(Key); const auto* Y = B->Values.Find(Key);
-        return X && Y && Same(*X, *Y);
+        return WFRGate(X && Y && Same(*X, *Y), TEXT("field-mismatch"), Key);
     }
     bool Properties(UObject* A, UObject* B, const TSet<FString>& Skip) const
     {
@@ -234,16 +260,18 @@ struct FWeaponRepair
 
 static int32 WeaponFidelityRepair(const FString& Params, bool Verify)
 {
+    WFRStage(TEXT("entry")); // WFR_DIAGNOSTIC_STAGE
     FString SpecPath, BaselinePath, Receipt, Forbidden;
     if (!GIsEditor || !IsInGameThread() || (!Verify && !FApp::CanEverRender()) ||
         !FParse::Value(*Params, TEXT("WeaponRepairSpec="), SpecPath) ||
         !FParse::Value(*Params, TEXT("WeaponBaseline="), BaselinePath) || !FParse::Value(*Params, TEXT("Receipt="), Receipt) ||
         FParse::Value(*Params, TEXT("Manifest="), Forbidden) || FParse::Param(FCommandLine::Get(), TEXT("NoDependsGathering")))
-    { Fail(TEXT("WeaponRepair requires fixed spec, reviewed baseline, separate COW receipt and fresh editor; Apply requires rendering.")); return 1; }
+    { Fail(TEXT("WeaponRepair requires fixed spec, reviewed baseline, separate COW receipt and fresh editor; Apply requires rendering.")); return WFRStop(TEXT("admission")); }
     TSharedPtr<FJsonObject> Spec, Base;
-    if (!HashFile(SpecPath).Equals(WFRRecipeHash, ESearchCase::IgnoreCase) || !ReadJson(SpecPath, Spec) ||
-        !HashFile(BaselinePath).Equals(Str(Spec, TEXT("baseline_sha1")), ESearchCase::IgnoreCase) || !ReadJson(BaselinePath, Base) || Str(Base, TEXT("schema")) != TEXT("ut4-weapon-fidelity-baseline-v1") ||
-        Str(Base, TEXT("report_sha256")) != Str(Spec, TEXT("report_sha256"))) return 1;
+    if (!WFRGate(HashFile(SpecPath).Equals(WFRRecipeHash, ESearchCase::IgnoreCase), TEXT("recipe-hash"), SpecPath) || !WFRGate(ReadJson(SpecPath, Spec), TEXT("recipe-json"), SpecPath) ||
+        !WFRGate(HashFile(BaselinePath).Equals(Str(Spec, TEXT("baseline_sha1")), ESearchCase::IgnoreCase), TEXT("baseline-hash"), BaselinePath) || !WFRGate(ReadJson(BaselinePath, Base), TEXT("baseline-json"), BaselinePath) || Str(Base, TEXT("schema")) != TEXT("ut4-weapon-fidelity-baseline-v1") ||
+        Str(Base, TEXT("report_sha256")) != Str(Spec, TEXT("report_sha256"))) return WFRStop(TEXT("recipe-baseline"));
+    WFRStage(TEXT("recipe-baseline-passed")); // WFR_DIAGNOSTIC_STAGE
     FWeaponRepair R; R.Verify = Verify; R.Pins = Spec->GetObjectField(TEXT("original_sha1"));
     TSet<FString> Destinations;
     for (const auto& KV : Spec->GetObjectField(TEXT("clones"))->Values)
@@ -251,44 +279,51 @@ static int32 WeaponFidelityRepair(const FString& Params, bool Verify)
     for (const auto& V : Spec->GetArrayField(TEXT("instances"))) { R.Instances.Add(V->AsString()); Destinations.Add(V->AsString().ToLower()); }
     for (const auto& V : Spec->GetArrayField(TEXT("direct_parents"))) R.Direct.Add(V->AsString());
     if (R.Clones.Num() != 5 || R.Instances.Num() != 18 || R.Direct.Num() != 4 || Destinations.Num() != 23 || R.Pins->Values.Num() != 23 ||
-        !R.Policy.Read(Receipt, SpecPath, Destinations) || !R.DiskPins()) return 1;
+        !R.Policy.Read(Receipt, SpecPath, Destinations) || !R.DiskPins()) return WFRStop(TEXT("scope-receipt-original-pins"));
+    WFRStage(TEXT("scope-receipt-pins-passed")); // WFR_DIAGNOSTIC_STAGE
     for (const auto& V : Base->GetArrayField(TEXT("materials")))
     {
         auto B = V->AsObject(); const FString P = FPackageName::ObjectPathToPackageName(Str(B, TEXT("material")));
-        if (R.Baseline.Contains(P)) return 1;
+        if (R.Baseline.Contains(P)) return WFRStop(TEXT("baseline-duplicate"), P);
         R.Baseline.Add(P, B);
     }
-    if (R.Baseline.Num() != 19) return 1;
+    if (R.Baseline.Num() != 19) return WFRStop(TEXT("baseline-count"), FString::FromInt(R.Baseline.Num()));
+    WFRStage(TEXT("baseline-index-passed")); // WFR_DIAGNOSTIC_STAGE
     // This operation must be the first loader of originals and destination clones.
-    for (const auto& KV : R.Pins->Values) if (FindPackage(nullptr, *KV.Key)) return 1;
+    for (const auto& KV : R.Pins->Values) if (FindPackage(nullptr, *KV.Key)) return WFRStop(TEXT("original-already-loaded"), KV.Key);
     for (const auto& KV : R.Clones)
-        if (FindPackage(nullptr, *KV.Value) || (!Verify && FPackageName::DoesPackageExist(KV.Value))) return 1;
+        if (FindPackage(nullptr, *KV.Value) || (!Verify && FPackageName::DoesPackageExist(KV.Value))) return WFRStop(TEXT("clone-loaded-or-existing"), KV.Value);
+    WFRStage(TEXT("unloaded-gates-passed")); // WFR_DIAGNOSTIC_STAGE
     IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-    Registry.SearchAllAssets(true); if (Registry.IsLoadingAssets()) return 1;
+    Registry.SearchAllAssets(true); if (Registry.IsLoadingAssets()) return WFRStop(TEXT("registry-still-loading"));
+    WFRStage(TEXT("load-originals")); // WFR_DIAGNOSTIC_STAGE
     for (const auto& KV : R.Pins->Values)
     {
         UObject* O = LoadObject<UObject>(nullptr, *ObjectPath(KV.Key));
-        if (!O || (R.Instances.Contains(KV.Key) ? !Cast<UMaterialInstanceConstant>(O) : !R.Expressions(O))) return 1;
+        if (!O || (R.Instances.Contains(KV.Key) ? !Cast<UMaterialInstanceConstant>(O) : !R.Expressions(O))) return WFRStop(TEXT("original-load-or-type"), KV.Key);
         R.Objects.Add(KV.Key, O);
     }
-    for (const FString& P : R.Instances) if (!R.Instance(CastChecked<UMaterialInstanceConstant>(R.Objects.FindChecked(P)))) return 1;
+    WFRStage(TEXT("check-original-instances")); // WFR_DIAGNOSTIC_STAGE
+    for (const FString& P : R.Instances) if (!R.Instance(CastChecked<UMaterialInstanceConstant>(R.Objects.FindChecked(P)))) return WFRStop(TEXT("original-instance"), P);
+    WFRStage(TEXT("describe-original-master")); // WFR_DIAGNOSTIC_STAGE
     auto* OriginalMaster = Cast<UMaterial>(R.Objects.FindChecked(WRMaster()));
-    auto* Expected = R.Baseline.Find(WRMaster()); if (!OriginalMaster || !Expected) return 1;
+    auto* Expected = R.Baseline.Find(WRMaster()); if (!OriginalMaster || !Expected) return WFRStop(TEXT("original-master-or-baseline"), WRMaster());
     TSharedPtr<FJsonObject> OriginalFacts;
-    if (!MRDescribe(OriginalMaster, Registry, OriginalFacts)) return 1;
+    if (!MRDescribe(OriginalMaster, Registry, OriginalFacts)) return WFRStop(TEXT("original-master-describe"), WRMaster());
     auto Roots = OriginalFacts->GetObjectField(TEXT("roots"));
     Roots->SetObjectField(TEXT("Metallic"), MRPin(OriginalMaster->GetExpressionInputForProperty(MP_Metallic)));
     Roots->SetObjectField(TEXT("Roughness"), MRPin(OriginalMaster->GetExpressionInputForProperty(MP_Roughness)));
     Roots->SetObjectField(TEXT("Specular"), MRPin(OriginalMaster->GetExpressionInputForProperty(MP_Specular)));
     if (!R.Field(*Expected, OriginalFacts, TEXT("nodes")) ||
-        !R.Field(*Expected, OriginalFacts, TEXT("roots")) || !R.Field(*Expected, OriginalFacts, TEXT("package_sha1"))) return 1;
+        !R.Field(*Expected, OriginalFacts, TEXT("roots")) || !R.Field(*Expected, OriginalFacts, TEXT("package_sha1"))) return WFRStop(TEXT("original-master-snapshot"), WRMaster());
     for (const auto& KV : (*Expected)->GetObjectField(TEXT("package_sha1"))->Values) R.Pins->SetField(KV.Key, KV.Value);
+    WFRStage(TEXT("prepare-clones")); // WFR_DIAGNOSTIC_STAGE
     for (const auto& KV : R.Clones)
     {
         UObject* O = Verify ? LoadObject<UObject>(nullptr, *ObjectPath(KV.Value)) :
             DuplicateObject<UObject>(R.Objects.FindChecked(KV.Key), CreatePackage(nullptr, *KV.Value), FName(*FPackageName::GetShortName(KV.Value)));
-        if (!O || O->GetClass() != R.Objects.FindChecked(KV.Key)->GetClass() || !R.Expressions(O)) return 1;
-        for (auto* E : *R.Expressions(O)) if (!E || E->GetOuter() != O) return 1;
+        if (!O || O->GetClass() != R.Objects.FindChecked(KV.Key)->GetClass() || !R.Expressions(O)) return WFRStop(TEXT("clone-load-or-type"), KV.Value);
+        for (auto* E : *R.Expressions(O)) if (!E || E->GetOuter() != O) return WFRStop(TEXT("clone-expression-owner"), KV.Value);
         R.Objects.Add(KV.Value, O);
     }
     if (!Verify)
@@ -298,20 +333,21 @@ static int32 WeaponFidelityRepair(const FString& Params, bool Verify)
             UObject* O = R.Objects.FindChecked(KV.Value);
             for (auto* E : *R.Expressions(O)) if (auto* Call = Cast<UMaterialExpressionMaterialFunctionCall>(E))
             {
-                if (!Call->MaterialFunction) return 1;
+                if (!Call->MaterialFunction) return WFRStop(TEXT("function-call-null"), E->GetPathName());
                 const FString* Dest = R.Clones.Find(Call->MaterialFunction->GetOutermost()->GetName());
                 if (Dest && !Call->SetMaterialFunction(Cast<UMaterialFunction>(O), Call->MaterialFunction,
-                    CastChecked<UMaterialFunction>(R.Objects.FindChecked(*Dest)))) return 1;
+                    CastChecked<UMaterialFunction>(R.Objects.FindChecked(*Dest)))) return WFRStop(TEXT("function-remap"), E->GetPathName());
             }
         }
     }
+    WFRStage(TEXT("check-ao-wpo")); // WFR_DIAGNOSTIC_STAGE
     const FString MF = TEXT("/Game/RestrictedAssets/Weapons/Global/Material/MF/");
     const FString Texture = MF + TEXT("MF_BaseShader_Textures"), Dirt = MF + TEXT("MF_Dirt");
     R.AOAliases(Texture, TEXT("MaterialExpressionPrecomputedAOMask_0")); R.AOAliases(Dirt, TEXT("MaterialExpressionPrecomputedAOMask_4"));
     if (!R.AO(R.Objects.FindChecked(R.Clones.FindChecked(Texture)), TEXT("MaterialExpressionPrecomputedAOMask_0")) ||
-        !R.AO(R.Objects.FindChecked(R.Clones.FindChecked(Dirt)), TEXT("MaterialExpressionPrecomputedAOMask_4"))) return 1;
+        !R.AO(R.Objects.FindChecked(R.Clones.FindChecked(Dirt)), TEXT("MaterialExpressionPrecomputedAOMask_4"))) return WFRStop(TEXT("ao-branches"));
     auto* Master = CastChecked<UMaterial>(R.Objects.FindChecked(R.Clones.FindChecked(WRMaster())));
-    if (!R.WPO(Master)) return 1;
+    if (!R.WPO(Master)) return WFRStop(TEXT("wpo-branch"));
     if (!Verify)
     {
         for (const auto& KV : R.Clones) R.Objects.FindChecked(KV.Value)->PostEditChange();
@@ -319,11 +355,12 @@ static int32 WeaponFidelityRepair(const FString& Params, bool Verify)
         for (const FString& P : R.Direct)
         {
             auto* MI = CastChecked<UMaterialInstanceConstant>(R.Objects.FindChecked(P));
-            if (MI->Parent != OriginalMaster) return 1;
+            if (MI->Parent != OriginalMaster) return WFRStop(TEXT("direct-parent"), P);
             Update.AddMaterialInstance(MI); MI->SetParentEditorOnly(Master);
         }
     }
-    if (!R.Graph(Master, *Expected)) return 1;
+    WFRStage(TEXT("check-clone-graph")); // WFR_DIAGNOSTIC_STAGE
+    if (!R.Graph(Master, *Expected)) return WFRStop(TEXT("clone-graph"));
     for (const auto& KV : R.Clones)
     {
         TSet<FString> Skip; Skip.Add(TEXT("StateId")); Skip.Add(TEXT("Expressions"));
@@ -334,26 +371,28 @@ static int32 WeaponFidelityRepair(const FString& Params, bool Verify)
         // Pinned UMaterialInterface PostDuplicate/PostEditChangeProperty regenerate this cache identity.
         Skip.Add(TEXT("LightingGuid"));
         if (!R.Properties(R.Objects.FindChecked(KV.Key), R.Objects.FindChecked(KV.Value), Skip))
-        { Fail(TEXT("WeaponRepair cloned object properties drift: ") + KV.Key); return 1; }
+        { Fail(TEXT("WeaponRepair cloned object properties drift: ") + KV.Key); return WFRStop(TEXT("clone-properties"), KV.Key); }
     }
-    for (const FString& P : R.Instances) if (!R.Instance(CastChecked<UMaterialInstanceConstant>(R.Objects.FindChecked(P)))) return 1;
-    if (!R.DiskPins()) return 1;
+    for (const FString& P : R.Instances) if (!R.Instance(CastChecked<UMaterialInstanceConstant>(R.Objects.FindChecked(P)))) return WFRStop(TEXT("reparented-instance"), P);
+    if (!R.DiskPins()) return WFRStop(TEXT("pre-save-disk-pins"));
     TArray<FString> Saves; for (const auto& KV : R.Clones) Saves.Add(KV.Value);
-    Saves.Append(R.Direct); Saves.Sort(); if (Saves.Num() != 9) return 1;
+    Saves.Append(R.Direct); Saves.Sort(); if (Saves.Num() != 9) return WFRStop(TEXT("save-count"), FString::FromInt(Saves.Num()));
+    WFRStage(TEXT("all-semantic-checks-passed")); // WFR_DIAGNOSTIC_STAGE
     // No disk mutation until every structural, override, provenance and destination check passes.
-    for (const FString& P : Saves) if (!R.Policy.Check(P)) return 1;
+    for (const FString& P : Saves) if (!R.Policy.Check(P)) return WFRStop(TEXT("save-policy"), P);
+    WFRStage(TEXT("save-policy-passed")); // WFR_DIAGNOSTIC_STAGE
     for (const FString& P : Saves)
     {
         UObject* O = R.Objects.FindChecked(P);
         if (!Verify)
         {
             O->MarkPackageDirty();
-            if (!UPackage::SavePackage(O->GetOutermost(), O, RF_Public | RF_Standalone, *R.Policy.Files.FindChecked(P.ToLower()))) return 1;
+            if (!UPackage::SavePackage(O->GetOutermost(), O, RF_Public | RF_Standalone, *R.Policy.Files.FindChecked(P.ToLower()))) return WFRStop(TEXT("save-package"), P);
         }
         UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_REPAIR package=%s sha1=%s saved=%d"), *P,
             *HashFile(R.Policy.Files.FindChecked(P.ToLower())), Verify ? 0 : 1);
     }
-    R.Verify = true; if (!R.DiskPins()) return 1;
+    R.Verify = true; if (!R.DiskPins()) return WFRStop(TEXT("post-save-disk-pins"));
     UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_REPAIR complete mode=%s destinations=23 saves=%d untouchedMICs=14; shader/runtime validation still required"), Verify ? TEXT("verify") : TEXT("apply"), Verify ? 0 : 9);
     return 0;
 }

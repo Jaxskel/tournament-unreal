@@ -69,6 +69,68 @@ class FixedScope(unittest.TestCase):
         self.assertIn('Verify && Direct.Contains(KV.Key)', text)
 
 
+class Diagnostics(unittest.TestCase):
+    @staticmethod
+    def erase_call(text, name, replacement):
+        # Balanced parentheses/quoted strings: preserve the first argument verbatim.
+        needle = name + '('
+        while needle in text:
+            start = text.index(needle)
+            pos = start + len(needle)
+            depth, quoted, escaped, comma = 1, False, False, None
+            for end in range(pos, len(text)):
+                ch = text[end]
+                if quoted:
+                    if escaped:
+                        escaped = False
+                    elif ch == chr(92):
+                        escaped = True
+                    elif ch == '"':
+                        quoted = False
+                    continue
+                if ch == '"':
+                    quoted = True
+                elif ch == '(':
+                    depth += 1
+                elif ch == ')':
+                    depth -= 1
+                    if depth == 0:
+                        break
+                elif ch == ',' and depth == 1 and comma is None:
+                    comma = end
+            else:
+                raise AssertionError('unterminated diagnostic call')
+            first = text[pos:comma if comma is not None else end]
+            text = text[:start] + (first if replacement is None else replacement) + text[end + 1:]
+        return text
+
+    def test_diagnostic_inverse_recovers_frozen_repair_byte_exact(self):
+        text = HEADER.read_text()
+        text, count = re.subn(r'// WFR_DIAGNOSTICS_BEGIN\n.*?// WFR_DIAGNOSTICS_END\n', '', text, flags=re.S)
+        self.assertEqual(count, 1)
+        text, count = re.subn(r'    WFRStage\(TEXT\("[^"\n]+"\)\); // WFR_DIAGNOSTIC_STAGE\n', '', text)
+        self.assertEqual(count, 13)
+        text = self.erase_call(text, 'WFRGate', None)
+        text = self.erase_call(text, 'WFRStop', '1')
+        self.assertEqual(hashlib.sha256(text.encode()).hexdigest(),
+                         '7aa3e67cf02200e0357736d4a11f93e38d58eb8758c4078828491b175df5cf9f')
+
+    def test_every_main_failure_has_bounded_diagnostic_context(self):
+        text = HEADER.read_text()
+        body = text[text.index('static int32 WeaponFidelityRepair('):]
+        self.assertNotIn('return 1;', body)
+        self.assertEqual(body.count('return WFRStop('), 28)
+        for gate in ('original-already-loaded', 'clone-loaded-or-existing', 'baseline-duplicate',
+                     'recipe-hash', 'baseline-hash', 'original-master-snapshot', 'save-policy', 'save-package'):
+            self.assertIn('TEXT("' + gate + '")', body)
+        helper = text.split('// WFR_DIAGNOSTICS_BEGIN\n')[1].split('// WFR_DIAGNOSTICS_END')[0]
+        self.assertIn('Context.Left(320)', helper)
+        self.assertIn('return Passed;', helper)
+        for forbidden in ('LoadObject', 'SavePackage', 'MarkPackageDirty', 'HashFile', 'SetParent', 'ReadJson'):
+            self.assertNotIn(forbidden, helper)
+        self.assertIn('return WFRGate(X && Y && Same(*X, *Y), TEXT("field-mismatch"), Key);', text)
+
+
 class PhysicalView(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

@@ -34,7 +34,92 @@ def body(text, name):
 def shader(): return source().split('R"SHADER(', 1)[1].split(')SHADER"', 1)[0]
 
 
+def diagnostics_inverse(text):
+    text = re.sub(r'// BSX_DIAGNOSTICS_BEGIN:.*?// BSX_DIAGNOSTICS_END\n\n', '', text, flags=re.S)
+    text = re.sub(r'^\s*BSXDiagnosticLines = 0; // diagnostic-only per invocation\n', '', text, flags=re.M)
+    text = re.sub(r'^ *BSXStage\(TEXT\("[a-z_]+"\)\);\n', '', text, flags=re.M)
+    while True:
+        matches = list(re.finditer(r'\b(BSXBad|BSXGood)\(', text))
+        if not matches: return text
+        found = matches[-1]; start = found.end(); depth = 0; quote = None; escape = False; comma = None
+        for end in range(start, len(text)):
+            c = text[end]
+            if quote:
+                if escape: escape = False
+                elif c == '\\': escape = True
+                elif c == quote: quote = None
+            elif c in ('"', "'"): quote = c
+            elif c == '(': depth += 1
+            elif c == ')':
+                if depth == 0: break
+                depth -= 1
+            elif c == ',' and depth == 0 and comma is None: comma = end
+        if comma is None: raise AssertionError('Missing diagnostic label')
+        original = text[start:comma]
+        if found.group(1) == 'BSXBad':
+            if not (original.startswith('(') and original.endswith(')')): raise AssertionError('Missing exact predicate parentheses')
+            original = original[1:-1]
+        text = text[:found.start()] + original + text[end+1:]
+
+
 class ExperimentTests(unittest.TestCase):
+    def test_diagnostic_inverse_is_exact_previously_compiled_header(self):
+        restored = diagnostics_inverse(source())
+        self.assertEqual(hashlib.sha256(restored.encode()).hexdigest(),
+                         'e9a1cfc86c68c6da5f6afff9091c82a8a86a7737bb3eafc0b2c6c38860b2dc29')
+        self.assertIn('BSXStage(TEXT("presave_gates_accepted"))', source())
+        self.assertLess(source().index('BSXStage(TEXT("presave_gates_accepted"))'), source().index('Policy.Save(M)'))
+        labels = re.findall(r'TEXT\("((?:BSX\w+|BlobShadowExperiment):L\d+\.\d+)"\)', source())
+        self.assertEqual(len(labels), 113)
+        self.assertEqual(len(set(labels)), 113)
+
+    def test_actual_diagnostic_helpers_preserve_results_short_circuit_and_budget(self):
+        compiler = shutil.which('clang++') or shutil.which('g++')
+        if not compiler: self.fail('Host C++ compiler required for diagnostic fixture')
+        text = source()
+        helpers = text.split('// BSX_DIAGNOSTICS_BEGIN:', 1)[1].split('// BSX_DIAGNOSTICS_END', 1)[0]
+        helpers = helpers[helpers.index('static int32'):]
+        prefix = r'''
+#include <cassert>
+#include <string>
+#define TEXT(x) L##x
+using int32 = int; using TCHAR = wchar_t;
+int LogCalls = 0; std::wstring LastGate, LastContext;
+void Record(const TCHAR*, const TCHAR* Gate, const TCHAR* Context = L"") {
+ ++LogCalls; LastGate=Gate; LastContext=Context;
+}
+#define UE_LOG(Category, Verbosity, Format, ...) Record(Format, __VA_ARGS__)
+'''
+        main = r'''
+int main() {
+ assert(!BSXBad(false,L"pass")); assert(BSXGood(true,L"pass")); assert(LogCalls==0);
+ int Object=1; int* Null=nullptr; const int* Present=&Object;
+ assert(!BSXBad(Null,L"null-pointer")); assert(LogCalls==0);
+ assert(BSXBad(Present,L"present-pointer",L"pointer-context"));
+ assert(LogCalls==1&&LastContext==L"pointer-context");
+ BSXDiagnosticLines=0; LogCalls=0;
+ assert(BSXBad(true,L"failed",L"field")); assert(LogCalls==1&&LastGate==L"failed"&&LastContext==L"field");
+ assert(!BSXGood(false,L"comparison")); assert(LogCalls==2);
+ int Evaluated=0;
+ bool A=BSXBad((++Evaluated==1),L"first") || BSXBad((++Evaluated==2),L"must-not-run");
+ assert(A&&Evaluated==1);
+ Evaluated=0;
+ bool B=BSXBad((++Evaluated==0),L"first-pass") || BSXBad((++Evaluated==2),L"second-fail");
+ assert(B&&Evaluated==2);
+ BSXStage(L"stage");
+ for(int i=0;i<200;++i) { assert(BSXBad(true,L"budget")); assert(!BSXGood(false,L"budget")); BSXStage(L"bounded"); }
+ assert(LogCalls==64&&BSXDiagnosticLines==64);
+ assert(!BSXBad(false,L"still-pass")); assert(BSXGood(true,L"still-pass"));
+}
+'''
+        with tempfile.TemporaryDirectory(prefix='ut4-blob-diagnostics-') as temp:
+            root = Path(temp); cpp = root/'diagnostics.cpp'; exe = root/'diagnostics-test'
+            cpp.write_text(prefix + helpers + main)
+            result = subprocess.run([compiler, '-std=c++14', '-Wall', '-Wextra', '-Werror', str(cpp), '-o', str(exe)],
+                                    capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            subprocess.run([str(exe)], check=True, timeout=10)
+
     def test_recipe_is_byte_pinned(self):
         pin = re.search(r'BSXSpecSHA1 = TEXT\("([0-9a-f]{40})"\)', source()).group(1)
         self.assertEqual(hashlib.sha1(SPEC.read_bytes()).hexdigest(), pin)
