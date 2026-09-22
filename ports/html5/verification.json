@@ -14,7 +14,7 @@
       1080
     ],
     "mapLoaded": true,
-    "fpsMeasured": false,
+    "fpsMeasured": true,
     "multiplayerGameplayVerified": false,
     "gatewayTests": 42,
     "existingBrowserRegressionTests": 70,
@@ -227,7 +227,12 @@
       "actualBrowserFloor": "Four direct/targetScene rays and simple/complex lines/capsules block the correct BSP floor; initial3samplesWalking. No page/cleanup error, ownedexit0. Later sample has unpossessed pawn; cause unconfirmed in that probe.",
       "actualBrowserMovement": "Private BotFill=1 fixture uses real W500ms+Space after fixed initial diagnostic anchor: walking changesX4600\u21924218.97, jump mode3 positiveZ405.18, landWalkingZ735.29 zeroV onModel65. Four reports; errors[],ownedexit0. Default6bots unchanged.",
       "publicBuildWrapper": "New cache/provenance/fresh-link wrapper under independent review; descendant cleanup blocker found, not yet accepted or executed onWindows."
-    }
+    },
+    "fpsMeasurementScope": "Short fixed1080p/1440p Chrome headless six-bot runs around60 median engine callbacks/s; user reports around100 in interactive play with dips. Neither sustained120 nor presented-frame targets accepted. Firefox short1080p around18 median engineFPS.",
+    "multiplayerInputReconnect": "Two independent Chrome contexts joined native server, moved/fired, B remained while A reconnected; authoritative server events recorded incoming human deaths, no pageerrors. Precise PvP aim/kill and full-round multiplayer acceptance pending.",
+    "automaticRotation": "Shortened one-frag rounds repeatedly loaded Deck\u2192Outpost\u2192Deck with visible Outpost winner screen. Outpost overexposed; default-round acceptance pending.",
+    "startupOverlap": "Implemented ordered support/data scripts concurrently with WASM compile, engine gated onboth.6unit+1browser ordering test, broader65pass1skip. Actual6bot Ready14.5115s packagecomplete1.577s; no meaningful speedup vsprior14.5345s claimed.",
+    "practiceMenuPause": "Native scoped standalone ownership/epoch exports + frame-fenced JS resume implemented; independent source/API review and36focusedtests pass. New native build and actualgamepause stillpending."
   },
   "limitations": [
     "Private Deck/Outpost package integrity and the targeted floor collision, walking/jump/landing checks pass. 65 distinct material fallbacks need scoped review. Sustained combat, travel, cross-browser gameplay and target performance remain unverified.",
