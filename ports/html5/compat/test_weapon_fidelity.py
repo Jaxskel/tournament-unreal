@@ -21,8 +21,43 @@ PRIVATE_LOG = None
 HEADER = W.HERE / 'UT4Html5Compat/Source/UT4Html5Compat/Private/WeaponFidelityRepair.h'
 
 
+def without_tess(text):
+    """Byte-exact inverse of verifier reuse, before the historical UV0 inverse."""
+    block = re.search(r'// WFR_TESS_FINAL_BEGIN\n.*?// WFR_TESS_FINAL_END\n\n', text, re.S)
+    assert block
+    body = block.group().split('\n{\n', 1)[1].rsplit('    return 0;\n}', 1)[0]
+    text = text[:block.start()] + text[block.end():]
+    old = '    if (WFRFinalChecks(R, Master, Expected) != 0) return WFRStop(TEXT("final-checks"));\n'
+    assert text.count(old) == 1
+    text = text.replace(old, body)
+    for name in ('NODE', 'ADMISSION'):
+        text, count = re.subn(r'^ +// WFR_TESS_' + name + r'_BEGIN\n.*?^ +// WFR_TESS_' + name + r'_END\n', '', text, flags=re.M | re.S)
+        assert count == 1
+    for line in (
+        '    bool Tess1 = false; // Read-only existing-state verifier; upgrade owns the sole mutation.\n',
+        '        if (Tess1 && (!Pin(Set->Inputs[3], One) || Set->AttributeSetTypes[2] != FMaterialAttributeDefinitionMap::GetID(MP_TessellationMultiplier))) return false;\n',
+        '    R.Tess1 = Tess1;\n',
+        '    if (VerifiedState) *VerifiedState = R;\n',
+    ):
+        assert text.count(line) == 1, line
+        text = text.replace(line, '')
+    for new, old in (
+        ('bool Verify, FWeaponRepair* VerifiedState = nullptr, bool Tess1 = false)', 'bool Verify)'),
+        ('(Tess1 ? 4 : (UV0 ? 3 : 2))', '(UV0 ? 3 : 2)'),
+        ('(Tess1 ? 3 : (UV0 ? 2 : 1))', '(UV0 ? 2 : 1)'),
+        ('(Tess1 ? 8 : (UV0 ? 7 : 6))', '(UV0 ? 7 : 6)'),
+        ('R.Tess1 ? TEXT("es2-uv0-tess1") : (R.UV0 ? TEXT("es2-uv0-passthrough") : TEXT("original-six-node"))',
+         'R.UV0 ? TEXT("es2-uv0-passthrough") : TEXT("original-six-node")'),
+    ):
+        assert text.count(new) == 1, new
+        text = text.replace(new, old)
+    assert hashlib.sha256(text.encode()).hexdigest() == '7437413683b1349efc03665c81c58b214244635d350b4915cd1ce57fee9a301d'
+    return text
+
+
 def without_uv0(text):
     """Remove only the reviewed opt-in delta; retain the historical inverse checks."""
+    text = without_tess(text)
     for name in ('NODE', 'PIN'):
         text = re.sub(r'^    [^\n]*// WFR_UV0_' + name + r'_BEGIN\n.*?^    [^\n]*// WFR_UV0_' + name + r'_END\n',
                       '', text, flags=re.M | re.S)
@@ -46,7 +81,7 @@ def without_uv0(text):
     return text
 
 
-def prove_uv0_identity(master):
+def prove_uv0_identity(master, attribute='CustomizedUVs0', attribute_id='D30EC284E13A416087BB52302ED115DC', identity='uv0'):
     """Follow attribute demand through the captured graph, all switch arms included.
 
     This proves a finite-alpha value identity, not compilation success. Alpha is
@@ -56,7 +91,7 @@ def prove_uv0_identity(master):
     """
     nodes = {n['path']: n for n in master['nodes']}
     assert len(nodes) == len(master['nodes'])
-    uv_id = 'D30EC284E13A416087BB52302ED115DC'
+    uv_id = attribute_id
     seen, blends, switches, leaves = set(), set(), set(), set()
     calls = 0
     completed = {}
@@ -109,30 +144,30 @@ def prove_uv0_identity(master):
             return wire(ins[0], context, active)
         if kind == 'MaterialExpressionMakeMaterialAttributes':
             assert output == 0
-            pin = next(i for i in ins if i['name'] == 'CustomizedUVs0')
+            pin = next(i for i in ins if i['name'] == attribute)
             assert not pin['expression'], 'custom UV0 overrides the default'
             leaves.add(path)
-            return 'uv0'
+            return identity
         if kind == 'MaterialExpressionBlendMaterialAttributes':
             assert output == 0 and p['VertexAttributeBlendType'] == ''
-            assert wire(ins[0], context, active) == wire(ins[1], context, active) == 'uv0'
+            assert wire(ins[0], context, active) == wire(ins[1], context, active) == identity
             blends.add(path)
-            return 'uv0'
+            return identity
         if kind in ('MaterialExpressionStaticSwitchParameter', 'MaterialExpressionStaticSwitch'):
             assert output == 0
-            assert wire(ins[0], context, active) == wire(ins[1], context, active) == 'uv0'
+            assert wire(ins[0], context, active) == wire(ins[1], context, active) == identity
             switches.add(path)
-            return 'uv0'
+            return identity
         if kind in ('MaterialExpressionFeatureLevelSwitch', 'MaterialExpressionQualitySwitch'):
             assert output == 0 and ins[0]['expression']
             for pin in ins:
                 if pin['expression']:
-                    assert wire(pin, context, active) == 'uv0'
+                    assert wire(pin, context, active) == identity
             switches.add(path)
-            return 'uv0'
+            return identity
         raise AssertionError('unsupported attribute producer: ' + path)
 
-    assert wire(master['roots']['MaterialAttributes'], (), set()) == 'uv0'
+    assert wire(master['roots']['MaterialAttributes'], (), set()) == identity
     return {'visited': seen, 'blends': blends, 'switches': switches, 'leaves': leaves}
 
 
@@ -144,8 +179,9 @@ class UV0Passthrough(unittest.TestCase):
         return next(r for r in rows if r['material'].split('.', 1)[0] == W.report.MASTER)
 
     def test_opt_in_delta_and_existing_state_admission(self):
-        text = HEADER.read_text()
-        self.assertEqual(hashlib.sha256(without_uv0(text).encode()).hexdigest(),
+        raw = HEADER.read_text()
+        text = without_tess(raw)
+        self.assertEqual(hashlib.sha256(without_uv0(raw).encode()).hexdigest(),
                          '00b0e0e27a7dd08ce43fa8a9b650b253cacef3de8a96ec8a89730290c99e8fd5')
         self.assertIn('R.UV0 = FParse::Param(*Params, TEXT("WeaponUV0"));', text)
         self.assertIn('(!Verify && FPackageName::DoesPackageExist(KV.Value))', text)
@@ -356,7 +392,7 @@ class Diagnostics(unittest.TestCase):
         self.assertLess(body.index('if (!Verify)\n    {\n        for (const auto& KV : R.Clones)'), body.index('// WFR_REBIND_BEGIN'))
 
     def test_every_main_failure_has_bounded_diagnostic_context(self):
-        text = HEADER.read_text()
+        text = without_tess(HEADER.read_text())
         body = text[text.index('static int32 WeaponFidelityRepair('):]
         self.assertNotIn('return 1;', body)
         self.assertEqual(body.count('return WFRStop('), 31)

@@ -271,10 +271,13 @@ int main() {
 
     def test_dispatch_inverse_preserves_frozen_existing_modes(self):
         cpp = HEADER.with_name('UT4Html5Compat.cpp').read_text()
+        cpp, count = re.subn(r'    // EXPLICIT_MODE_ADMISSION_BEGIN\n.*?    // EXPLICIT_MODE_ADMISSION_END\n', '', cpp, flags=re.S)
+        self.assertEqual(count, 1)
         for name in ('Constant', 'FeatureLevelSwitch', 'SetMaterialAttributes', 'Custom', 'SceneDepth', 'CameraVectorWS'):
             line = '#include "Materials/MaterialExpression%s.h"\n' % name
             self.assertEqual(cpp.count(line), 1); cpp = cpp.replace(line, '')
-        for name in ('WeaponFidelityRepair', 'BlobShadowExperiment', 'WeaponSupplementReport'):
+        for name in ('WeaponFidelityRepair', 'BlobShadowExperiment', 'WeaponSupplementReport',
+                     'WeaponTessellationUpgrade', 'WeaponShaderProbe'):
             line = '#include "%s.h"\n' % name
             self.assertEqual(cpp.count(line), 1); cpp = cpp.replace(line, '')
         for mode, call in (('WeaponRepairApply', 'WeaponFidelityRepair(Params, false)'),
@@ -283,6 +286,11 @@ int main() {
                            ('WeaponSupplementReport', 'WeaponSupplementReport(Params)')):
             block = '    if (Mode.Equals(TEXT("%s"), ESearchCase::IgnoreCase))\n        return %s;\n' % (mode, call)
             self.assertEqual(cpp.count(block), 1); cpp = cpp.replace(block, '')
+        for flag, call in (('WeaponTessUpgrade', 'WeaponTessellationUpgrade(Params, false)'),
+                           ('WeaponTessVerify', 'WeaponTessellationUpgrade(Params, true)'),
+                           ('WeaponShaderProbe', 'WeaponShaderProbe(Params)')):
+            line = '    if (FParse::Param(*Params, TEXT("%s"))) return %s;\n' % (flag, call)
+            self.assertEqual(cpp.count(line), 1); cpp = cpp.replace(line, '', 1)
         self.assertEqual(hashlib.sha256(cpp.encode()).hexdigest(),
                          '2ab000d06f3a3224077786775c5694196fa1b9c2820e408fdccc4c73aea8b7fc')
 

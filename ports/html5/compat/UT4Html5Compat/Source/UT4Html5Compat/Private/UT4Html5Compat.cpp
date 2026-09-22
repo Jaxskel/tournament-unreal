@@ -354,6 +354,8 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
 #include "WeaponSupplementReport.h"
 #include "PhysicsPreflightReport.h"
 #include "WeaponFidelityRepair.h"
+#include "WeaponTessellationUpgrade.h"
+#include "WeaponShaderProbe.h"
 #include "BlobShadowExperiment.h"
 static bool ReportMeshes(const TArray<FString>& Meshes)
 {
@@ -495,6 +497,21 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
     FParse::Value(*Params, TEXT("Manifest="), ManifestPath);
     FParse::Value(*Params, TEXT("Receipt="), ReceiptPath);
     FParse::Value(*Params, TEXT("Meshes="), MeshOverride);
+    // EXPLICIT_MODE_ADMISSION_BEGIN
+    // Reject conflicting operations before any report, load or asset write.
+    const bool TessUpgradeMode = FParse::Param(*Params, TEXT("WeaponTessUpgrade"));
+    const bool TessVerifyMode = FParse::Param(*Params, TEXT("WeaponTessVerify"));
+    const bool ShaderProbeMode = FParse::Param(*Params, TEXT("WeaponShaderProbe"));
+    const int32 ExplicitModeCount = int32(TessUpgradeMode) + int32(TessVerifyMode) + int32(ShaderProbeMode);
+    const bool ShaderModifier = FParse::Param(*Params, TEXT("WeaponShaderEnforcer1PHigh")) ||
+        FParse::Param(*Params, TEXT("WeaponShaderNoStaticLighting"));
+    if (ExplicitModeCount > 1 || (ExplicitModeCount != 0 && !Mode.IsEmpty()) ||
+        (ShaderModifier && !ShaderProbeMode))
+    {
+        Fail(TEXT("Choose exactly one operation: Mode=..., WeaponTessUpgrade, WeaponTessVerify or WeaponShaderProbe; shader modifiers require WeaponShaderProbe."));
+        return 1;
+    }
+    // EXPLICIT_MODE_ADMISSION_END
     // A separate read-only entry point: its spec cannot enter Apply/Verify or COW.
     if (Mode.Equals(TEXT("MaterialReport"), ESearchCase::IgnoreCase))
         return MaterialPreflightReport(Params);
@@ -517,6 +534,9 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
         return WeaponFidelityRepair(Params, false);
     if (Mode.Equals(TEXT("WeaponRepairVerify"), ESearchCase::IgnoreCase))
         return WeaponFidelityRepair(Params, true);
+    if (FParse::Param(*Params, TEXT("WeaponTessUpgrade"))) return WeaponTessellationUpgrade(Params, false);
+    if (FParse::Param(*Params, TEXT("WeaponTessVerify"))) return WeaponTessellationUpgrade(Params, true);
+    if (FParse::Param(*Params, TEXT("WeaponShaderProbe"))) return WeaponShaderProbe(Params);
     if (Mode.Equals(TEXT("BlobShadowExperiment"), ESearchCase::IgnoreCase))
         return BlobShadowExperiment(Params);
     const bool Apply = Mode.Equals(TEXT("Apply"), ESearchCase::IgnoreCase);

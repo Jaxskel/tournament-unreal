@@ -38,6 +38,7 @@ struct FWeaponRepair
     FSavePolicy Policy;
     bool Verify = false;
     bool UV0 = false; // Explicit fresh Apply/Verify variant; never adopts existing clones.
+    bool Tess1 = false; // Read-only existing-state verifier; upgrade owns the sole mutation.
 
     FString Normal(FString Text) const
     {
@@ -184,6 +185,11 @@ struct FWeaponRepair
             Call->FunctionOutputs[1].Output.OutputName != TEXT("WPO Only")) return false;
         auto* Set = Cast<UMaterialExpressionSetMaterialAttributes>(Node(M, TEXT("TournamentES2WPO"), TEXT("MaterialExpressionSetMaterialAttributes")));
         auto* Switch = Cast<UMaterialExpressionFeatureLevelSwitch>(Node(M, TEXT("TournamentES2Attributes"), TEXT("MaterialExpressionFeatureLevelSwitch")));
+        // WFR_TESS_NODE_BEGIN
+        auto* One = Cast<UMaterialExpressionConstant>(Node(M, TEXT("TournamentES2TessellationOne"), TEXT("MaterialExpressionConstant")));
+        if (Tess1 && (!Verify || !UV0 || M->D3D11TessellationMode != MTM_NoTessellation || !One ||
+            One->R != 1.0f || One->Material != M || One->Function || One->GetInputs().Num() != 0)) return false;
+        // WFR_TESS_NODE_END
         UMaterialExpression* UV = UV0 ? UV0Node(M) : nullptr;
         if (UV0 && !UV) return false;
         if (!Verify)
@@ -206,10 +212,11 @@ struct FWeaponRepair
             Root->Expression = Switch; Root->OutputIndex = 0;
         }
         if (!Set || !Switch || !Pin(*Root, Switch) || !Pin(Switch->Default, Old) ||
-            !Pin(Switch->Inputs[ERHIFeatureLevel::ES2], Set) || Set->Inputs.Num() != (UV0 ? 3 : 2) ||
+            !Pin(Switch->Inputs[ERHIFeatureLevel::ES2], Set) || Set->Inputs.Num() != (Tess1 ? 4 : (UV0 ? 3 : 2)) ||
             !Pin(Set->Inputs[0], Old) || !Pin(Set->Inputs[1], Call, 1) ||
-            Set->AttributeSetTypes.Num() != (UV0 ? 2 : 1) || Set->AttributeSetTypes[0] != FMaterialAttributeDefinitionMap::GetID(MP_WorldPositionOffset)) return false;
+            Set->AttributeSetTypes.Num() != (Tess1 ? 3 : (UV0 ? 2 : 1)) || Set->AttributeSetTypes[0] != FMaterialAttributeDefinitionMap::GetID(MP_WorldPositionOffset)) return false;
         if (UV0 && (!Pin(Set->Inputs[2], UV) || Set->AttributeSetTypes[1] != FMaterialAttributeDefinitionMap::GetID(MP_CustomizedUVs0))) return false;
+        if (Tess1 && (!Pin(Set->Inputs[3], One) || Set->AttributeSetTypes[2] != FMaterialAttributeDefinitionMap::GetID(MP_TessellationMultiplier))) return false;
         for (int32 I = 1; I < ERHIFeatureLevel::Num; ++I) if (Switch->Inputs[I].Expression) return false;
         return true;
     }
@@ -232,7 +239,7 @@ struct FWeaponRepair
             ByPath.Add(Path, N);
         }
         const auto& OldNodes = Expected->GetArrayField(TEXT("nodes"));
-        if (Added != (UV0 ? 7 : 6) || ByPath.Num() != OldNodes.Num()) return false;
+        if (Added != (Tess1 ? 8 : (UV0 ? 7 : 6)) || ByPath.Num() != OldNodes.Num()) return false;
         for (const auto& V : OldNodes)
         {
             auto N = V->AsObject(); auto* Actual = ByPath.Find(Str(N, TEXT("path")));
@@ -295,8 +302,36 @@ struct FWeaponRepair
     }
 };
 
-static int32 WeaponFidelityRepair(const FString& Params, bool Verify)
+// WFR_TESS_FINAL_BEGIN
+// Shared by initial repair/verify and the one-master upgrade, with identical gates.
+static int32 WFRFinalChecks(FWeaponRepair& R, UMaterial* Master, const TSharedPtr<FJsonObject>* Expected)
 {
+    if (!R.Graph(Master, *Expected)) return WFRStop(TEXT("clone-graph"));
+    for (const auto& KV : R.Clones)
+    {
+        TSet<FString> Skip; Skip.Add(TEXT("StateId")); Skip.Add(TEXT("Expressions"));
+        Skip.Add(TEXT("FunctionExpressions")); Skip.Add(TEXT("MaterialAttributes"));
+        // Derived compile dependency IDs change when cloned functions receive new StateIds.
+        // MRGraph above checks the complete normalized dependency graph independently.
+        Skip.Add(TEXT("MaterialFunctionInfos"));
+        // Pinned UMaterialInterface PostDuplicate/PostEditChangeProperty regenerate this cache identity.
+        Skip.Add(TEXT("LightingGuid"));
+        if (!R.Properties(R.Objects.FindChecked(KV.Key), R.Objects.FindChecked(KV.Value), Skip))
+        { Fail(TEXT("WeaponRepair cloned object properties drift: ") + KV.Key); return WFRStop(TEXT("clone-properties"), KV.Key); }
+    }
+    for (const FString& P : R.Instances) if (!R.Instance(CastChecked<UMaterialInstanceConstant>(R.Objects.FindChecked(P)))) return WFRStop(TEXT("reparented-instance"), P);
+    if (!R.DiskPins()) return WFRStop(TEXT("pre-save-disk-pins"));
+    return 0;
+}
+// WFR_TESS_FINAL_END
+
+static int32 WeaponFidelityRepair(const FString& Params, bool Verify, FWeaponRepair* VerifiedState = nullptr, bool Tess1 = false)
+{
+    // WFR_TESS_ADMISSION_BEGIN
+    // No standalone eight-node adoption and no captured state from a write operation.
+    if ((VerifiedState && !Verify) || (Tess1 && (!Verify || !VerifiedState || !FParse::Param(*Params, TEXT("WeaponUV0")))) ||
+        (FParse::Param(*Params, TEXT("WeaponTess1")) && !VerifiedState)) return WFRStop(TEXT("tess-upgrade-mode"));
+    // WFR_TESS_ADMISSION_END
     WFRStage(TEXT("entry")); // WFR_DIAGNOSTIC_STAGE
     FString SpecPath, BaselinePath, Receipt, Forbidden;
     if (!GIsEditor || !IsInGameThread() || (!Verify && !FApp::CanEverRender()) ||
@@ -311,6 +346,7 @@ static int32 WeaponFidelityRepair(const FString& Params, bool Verify)
     WFRStage(TEXT("recipe-baseline-passed")); // WFR_DIAGNOSTIC_STAGE
     FWeaponRepair R; R.Verify = Verify; R.Pins = Spec->GetObjectField(TEXT("original_sha1"));
     R.UV0 = FParse::Param(*Params, TEXT("WeaponUV0"));
+    R.Tess1 = Tess1;
     TSet<FString> Destinations;
     for (const auto& KV : Spec->GetObjectField(TEXT("clones"))->Values)
     { R.Clones.Add(KV.Key, KV.Value->AsString()); R.Canonical.Add(ObjectPath(KV.Value->AsString()), ObjectPath(KV.Key)); Destinations.Add(KV.Value->AsString().ToLower()); }
@@ -413,21 +449,7 @@ static int32 WeaponFidelityRepair(const FString& Params, bool Verify)
         }
     }
     WFRStage(TEXT("check-clone-graph")); // WFR_DIAGNOSTIC_STAGE
-    if (!R.Graph(Master, *Expected)) return WFRStop(TEXT("clone-graph"));
-    for (const auto& KV : R.Clones)
-    {
-        TSet<FString> Skip; Skip.Add(TEXT("StateId")); Skip.Add(TEXT("Expressions"));
-        Skip.Add(TEXT("FunctionExpressions")); Skip.Add(TEXT("MaterialAttributes"));
-        // Derived compile dependency IDs change when cloned functions receive new StateIds.
-        // MRGraph above checks the complete normalized dependency graph independently.
-        Skip.Add(TEXT("MaterialFunctionInfos"));
-        // Pinned UMaterialInterface PostDuplicate/PostEditChangeProperty regenerate this cache identity.
-        Skip.Add(TEXT("LightingGuid"));
-        if (!R.Properties(R.Objects.FindChecked(KV.Key), R.Objects.FindChecked(KV.Value), Skip))
-        { Fail(TEXT("WeaponRepair cloned object properties drift: ") + KV.Key); return WFRStop(TEXT("clone-properties"), KV.Key); }
-    }
-    for (const FString& P : R.Instances) if (!R.Instance(CastChecked<UMaterialInstanceConstant>(R.Objects.FindChecked(P)))) return WFRStop(TEXT("reparented-instance"), P);
-    if (!R.DiskPins()) return WFRStop(TEXT("pre-save-disk-pins"));
+    if (WFRFinalChecks(R, Master, Expected) != 0) return WFRStop(TEXT("final-checks"));
     TArray<FString> Saves; for (const auto& KV : R.Clones) Saves.Add(KV.Value);
     Saves.Append(R.Direct); Saves.Sort(); if (Saves.Num() != 9) return WFRStop(TEXT("save-count"), FString::FromInt(Saves.Num()));
     WFRStage(TEXT("all-semantic-checks-passed")); // WFR_DIAGNOSTIC_STAGE
@@ -446,7 +468,8 @@ static int32 WeaponFidelityRepair(const FString& Params, bool Verify)
             *HashFile(R.Policy.Files.FindChecked(P.ToLower())), Verify ? 0 : 1);
     }
     R.Verify = true; if (!R.DiskPins()) return WFRStop(TEXT("post-save-disk-pins"));
-    UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_REPAIR variant=%s"), R.UV0 ? TEXT("es2-uv0-passthrough") : TEXT("original-six-node"));
+    if (VerifiedState) *VerifiedState = R;
+    UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_REPAIR variant=%s"), R.Tess1 ? TEXT("es2-uv0-tess1") : (R.UV0 ? TEXT("es2-uv0-passthrough") : TEXT("original-six-node")));
     UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_REPAIR complete mode=%s destinations=23 saves=%d untouchedMICs=14; shader/runtime validation still required"), Verify ? TEXT("verify") : TEXT("apply"), Verify ? 0 : 9);
     return 0;
 }
