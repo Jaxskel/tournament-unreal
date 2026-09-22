@@ -127,16 +127,57 @@ class ExperimentTests(unittest.TestCase):
         for name in ('Constant', 'FeatureLevelSwitch', 'SetMaterialAttributes', 'Custom', 'SceneDepth', 'CameraVectorWS'):
             line = '#include "Materials/MaterialExpression%s.h"\n' % name
             self.assertEqual(cpp.count(line), 1); cpp = cpp.replace(line, '')
-        for name in ('WeaponFidelityRepair', 'BlobShadowExperiment'):
+        for name in ('WeaponFidelityRepair', 'BlobShadowExperiment', 'WeaponSupplementReport'):
             line = '#include "%s.h"\n' % name
             self.assertEqual(cpp.count(line), 1); cpp = cpp.replace(line, '')
         for mode, call in (('WeaponRepairApply', 'WeaponFidelityRepair(Params, false)'),
                            ('WeaponRepairVerify', 'WeaponFidelityRepair(Params, true)'),
-                           ('BlobShadowExperiment', 'BlobShadowExperiment(Params)')):
+                           ('BlobShadowExperiment', 'BlobShadowExperiment(Params)'),
+                           ('WeaponSupplementReport', 'WeaponSupplementReport(Params)')):
             block = '    if (Mode.Equals(TEXT("%s"), ESearchCase::IgnoreCase))\n        return %s;\n' % (mode, call)
             self.assertEqual(cpp.count(block), 1); cpp = cpp.replace(block, '')
         self.assertEqual(hashlib.sha256(cpp.encode()).hexdigest(),
                          '2ab000d06f3a3224077786775c5694196fa1b9c2820e408fdccc4c73aea8b7fc')
+
+    def test_baseline_mismatch_actual_expression_compiles_and_old_pointer_sum_fails(self):
+        compiler = shutil.which('clang++') or shutil.which('g++')
+        if not compiler: self.fail('Host C++ compiler required for string-expression fixture')
+        expression = re.search(r'return Fail\(([^\n]*Blob experiment baseline mismatch:[^\n]*)\);',
+                               body(source(), 'BSXFacts')).group(1)
+        old = 'TEXT("Blob experiment baseline mismatch: ") + K'
+        self.assertEqual(expression, 'FString(TEXT("Blob experiment baseline mismatch: ")) + K')
+        # Original expression only, with explicit host string stand-in. This
+        # tests C++ pointer/string operand types; it is not UE module compilation.
+        prefix = r'''
+#include <cassert>
+#include <string>
+#include <initializer_list>
+#define TEXT(x) L##x
+using TCHAR = wchar_t;
+using FString = std::wstring;
+FString Message;
+bool Fail(const FString& Value) { Message = Value; return false; }
+bool Report(const TCHAR* K) { return Fail(
+'''
+        suffix = r'''); }
+int main() {
+ for(const TCHAR* K : {TEXT("material"), TEXT("roots"), TEXT("")}) {
+  assert(!Report(K));
+  assert(Message == FString(TEXT("Blob experiment baseline mismatch: ")) + K);
+ }
+}
+'''
+        with tempfile.TemporaryDirectory(prefix='ut4-blob-string-') as temp:
+            root = Path(temp); cpp = root/'expression.cpp'; exe = root/'expression-test'
+            cpp.write_text(prefix + old + suffix)
+            failed = subprocess.run([compiler, '-std=c++14', '-fsyntax-only', str(cpp)],
+                                    capture_output=True, text=True, timeout=30)
+            self.assertNotEqual(failed.returncode, 0, 'Old pointer+pointer expression unexpectedly compiled')
+            cpp.write_text(prefix + expression + suffix)
+            fixed = subprocess.run([compiler, '-std=c++14', '-Wall', '-Wextra', '-Werror',
+                                    str(cpp), '-o', str(exe)], capture_output=True, text=True, timeout=30)
+            self.assertEqual(fixed.returncode, 0, fixed.stderr)
+            subprocess.run([str(exe)], check=True, timeout=10)
 
     def test_private_baseline_and_native_all_rgba_mask(self):
         if PRIVATE is None: self.skipTest('pass --private-baseline for licensed native evidence')

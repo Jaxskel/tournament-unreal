@@ -157,7 +157,7 @@ static bool BSXFacts(UMaterialInterface* Asset, const TSharedPtr<FJsonObject>& E
         TEXT("two_sided"), TEXT("opacity_mask_clip"), TEXT("parent_chain"), TEXT("texture_parameters"),
         TEXT("scalar_parameters"), TEXT("vector_parameters"), TEXT("base_graph_textures_including_functions"),
         TEXT("has_null_texture_expression"), TEXT("roots")})
-        if (!BSXField(Expected, Actual, K)) return Fail(TEXT("Blob experiment baseline mismatch: ") + K);
+        if (!BSXField(Expected, Actual, K)) return Fail(FString(TEXT("Blob experiment baseline mismatch: ")) + K);
     for (const TCHAR* K : {TEXT("static_overrides"), TEXT("static_effective")})
         if (Expected->HasField(K) && !BSXField(Expected, Actual, K)) return false;
     TSharedPtr<FJsonObject> X = MakeShareable(new FJsonObject); X->Values = Expected->GetObjectField(TEXT("properties"))->Values;
