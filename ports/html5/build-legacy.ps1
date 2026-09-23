@@ -61,6 +61,8 @@ if($LASTEXITCODE){throw 'Browser canvas tile lighting patch failed'}
 if($LASTEXITCODE){throw 'Browser intro schedule bounds patch failed'}
 & py -3 "$PSScriptRoot\patch-browser-analytics.py" $root --apply
 if($LASTEXITCODE){throw 'Browser legacy analytics initialization patch failed'}
+& py -3 "$PSScriptRoot\patch-browser-cloud-stats.py" $root --apply
+if($LASTEXITCODE){throw 'Browser NoMCP legacy cloud stats patch failed'}
 $logDir="$root\UnrealTournament\Saved\Logs\BrowserPort"
 New-Item -ItemType Directory -Force $logDir | Out-Null
 # This receipt records source inputs only, never successful shader/runtime proof.

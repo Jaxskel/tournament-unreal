@@ -50,6 +50,7 @@ jobs:
       - run: python3 -B ports/html5/test_patch_browser_tile_light.py
       - run: python3 -B ports/html5/test_patch_browser_lineup.py
       - run: python3 -B ports/html5/test_patch_browser_analytics.py
+      - run: python3 -B ports/html5/test_patch_browser_cloud_stats.py
       - run: python3 -B ports/html5/test_patch_browser_optimizer.py
       - run: python3 -B ports/html5/test_patch_browser_gpu_skin.py
       - run: python3 -B ports/html5/test_configure_browser_gpu_skin.py
@@ -79,6 +80,8 @@ jobs:
         run: python -B ports/html5/test_prepare_browser_optimizer.py -v
       - name: Verify browser analytics patch publication on Windows
         run: python -B ports/html5/test_patch_browser_analytics.py -v
+      - name: Verify NoMCP cloud stats patch publication on Windows
+        run: python -B ports/html5/test_patch_browser_cloud_stats.py -v
       - name: Verify optional startup compression response preparation
         run: python -B ports/html5/test_prepare_startup_compression.py -v
       - name: Verify selective startup archive equivalence
