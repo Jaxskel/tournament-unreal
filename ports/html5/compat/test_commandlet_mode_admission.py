@@ -8,7 +8,19 @@ from test_weapon_tessellation import compile_run
 CPP = Path(__file__).parent / 'UT4Html5Compat/Source/UT4Html5Compat/Private/UT4Html5Compat.cpp'
 PATTERN = r'    // EXPLICIT_MODE_ADMISSION_BEGIN\n(.*?)    // EXPLICIT_MODE_ADMISSION_END\n'
 
+def without_enforcer_dispatches(source):
+    for name in ('EnforcerMaterialCandidate', 'EnforcerConsumerReport'):
+        blocks = ['#include "%s.h"\n' % name,
+                  '    if (Mode.Equals(TEXT("%s"), ESearchCase::IgnoreCase))\n        return %s(Params);\n' % (name, name)]
+        for block in blocks:
+            if source.count(block) != 1:
+                raise AssertionError('Expected one Enforcer integration block: ' + block)
+            source = source.replace(block, '')
+    return source
+
+
 def without_grenade_repair_dispatch(source):
+    source = without_enforcer_dispatches(source)
     blocks = ['#include "WeaponGrenadeRepair.h"\n',
         '    if (Mode.Equals(TEXT("WeaponGrenadeRepairApply"), ESearchCase::IgnoreCase))\n        return WeaponGrenadeRepair(Params, false);\n',
         '    if (Mode.Equals(TEXT("WeaponGrenadeRepairVerify"), ESearchCase::IgnoreCase))\n        return WeaponGrenadeRepair(Params, true);\n']
@@ -73,6 +85,13 @@ def without_readonly_dispatches(source):
     return source
 
 class Admission(unittest.TestCase):
+    def test_enforcer_dispatch_inverse_preserves_prior_commandlet(self):
+        source = CPP.read_text()
+        self.assertEqual(hashlib.sha256(without_enforcer_dispatches(source).encode()).hexdigest(),
+                         'd297876135b5a8fdfa773d6e67965bdf3465212766730c184e6e885c8ed6bbef')
+        for name in ('EnforcerConsumerReport', 'EnforcerMaterialCandidate'):
+            self.assertLess(source.index('// EXPLICIT_MODE_ADMISSION_END'), source.index('return ' + name + '(Params);'))
+
     def test_grenade_repair_dispatch_inverse_preserves_prior_commandlet(self):
         source = CPP.read_text()
         self.assertEqual(hashlib.sha256(without_grenade_repair_dispatch(source).encode()).hexdigest(),
@@ -124,7 +143,7 @@ BLOCK
  ++reached;return 0;
 }
 int main(){
- const char* modes[]={"","WeaponRepairApply","WeaponRepairVerify","Apply","Verify","WeaponReport","BlobShadowExperiment","WeaponUsageReport","WeaponShaderBatchProbe","WeaponBlueprintReport","WeaponSamplerAliasProbe"};
+ const char* modes[]={"","WeaponRepairApply","WeaponRepairVerify","Apply","Verify","WeaponReport","BlobShadowExperiment","WeaponUsageReport","WeaponShaderBatchProbe","WeaponBlueprintReport","WeaponSamplerAliasProbe","EnforcerConsumerReport","EnforcerMaterialCandidate"};
  const char* flags[]={"WeaponTessUpgrade","WeaponTessVerify","WeaponShaderProbe","WeaponShaderEnforcer1PHigh","WeaponShaderNoStaticLighting"};
  for(const char* mode:modes)for(int bits=0;bits<32;bits++){
   FString args;for(int i=0;i<5;i++)if(bits&(1<<i)){args+=" -";args+=flags[i];}
