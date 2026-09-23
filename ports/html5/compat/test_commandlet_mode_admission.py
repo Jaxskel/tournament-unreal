@@ -8,7 +8,17 @@ from test_weapon_tessellation import compile_run
 CPP = Path(__file__).parent / 'UT4Html5Compat/Source/UT4Html5Compat/Private/UT4Html5Compat.cpp'
 PATTERN = r'    // EXPLICIT_MODE_ADMISSION_BEGIN\n(.*?)    // EXPLICIT_MODE_ADMISSION_END\n'
 
+def without_grenade_assignment_dispatch(source):
+    blocks = ['#include "WeaponGrenadeAssignmentReport.h"\n',
+        '    if (Mode.Equals(TEXT("WeaponGrenadeAssignmentReport"), ESearchCase::IgnoreCase))\n        return WeaponGrenadeAssignmentReport(Params);\n']
+    for block in blocks:
+        if source.count(block) != 1:
+            raise AssertionError('Expected exactly one Grenade assignment integration block: ' + block)
+        source = source.replace(block, '')
+    return source
+
 def without_alias_dispatch(source):
+    source = without_grenade_assignment_dispatch(source)
     blocks = ['// SAMPLER_ALIAS_DECLARATIONS_BEGIN\n#include "ShaderCompiler.h"\n// SAMPLER_ALIAS_DECLARATIONS_END\n',
         '#include "WeaponSamplerAliasProbe.h"\n',
         '    if (Mode.Equals(TEXT("WeaponSamplerAliasProbe"), ESearchCase::IgnoreCase))\n        return WeaponSamplerAliasProbe(Params);\n']
@@ -63,6 +73,7 @@ class Admission(unittest.TestCase):
         self.assertLess(main.index('// EXPLICIT_MODE_ADMISSION_END'), main.index('return WeaponTessellationUpgrade('))
         self.assertLess(main.index('// EXPLICIT_MODE_ADMISSION_END'), main.index('return WeaponFidelityRepair('))
         self.assertLess(main.index('// EXPLICIT_MODE_ADMISSION_END'), main.index('return WeaponUsageReport('))
+        self.assertLess(main.index('// EXPLICIT_MODE_ADMISSION_END'), main.index('return WeaponGrenadeAssignmentReport('))
         self.assertLess(main.index('// EXPLICIT_MODE_ADMISSION_END'), main.index('return WeaponShaderBatchProbe('))
         self.assertLess(main.index('// EXPLICIT_MODE_ADMISSION_END'), main.index('return WeaponBlueprintReport('))
         self.assertLess(main.index('// EXPLICIT_MODE_ADMISSION_END'), main.index('return WeaponSamplerAliasProbe('))
