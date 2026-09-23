@@ -8,7 +8,19 @@ from test_weapon_tessellation import compile_run
 CPP = Path(__file__).parent / 'UT4Html5Compat/Source/UT4Html5Compat/Private/UT4Html5Compat.cpp'
 PATTERN = r'    // EXPLICIT_MODE_ADMISSION_BEGIN\n(.*?)    // EXPLICIT_MODE_ADMISSION_END\n'
 
+def without_enforcer_repair_dispatch(source):
+    blocks = ['#include "EnforcerMaterialRepair.h"\n']
+    for mode, args in (('Preflight', 'false, true'), ('Apply', 'false'), ('Verify', 'true')):
+        blocks.append('    if (Mode.Equals(TEXT("EnforcerMaterialRepair%s"), ESearchCase::IgnoreCase))\n        return EnforcerMaterialRepair(Params, %s);\n' % (mode, args))
+    for block in blocks:
+        if source.count(block) != 1:
+            raise AssertionError('Expected one Enforcer repair dispatch: ' + block)
+        source = source.replace(block, '')
+    return source
+
+
 def without_enforcer_dispatches(source):
+    source = without_enforcer_repair_dispatch(source)
     mesh_blocks = ['// ENFORCER_MESH_DECLARATIONS_BEGIN\n#include "SkeletalMeshTypes.h"\n#include "RawIndexBuffer.h"\n#include "Serialization/BulkData.h"\n// ENFORCER_MESH_DECLARATIONS_END\n',
         '#include "EnforcerMeshInvariant.h"\n', '#include "EnforcerMeshReport.h"\n',
         '    if (Mode.Equals(TEXT("EnforcerMeshReport"), ESearchCase::IgnoreCase))\n        return EnforcerMeshReport(Params);\n']
@@ -92,6 +104,13 @@ def without_readonly_dispatches(source):
     return source
 
 class Admission(unittest.TestCase):
+    def test_enforcer_repair_inverse_preserves_current_commandlet(self):
+        source = CPP.read_text()
+        self.assertEqual(hashlib.sha256(without_enforcer_repair_dispatch(source).encode()).hexdigest(),
+                         '85aba8c32b63ee7d034ef50893405bc4763fc1c6e59d4ec0cf7e281cdfb68f8f')
+        for args in ('false, true', 'false', 'true'):
+            self.assertLess(source.index('// EXPLICIT_MODE_ADMISSION_END'), source.index('return EnforcerMaterialRepair(Params, ' + args + ');'))
+
     def test_enforcer_dispatch_inverse_preserves_prior_commandlet(self):
         source = CPP.read_text()
         self.assertEqual(hashlib.sha256(without_enforcer_dispatches(source).encode()).hexdigest(),
@@ -150,7 +169,7 @@ BLOCK
  ++reached;return 0;
 }
 int main(){
- const char* modes[]={"","WeaponRepairApply","WeaponRepairVerify","Apply","Verify","WeaponReport","BlobShadowExperiment","WeaponUsageReport","WeaponShaderBatchProbe","WeaponBlueprintReport","WeaponSamplerAliasProbe","EnforcerConsumerReport","EnforcerMaterialCandidate","EnforcerMeshReport"};
+ const char* modes[]={"","WeaponRepairApply","WeaponRepairVerify","Apply","Verify","WeaponReport","BlobShadowExperiment","WeaponUsageReport","WeaponShaderBatchProbe","WeaponBlueprintReport","WeaponSamplerAliasProbe","EnforcerConsumerReport","EnforcerMaterialCandidate","EnforcerMeshReport","EnforcerMaterialRepairPreflight","EnforcerMaterialRepairApply","EnforcerMaterialRepairVerify"};
  const char* flags[]={"WeaponTessUpgrade","WeaponTessVerify","WeaponShaderProbe","WeaponShaderEnforcer1PHigh","WeaponShaderNoStaticLighting"};
  for(const char* mode:modes)for(int bits=0;bits<32;bits++){
   FString args;for(int i=0;i<5;i++)if(bits&(1<<i)){args+=" -";args+=flags[i];}

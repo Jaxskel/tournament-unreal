@@ -396,6 +396,7 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
 #include "EnforcerMaterialCandidate.h"
 #include "EnforcerMeshInvariant.h"
 #include "EnforcerMeshReport.h"
+#include "EnforcerMaterialRepair.h"
 #include "WeaponBlueprintReport.h"
 #include "BlobShadowExperiment.h"
 static bool ReportMeshes(const TArray<FString>& Meshes)
@@ -564,6 +565,12 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
         return WeaponBlueprintReport(Params);
     if (Mode.Equals(TEXT("WeaponUsageReport"), ESearchCase::IgnoreCase))
         return WeaponUsageReport(Params);
+    if (Mode.Equals(TEXT("EnforcerMaterialRepairPreflight"), ESearchCase::IgnoreCase))
+        return EnforcerMaterialRepair(Params, false, true);
+    if (Mode.Equals(TEXT("EnforcerMaterialRepairApply"), ESearchCase::IgnoreCase))
+        return EnforcerMaterialRepair(Params, false);
+    if (Mode.Equals(TEXT("EnforcerMaterialRepairVerify"), ESearchCase::IgnoreCase))
+        return EnforcerMaterialRepair(Params, true);
     if (Mode.Equals(TEXT("EnforcerMeshReport"), ESearchCase::IgnoreCase))
         return EnforcerMeshReport(Params);
     if (Mode.Equals(TEXT("EnforcerMaterialCandidate"), ESearchCase::IgnoreCase))
