@@ -253,6 +253,21 @@ struct FWSAliasState
     FWSALightingPolicy MasterLighting, MILighting;
     bool Captured = false, Closed = false, FinalOK = false, Attempted = false;
     bool OrdinaryLighting = false; // ALIAS_ORDINARY_STATE
+    // ALIAS_ASSET_STATE_BEGIN
+    bool AssetFlagChanged = false;
+    FString SourceStaticLightingText, OwnedStaticLightingText;
+    bool NormalizeAssetFlag(const TSharedPtr<FJsonObject>& Original, const TSharedPtr<FJsonObject>& Candidate) const
+    {
+        if (!AssetFlagChanged) return true;
+        if (!Master || !CloneMaster || Master == CloneMaster || !Master->bUsedWithStaticLighting || CloneMaster->bUsedWithStaticLighting ||
+            CloneMaster->GetOuter() != GetTransientPackage() || !CloneMaster->HasAnyFlags(RF_Transient) ||
+            SourceStaticLightingText.IsEmpty() || OwnedStaticLightingText.IsEmpty() || SourceStaticLightingText == OwnedStaticLightingText ||
+            !WSAField(Original, TEXT("bUsedWithStaticLighting"), SourceStaticLightingText) ||
+            !WSAField(Candidate, TEXT("bUsedWithStaticLighting"), OwnedStaticLightingText)) return false;
+        Candidate->SetStringField(TEXT("bUsedWithStaticLighting"), SourceStaticLightingText);
+        return true;
+    }
+    // ALIAS_ASSET_STATE_END
     explicit FWSAliasState(FWeaponTessProof& P, const FString& H) : Proof(P), MasterHash(H) {}
     ~FWSAliasState() { Close(); }
 
@@ -471,6 +486,9 @@ struct FWSAliasState
             auto X = WSAObject(Old[I]); auto Y = WSAObject(New[I]);
             auto XP = X->GetObjectField(TEXT("properties")); auto YP = Y->GetObjectField(TEXT("properties"));
             if (I == 0 && !MasterLighting.Normalize(XP, YP)) return false;
+            // ALIAS_ASSET_NORMALIZE_BEGIN
+            if (I == 0 && !NormalizeAssetFlag(XP, YP)) return false;
+            // ALIAS_ASSET_NORMALIZE_END
             if (I == 2 && !MILighting.Normalize(XP, YP)) return false;
             if (I < 2) YP->SetStringField(TEXT("StateId"), Str(XP, TEXT("StateId")));
             if (I == 0) YP->SetStringField(TEXT("MaterialFunctionInfos"), Str(XP, TEXT("MaterialFunctionInfos")));
@@ -721,6 +739,140 @@ static int32 WSACompilePair(FWeaponTessProof& Proof, const FString& Hash)
     return State.ValidResources == 6 ? 0 : 1;
 }
 // ALIAS_PAIR_IMPLEMENTATION_END
+// ALIAS_ASSET_IMPLEMENTATION_BEGIN
+// Bridge resource-only NoStatic policy to an actual owned master flag. This is
+// still transient: ordinary acceptance and persistent repair authority stay zero.
+struct FWSAliasAssetState : FWSAliasPairState
+{
+    TArray<FMaterialShaderMapId> NoStaticReferences;
+    explicit FWSAliasAssetState(FWeaponTessProof& P, const FString& H) : FWSAliasPairState(P, H) {}
+    // ALIAS_ASSET_PREPARE_BEGIN
+    bool PrepareAssetFlag()
+    {
+        if (AssetFlagChanged || Resource || Completed || RequestedIds.Num() || NoStaticReferences.Num() || OrdinaryLighting ||
+            !WSADrain() || !PairEquivalent() || !Unchanged() || !Proof.Check(MasterHash) ||
+            !Contracts(MI, Layer) || !Contracts(Child, Layer) || !Master->bUsedWithStaticLighting || !CloneMaster->bUsedWithStaticLighting ||
+            CloneMaster->GetOuter() != GetTransientPackage() || !CloneMaster->HasAnyFlags(RF_Transient) || !Roots.Contains(CloneMaster) ||
+            !WSAOwnedGraph(Master, CloneMaster, Layer, CloneLayer) || !WSAOwnedGraph(Layer, CloneLayer)) return false;
+        // Setter-triggered jobs used the previous ID and have fully drained. No
+        // true-flag compilation is submitted under this new comparison ID.
+        const FGuid Previous = MasterId, Fresh = FGuid::NewGuid();
+        if (!Fresh.IsValid() || Fresh == Previous || Fresh == Master->StateId || Fresh == LayerId) return false;
+        MasterId = Fresh; CloneMaster->StateId = Fresh;
+        if (!PairEquivalent()) return false;
+        const EMaterialQualityLevel::Type Qualities[] = {EMaterialQualityLevel::Low, EMaterialQualityLevel::Medium, EMaterialQualityLevel::High};
+        for (int32 Member = 0; Member < 2; ++Member) for (auto Quality : Qualities)
+        {
+            auto* Instance = Member == 0 ? CloneMI : CloneChild;
+            FWeaponShaderResource Reference; // ID generation only, never CacheShaders.
+            Reference.SetMaterial(CloneMaster, Quality, true, ERHIFeatureLevel::ES2, Instance);
+            Reference.NoStaticLighting = true;
+            FMaterialShaderMapId Id; Reference.GetShaderMapId(SP_OPENGL_ES2_WEBGL, Id);
+            FStaticParameterSet Effective; Instance->GetStaticParameterValues(Effective); FWeaponRepair Compare;
+            if (Reference.IsPersistent() || Reference.IsUsedWithStaticLighting() || Reference.IsSpecialEngineMaterial() ||
+                Id.BaseMaterialId != MasterId || Id.QualityLevel != Quality || Id.FeatureLevel != ERHIFeatureLevel::ES2 ||
+                !Id.ReferencedFunctions.Contains(LayerId) || Id.ReferencedFunctions.Contains(Layer->StateId) ||
+                Id.ShaderTypeDependencies.Num() == 0 || !Compare.Same(MRValue(MRStatic(Effective)), MRValue(MRStatic(Id.ParameterSet)))) return false;
+            for (const auto& Prior : NoStaticReferences) if (WSAOrdinaryIDEqual(Prior, Id)) return false;
+            NoStaticReferences.Add(Id);
+        }
+        if (NoStaticReferences.Num() != 6 || !WSADrain() || !PairEquivalent() || !Unchanged() || !Proof.Check(MasterHash)) return false;
+        auto BeforeFlag = MRProperties(CloneMaster, true);
+        if (!BeforeFlag->TryGetStringField(TEXT("bUsedWithStaticLighting"), SourceStaticLightingText) ||
+            SourceStaticLightingText.IsEmpty() || !WSAField(MRProperties(Master, true), TEXT("bUsedWithStaticLighting"), SourceStaticLightingText)) return false;
+        CloneMaster->bUsedWithStaticLighting = false;
+        auto AfterFlag = MRProperties(CloneMaster, true);
+        if (!AfterFlag->TryGetStringField(TEXT("bUsedWithStaticLighting"), OwnedStaticLightingText) ||
+            OwnedStaticLightingText.IsEmpty() || OwnedStaticLightingText == SourceStaticLightingText) return false;
+        // Comparison copies only. No source or owned object is normalized back.
+        AfterFlag->SetStringField(TEXT("bUsedWithStaticLighting"), SourceStaticLightingText);
+        FWeaponRepair Compare;
+        if (!Compare.Same(MRValue(BeforeFlag), MRValue(AfterFlag))) return false;
+        AssetFlagChanged = true;
+        return PairEquivalent() && Unchanged() && Proof.Check(MasterHash);
+    }
+    // ALIAS_ASSET_PREPARE_END
+    // ALIAS_ASSET_COMPILE_ONE_BEGIN
+    bool CompileAssetOne(int32 Member, EMaterialQualityLevel::Type Quality)
+    {
+        if (!AssetFlagChanged || Member < 0 || Member > 1 || int32(Quality) < 0 || int32(Quality) >= EMaterialQualityLevel::Num ||
+            Resource || OrdinaryLighting || NoStaticReferences.Num() != 6 || Completed < 0 || Completed >= 6 ||
+            !Contracts(MI, Layer) || !Contracts(Child, Layer) || !PairEquivalent() || !Unchanged() || !Proof.Check(MasterHash)) return false;
+        auto* Instance = Member == 0 ? CloneMI : CloneChild;
+        const FString Target = Member == 0 ? WSATarget() : ChildTarget();
+        auto* Candidate = new FWSAOrdinaryResource; Resource = Candidate;
+        Candidate->SetMaterial(CloneMaster, Quality, true, ERHIFeatureLevel::ES2, Instance);
+        FMaterialResource Reference; // Ordinary persistent policy, ID generation only.
+        Reference.SetMaterial(CloneMaster, Quality, true, ERHIFeatureLevel::ES2, Instance);
+        if (Candidate->IsPersistent() || !Reference.IsPersistent() || Candidate->IsUsedWithStaticLighting() ||
+            Reference.IsUsedWithStaticLighting() || Candidate->IsSpecialEngineMaterial() || Reference.IsSpecialEngineMaterial()) return false;
+        FMaterialShaderMapId Ordinary, Requested;
+        Reference.GetShaderMapId(SP_OPENGL_ES2_WEBGL, Ordinary);
+        Candidate->GetShaderMapId(SP_OPENGL_ES2_WEBGL, Requested);
+        if (!WSAOrdinaryIDEqual(Ordinary, Requested) || !WSAOrdinaryIDEqual(NoStaticReferences[Completed], Requested) ||
+            Requested.BaseMaterialId != MasterId || Requested.QualityLevel != Quality || Requested.FeatureLevel != ERHIFeatureLevel::ES2) return false;
+        for (const auto& Prior : RequestedIds) if (WSAOrdinaryIDEqual(Prior, Requested)) return false;
+        RequestedIds.Add(Requested);
+        UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_SAMPLER_ALIAS_ASSET begin material=%s quality=%d assetFlagFalse=1 resourceLightingOverride=0 referenceIdsEqual=1 persistent=0 masterId=%s layerId=%s incidentalDDCSaves=possible"),
+            *Target, int32(Quality), *MasterId.ToString(), *LayerId.ToString());
+        Attempted = true;
+        const bool Cached = Candidate->CacheShaders(Requested, SP_OPENGL_ES2_WEBGL, false);
+        Candidate->FinishCompilation();
+        if (!WSADrain() || !Candidate->IsCompilationFinished() || !PairEquivalent() || !Unchanged() || !Proof.Check(MasterHash)) return false;
+        auto* Map = Candidate->GetGameThreadShaderMap();
+        const bool ValidMap = Cached && Candidate->HasValidGameThreadShaderMap() && Map && Map->IsCompilationFinalized() &&
+            Map->CompiledSuccessfully() && Map->GetShaderPlatform() == SP_OPENGL_ES2_WEBGL &&
+            WSAOrdinaryIDEqual(Requested, Map->GetShaderMapId()) && Candidate->GetCompileErrors().Num() == 0;
+        if (Candidate->GetCompileErrors().Num() > 64) return false;
+        for (const FString& Error : Candidate->GetCompileErrors())
+            UE_LOG(LogUT4Html5Compat, Warning, TEXT("COMPAT_WEAPON_SAMPLER_ALIAS_ASSET error material=%s quality=%d text=%s"), *Target, int32(Quality), *WFRContext(Error));
+        const int32 Samplers = ValidMap ? Candidate->GetSamplerUsage() : -1;
+        const int32 Textures = ValidMap ? Candidate->GetUniform2DTextureExpressions().Num() : -1;
+        const int32 Cubes = ValidMap ? Candidate->GetUniformCubeTextureExpressions().Num() : -1;
+        const bool Valid = ValidMap && Samplers >= 0 && Samplers <= 16 && Textures == 14 && Cubes == 0;
+        if (Valid)
+        {
+            const auto& Bindings = Candidate->GetUniform2DTextureExpressions();
+            for (int32 I = 0; I < Bindings.Num(); ++I)
+            {
+                auto* E = Bindings[I].GetReference(); UTexture* Texture = nullptr;
+                if (!E || !E->GetType()) return false;
+                E->GetGameThreadTextureValue(Instance, *Candidate, Texture);
+                if (!Texture) return false;
+                UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_SAMPLER_ALIAS_ASSET binding material=%s quality=%d index=%d type=%s textureIndex=%d texture=%s"),
+                    *Target, int32(Quality), I, E->GetType()->GetName(), E->GetTextureIndex(), *Texture->GetPathName());
+            }
+        }
+        UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_SAMPLER_ALIAS_ASSET result material=%s quality=%d valid=%d samplers=%d material2D=%d materialCube=%d translationRequests=%d fullRequestedIdEqual=%d assetFlagFalse=1 resourceLightingOverride=0 ordinaryAcceptance=0"),
+            *Target, int32(Quality), Valid ? 1 : 0, Samplers, Textures, Cubes, Candidate->TranslationRequests, ValidMap ? 1 : 0);
+        ++Completed; if (Valid) ++ValidResources;
+        delete Resource; Resource = nullptr;
+        return true;
+    }
+    // ALIAS_ASSET_COMPILE_ONE_END
+    // ALIAS_ASSET_LOOP_BEGIN
+    bool CompileAssetPair()
+    {
+        if (!AssetFlagChanged || Completed || ValidResources || RequestedIds.Num() || NoStaticReferences.Num() != 6) return false;
+        const EMaterialQualityLevel::Type Qualities[] = {EMaterialQualityLevel::Low, EMaterialQualityLevel::Medium, EMaterialQualityLevel::High};
+        for (int32 Member = 0; Member < 2; ++Member)
+            for (auto Quality : Qualities) if (!CompileAssetOne(Member, Quality)) return false;
+        return Completed == 6 && RequestedIds.Num() == 6 && PairEquivalent() && Unchanged();
+    }
+    // ALIAS_ASSET_LOOP_END
+};
+static int32 WSACompileAssetPair(FWeaponTessProof& Proof, const FString& Hash)
+{
+    FWSAliasAssetState State(Proof, Hash);
+    if (!State.CapturePair()) return WFRStop(TEXT("sampler-alias-asset-source"));
+    if (!State.PreparePair() || !State.PrepareAssetFlag()) return WFRStop(TEXT("sampler-alias-asset-clones"));
+    const bool Finished = State.CompileAssetPair();
+    if (!State.Close()) return WFRStop(TEXT("sampler-alias-asset-final"));
+    if (!Finished || !State.Attempted || State.Completed != 6) return WFRStop(TEXT("sampler-alias-asset-incomplete"));
+    UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_SAMPLER_ALIAS_ASSET complete selector=grenade-pair-asset-flag resources=6 valid=%d redirects=6 assetsSaved=0 staticLighting=0 assetFlagFalse=1 resourceLightingOverride=0 persistent=0 ordinaryAcceptance=0 repairAuthority=0 runtimeImmutabilityProven=0 incidentalDDCSaves=possible"), State.ValidResources);
+    return State.ValidResources == 6 ? 0 : 1;
+}
+// ALIAS_ASSET_IMPLEMENTATION_END
 // ALIAS_CONTROL_BEGIN
 static int32 WeaponSamplerAliasProbe(const FString& Params)
 {
@@ -736,10 +888,17 @@ static int32 WeaponSamplerAliasProbe(const FString& Params)
     if (!MasterFile) return WFRStop(TEXT("sampler-alias-master-proof"));
     const FString Hash = HashFile(*MasterFile);
     if (!Proof.Check(Hash) || !WSADrain()) return WFRStop(TEXT("sampler-alias-before"));
+    // ALIAS_ASSET_ADMISSION_BEGIN
+    if (FParse::Param(*Params, TEXT("SamplerAliasAssetFlag")) && !FParse::Param(*Params, TEXT("SamplerAliasGrenadePair")))
+        return WFRStop(TEXT("sampler-alias-asset-requires-pair"));
+    // ALIAS_ASSET_ADMISSION_END
     // ALIAS_PAIR_DISPATCH_BEGIN
     if (FParse::Param(*Params, TEXT("SamplerAliasGrenadePair")))
     {
         if (FParse::Param(*Params, TEXT("SamplerAliasOrdinaryLighting"))) return WFRStop(TEXT("sampler-alias-conflicting-selectors"));
+        // ALIAS_ASSET_DISPATCH_BEGIN
+        if (FParse::Param(*Params, TEXT("SamplerAliasAssetFlag"))) return WSACompileAssetPair(Proof, Hash);
+        // ALIAS_ASSET_DISPATCH_END
         return WSACompilePair(Proof, Hash);
     }
     // ALIAS_PAIR_DISPATCH_END

@@ -183,6 +183,33 @@ order is covered by a host test that extracts the production policy getters;
 the former order fails that regression. The failed run is retained separately
 from any retry. Native shader results remain separate from host-test success.
 
+The corrected native retry completed all six resources successfully: each had
+sixteen samplers, fourteen material 2D bindings, no cube bindings and a full
+requested shader-map identity match. The commandlet exited zero, all eleven
+fixed input hashes matched afterward, and the temporary debug configuration was
+restored. It saved no assets. This establishes the fixed pair's temporary
+resource result; saved-material policy equivalence, a fresh cook and in-game
+appearance remain separate requirements.
+
+### Owned material flag bridge
+
+Add `-SamplerAliasAssetFlag` alongside `-SamplerAliasGrenadePair` to test the
+proposed material setting through ordinary lighting-policy resources. After
+draining earlier work, the probe gives the owned master a fresh state ID and
+generates six reference IDs using the diagnostic override without compiling
+them. It then sets only that owned master's static-lighting usage flag to false.
+The original master stays unchanged. Comparison copies normalize only this
+authenticated flag difference; all graph, instance and source checks remain.
+
+Six resources with ordinary lighting policy regenerate their own IDs. Those IDs
+must exactly equal both the ordinary persistent resource's ID and the pre-change
+diagnostic reference. Compilation uses the newly generated ordinary IDs, with
+the same map, sampler and lifetime checks as the paired probe. The output prefix
+is `COMPAT_WEAPON_SAMPLER_ALIAS_ASSET`; it explicitly records no resource lighting
+override and no repair authority. This mode saves no packages. Success establishes
+the temporary candidate's compilation policy, not saved/reloaded package or
+browser visual acceptance.
+
 `-Mode=WeaponSamplerAliasProbe` requires the same verified Tess/UV0 generation
 and proof arguments as the existing shader probe. It targets only Grenade
 Launcher first-person High. It duplicates the master, `MF_LayerSet` and MIC into

@@ -14,14 +14,25 @@ HEADER = PRIVATE / 'WeaponSamplerAliasProbe.h'
 PRIVATE_GRAPH = None
 
 
-def block(name):
-    match = re.search(r'// ALIAS_' + name + r'_BEGIN\n(.*?)\s*// ALIAS_' + name + r'_END', HEADER.read_text(), re.S)
+def block(name, source=None):
+    match = re.search(r'// ALIAS_' + name + r'_BEGIN\n(.*?)\s*// ALIAS_' + name + r'_END', HEADER.read_text() if source is None else source, re.S)
     if not match:
         raise AssertionError(name)
     return match.group(1)
 
 
+def without_asset(source):
+    for name, indent in [('STATE', '    '), ('NORMALIZE', '            '), ('IMPLEMENTATION', ''),
+                         ('ADMISSION', '    '), ('DISPATCH', '        ')]:
+        pattern = re.escape(indent + '// ALIAS_ASSET_' + name + '_BEGIN\n') + r'.*?' + re.escape(indent + '// ALIAS_ASSET_' + name + '_END\n')
+        source, count = re.subn(pattern, '', source, flags=re.S)
+        if count != 1:
+            raise AssertionError(name)
+    return source
+
+
 def without_pair(source):
+    source = without_asset(source)
     for name, indent in [('IMPLEMENTATION', ''), ('DISPATCH', '    ')]:
         pattern = re.escape(indent + '// ALIAS_PAIR_' + name + '_BEGIN\n') + r'.*?' + re.escape(indent + '// ALIAS_PAIR_' + name + '_END\n')
         source, count = re.subn(pattern, '', source, flags=re.S)
@@ -54,6 +65,229 @@ def without_ordinary_control(source):
 
 
 class SamplerAlias(unittest.TestCase):
+    def test_actual_asset_resource_with_production_ordinary_policy(self):
+        # Reuse the instrumented engine boundary from the pair fixture, then
+        # substitute the actual ordinary resource and actual asset compile body.
+        # Exact replacements below alter only host stand-ins, not production code.
+        captured = []
+        global compile_run
+        original_compile = compile_run
+        try:
+            compile_run = captured.append
+            self.test_actual_pair_resource_map_guards_and_failure_rows()
+        finally:
+            compile_run = original_compile
+        self.assertEqual(len(captured), 1)
+        code = captured[0]
+
+        def replace(old, new):
+            nonlocal code
+            self.assertEqual(code.count(old), 1, old)
+            code = code.replace(old, new)
+
+        replace(block('PAIR_COMPILE_ONE'), block('ASSET_COMPILE_ONE'))
+        replace('find("_PAIR result")', 'find("_ASSET result")')
+        replace('virtual bool IsUsedWithStaticLighting()const{return true;}',
+                'virtual bool IsUsedWithStaticLighting()const{return false;}')
+        replace('struct FMaterialResource{int TranslationRequests',
+                'enum EMaterialProperty{P};enum EShaderFrequency{F};struct FMaterialCompiler{};int ordinaryMismatch=0;\nstruct FMaterialResource{int TranslationRequests')
+        replace('virtual~FMaterialResource(){++destroyed;}',
+                'virtual~FMaterialResource(){++destroyed;}\n virtual int32 CompilePropertyAndSetMaterialProperty(EMaterialProperty,FMaterialCompiler*,EShaderFrequency,bool)const{return 0;}')
+        ordinary_class = block('ORDINARY_RESOURCE').split('static bool WSAOrdinaryIDEqual', 1)[0]
+        replace('struct FWeaponShaderResource:FMaterialResource{', ordinary_class + '\nstruct FWeaponShaderResource:FMaterialResource{')
+        replace('if(scenario==3)out.ParameterSet.value=99;',
+                'if(ordinaryMismatch&&!IsPersistent())out.VertexFactoryTypeDependencies[0].VFSourceHash=99;if(scenario==3)out.ParameterSet.value=99;')
+        replace('TArray<FMaterialShaderMapId>RequestedIds;', '''TArray<FMaterialShaderMapId>RequestedIds,NoStaticReferences;bool AssetFlagChanged=true;
+ State(){for(int m=0;m<2;++m)for(int q:{0,2,1}){FMaterialShaderMapId id;id.QualityLevel=q;id.ParameterSet.value=m+1;NoStaticReferences.Add(id);}}''')
+        # Persistent reference is a second stack resource; neither it nor the
+        # no-static comparison IDs submit jobs. Destruction counts include it.
+        replace('assert(destroyed==!aborted);', 'assert(destroyed==(s>=27?0:(aborted?1:2)));')
+        replace('assert(destroyed==(s>=27?0:1));', 'assert(destroyed==(s>=27?0:2));')
+        code = code.replace('.CompileOne(', '.CompileAssetOne(')
+        replace('State x;assert(x.CompileAssetOne(m,q)&&x.ValidResources==1);',
+                'State x;x.Completed=m*3+(q==EMaterialQualityLevel::Low?0:q==EMaterialQualityLevel::Medium?1:2);assert(x.CompileAssetOne(m,q)&&x.ValidResources==1);')
+        replace('assert(x.IsPersistent()&&x.IsUsedWithStaticLighting());',
+                'assert(x.IsPersistent()&&!x.IsUsedWithStaticLighting());')
+        offset = code.rfind('\n}')
+        self.assertGreater(offset, 0)
+        code = code[:offset] + r'''
+ scenario=0;
+ for(int test=0;test<5;++test){caches=0;ordinaryMismatch=test==0;State x;
+  if(test==1)x.NoStaticReferences[0].ShaderTypeDependencies[0].SourceHash=99;
+  if(test==2)x.AssetFlagChanged=false;if(test==3)x.NoStaticReferences.clear();if(test==4)x.Completed=6;
+  assert(!x.CompileAssetOne(0,EMaterialQualityLevel::Low)&&caches==0);
+ }
+''' + code[offset:]
+        compile_run(code)
+
+    def test_asset_selector_loop_and_no_success_on_partial(self):
+        # Actual selector gates and fixed loop; failures stop before any false
+        # complete/valid-six interpretation. Ordinary single control stays separate.
+        compile_run(r'''
+#include <cassert>
+#include <string>
+#include <vector>
+using int32=int;
+#define TEXT(x) x
+namespace EMaterialQualityLevel{enum Type{Low=0,High=1,Medium=2,Num=3};}
+struct IDs{int n=0;int Num(){return n;}};
+struct S{bool AssetFlagChanged=true;int Completed=0,ValidResources=0,fail=-1;IDs RequestedIds,NoStaticReferences{6};std::vector<int>calls;
+ bool PairEquivalent(){return true;}bool Unchanged(){return true;}
+ bool CompileAssetOne(int m,EMaterialQualityLevel::Type q){int i=calls.size();calls.push_back(m*3+int(q));if(i==fail)return false;++Completed;++RequestedIds.n;return true;}
+''' + block('ASSET_LOOP') + r'''
+};
+struct FString:std::string{using std::string::string;const char*operator*()const{return c_str();}};
+bool pair=false,asset=false,ordinary=false;int invoked=0;
+struct FParse{static bool Param(const char*,const char*k){auto s=std::string(k);return s=="SamplerAliasGrenadePair"?pair:s=="SamplerAliasAssetFlag"?asset:ordinary;}};
+int WFRStop(const char*){return 1;}int WSACompilePair(int,int){invoked=1;return 2;}int WSACompileAssetPair(int,int){invoked=2;return 3;}
+int route(){FString Params="";int Proof=0,Hash=0;
+''' + block('ASSET_ADMISSION') + block('PAIR_DISPATCH') + r'''
+return 4;}
+int main(){for(int p=0;p<2;++p)for(int a=0;a<2;++a)for(int o=0;o<2;++o){pair=p;asset=a;ordinary=o;invoked=0;int result=route();
+ bool reject=a&&!p||p&&o;assert(result==(reject?1:!p?4:a?3:2));assert(invoked==(reject||!p?0:a?2:1));}
+ const std::vector<int>expected{0,2,1,3,5,4};
+ for(int f=-1;f<6;++f){S s;s.fail=f;assert(s.CompileAssetPair()==(f<0));assert(s.Completed==(f<0?6:f));assert(s.calls.size()==(f<0?6:f+1));
+  for(int i=0;i<int(s.calls.size());++i)assert(s.calls[i]==expected[i]);assert(s.ValidResources==0);}
+ {S s;s.AssetFlagChanged=false;assert(!s.CompileAssetPair()&&s.calls.empty());}
+ {S s;s.NoStaticReferences.n=5;assert(!s.CompileAssetPair()&&s.calls.empty());}
+}
+''')
+
+    def test_actual_asset_completion_keeps_failure_and_closes(self):
+        implementation = block('ASSET_IMPLEMENTATION')
+        control = implementation[implementation.index('static int32 WSACompileAssetPair'):]
+        compile_run(r'''
+#include <cassert>
+#include <string>
+using int32=int;using FString=std::string;
+#define TEXT(x) x
+int scenario=0,closed=0,completed=0;struct FWeaponTessProof{};
+int WFRStop(const char*){return 1;}
+struct FWSAliasAssetState{bool done=false,Attempted=false;int Completed=0,ValidResources=0;
+ FWSAliasAssetState(FWeaponTessProof&,const FString&){}~FWSAliasAssetState(){if(!done)Close();}
+ bool CapturePair(){return scenario!=1;}bool PreparePair(){return scenario!=2;}bool PrepareAssetFlag(){return scenario!=3;}
+ bool CompileAssetPair(){Attempted=scenario!=6;Completed=scenario==7?5:6;ValidResources=scenario==8?5:6;return scenario!=4;}
+ bool Close(){assert(!done);done=true;++closed;return scenario!=5;}};
+void log(const char*s,...){auto line=std::string(s);assert(line.find("ordinaryAcceptance=0")!=std::string::npos&&line.find("repairAuthority=0")!=std::string::npos);++completed;}
+#define UE_LOG(c,v,...) log(__VA_ARGS__)
+''' + control + r'''
+int main(){for(scenario=0;scenario<=8;++scenario){closed=completed=0;FWeaponTessProof proof;assert(WSACompileAssetPair(proof,"hash")==bool(scenario));
+ assert(closed==1);assert(completed==(scenario==0||scenario==8));}}
+''')
+
+    def test_asset_inverse_and_narrow_normalization(self):
+        s = HEADER.read_text()
+        self.assertEqual(hashlib.sha256(without_asset(s).encode()).hexdigest(),
+                         'ee9471c5eafbe60b88bfd34f087a753d9d9d555bd0af64351d75bb46e8d3bbd1')
+        self.assertEqual(s.count('CloneMaster->bUsedWithStaticLighting = false;'), 1)
+        self.assertIn('if (I == 0 && !NormalizeAssetFlag(XP, YP)) return false;', s)
+        preparation = block('ASSET_PREPARE')
+        self.assertNotIn('->CacheShaders(', preparation)
+        self.assertLess(preparation.index('!WSADrain()'), preparation.index('MasterId = Fresh'))
+        self.assertLess(preparation.index('MasterId = Fresh'), preparation.index('Reference.GetShaderMapId'))
+        self.assertLess(preparation.index('NoStaticReferences.Num() != 6 || !WSADrain()'), preparation.index('CloneMaster->bUsedWithStaticLighting = false;'))
+        compile_run(r'''
+#include <cassert>
+#include <map>
+#include <memory>
+#include <string>
+using TCHAR=char;
+#define TEXT(x) x
+const int RF_Transient=1;int package,other;void*GetTransientPackage(){return &package;}
+struct FString:std::string{using std::string::string;FString(){}FString(const std::string&s):std::string(s){}bool IsEmpty()const{return empty();}};
+struct FJsonObject{std::map<FString,FString>values;void SetStringField(const char*k,const FString&v){values[k]=v;}};
+template<class T>using TSharedPtr=std::shared_ptr<T>;
+bool WSAField(TSharedPtr<FJsonObject>p,const char*k,const FString&v){return p->values.count(k)&&p->values[k]==v;}
+struct Material{bool bUsedWithStaticLighting=true,transient=true;void*outer=&package;void*GetOuter(){return outer;}bool HasAnyFlags(int){return transient;}};
+struct State{Material*Master=nullptr,*CloneMaster=nullptr;
+''' + block('ASSET_STATE') + r'''
+};
+int main(){for(int n=0;n<14;++n){Material source,owned;owned.bUsedWithStaticLighting=false;State s;s.Master=&source;s.CloneMaster=&owned;
+ s.AssetFlagChanged=n!=1;s.SourceStaticLightingText="True";s.OwnedStaticLightingText="False";
+ auto a=std::make_shared<FJsonObject>(),b=std::make_shared<FJsonObject>();a->values={{"bUsedWithStaticLighting","True"},{"other","original"}};b->values={{"bUsedWithStaticLighting","False"},{"other","candidate"}};
+ if(n==2)s.Master=nullptr;if(n==3)s.CloneMaster=nullptr;if(n==4)s.CloneMaster=s.Master;if(n==5)source.bUsedWithStaticLighting=false;
+ if(n==6)owned.bUsedWithStaticLighting=true;if(n==7)owned.outer=&other;if(n==8)owned.transient=false;if(n==9)s.SourceStaticLightingText="";
+ if(n==10)s.OwnedStaticLightingText="True";if(n==11)a->values.erase("bUsedWithStaticLighting");if(n==12)b->values.erase("bUsedWithStaticLighting");if(n==13)b->values["bUsedWithStaticLighting"]="True";
+ auto av=a->values,bv=b->values;bool originalFlag=source.bUsedWithStaticLighting,ownedFlag=owned.bUsedWithStaticLighting;
+ assert(s.NormalizeAssetFlag(a,b)==(n<2));assert(a->values==av);assert(source.bUsedWithStaticLighting==originalFlag&&owned.bUsedWithStaticLighting==ownedFlag);
+ if(n==0){assert(b->values["bUsedWithStaticLighting"]=="True"&&b->values["other"]=="candidate");}else assert(b->values==bv);
+}}
+''')
+
+    def test_actual_asset_preparation_reference_only_and_one_owned_flag(self):
+        overrides = (PRIVATE / 'WeaponShaderProbe.h').read_text().split('// WSP_CF_OVERRIDES_BEGIN\n', 1)[1].split('// WSP_CF_OVERRIDES_END', 1)[0]
+        comparator = block('ORDINARY_RESOURCE').split('static bool WSAOrdinaryIDEqual', 1)[1]
+        compile_run(r'''
+#include <cassert>
+#include <string>
+#include <vector>
+#include <map>
+#include <memory>
+#include <algorithm>
+using int32=int;using TCHAR=char;
+#define TEXT(x) x
+int scenario=0,drains=0,ids=0,live=0;const int RF_Transient=1,SP_OPENGL_ES2_WEBGL=9;
+int package,other;void*GetTransientPackage(){return &package;}
+struct FString:std::string{using std::string::string;FString(){}FString(const std::string&s):std::string(s){}bool IsEmpty()const{return empty();}};
+template<class T>struct TArray:std::vector<T>{using std::vector<T>::vector;int Num()const{return this->size();}void Add(const T&v){this->push_back(v);}bool Contains(const T&v)const{return std::find(this->begin(),this->end(),v)!=this->end();}};
+struct FGuid{int v=0;bool IsValid()const{return v!=0;}bool operator==(const FGuid&o)const{return v==o.v;}bool operator!=(const FGuid&o)const{return v!=o.v;}
+ static FGuid NewGuid(){return {scenario==18?0:scenario==19?10:scenario==20?5:scenario==21?20:100};}};
+namespace EMaterialQualityLevel{enum Type{Low=0,High=1,Medium=2,Num=3};}namespace ERHIFeatureLevel{enum Type{ES2=2};}
+struct FStaticParameterSet{int value=0;};
+struct O{FGuid StateId;bool bUsedWithStaticLighting=true,transient=true;void*outer=&package;int staticValue=0;void*GetOuter(){return outer;}bool HasAnyFlags(int){return transient;}void GetStaticParameterValues(FStaticParameterSet&s){s.value=staticValue;}};
+struct FJsonObject{std::map<FString,FString>values;bool TryGetStringField(const char*k,FString&v){if(!values.count(k))return false;v=values[k];return true;}void SetStringField(const char*k,const FString&v){values[k]=v;}};
+template<class T>using TSharedPtr=std::shared_ptr<T>;
+O*original=nullptr;
+TSharedPtr<FJsonObject>MRProperties(O*o,bool){auto p=std::make_shared<FJsonObject>();p->values={{"bUsedWithStaticLighting",o->bUsedWithStaticLighting?"True":"False"},{"other","same"}};
+ if(scenario==30&&o!=original&&o->bUsedWithStaticLighting)p->values.erase("bUsedWithStaticLighting");
+ if(scenario==31&&o==original)p->values["bUsedWithStaticLighting"]="different";
+ if(scenario==32&&!o->bUsedWithStaticLighting)p->values.erase("bUsedWithStaticLighting");
+ if(scenario==33&&!o->bUsedWithStaticLighting)p->values["bUsedWithStaticLighting"]="True";
+ if(scenario==34&&!o->bUsedWithStaticLighting)p->values["other"]="changed";return p;}
+bool WSAField(TSharedPtr<FJsonObject>p,const char*k,const FString&v){return p->values.count(k)&&p->values[k]==v;}
+FString MRValue(TSharedPtr<FJsonObject>p){FString s;for(auto&kv:p->values)s+=kv.first+kv.second;return s;}
+int MRStatic(const FStaticParameterSet&s){return s.value;}int MRValue(int x){return x;}
+struct FWeaponRepair{template<class T>bool Same(const T&a,const T&b){return a==b;}};
+struct SD{int ShaderType=1,SourceHash=2;};struct PD{int ShaderPipelineType=3,StagesSourceHash=4;};struct VD{int VertexFactoryType=5,VFSourceHash=6;};
+struct FMaterialShaderMapId{FGuid BaseMaterialId;int QualityLevel=0,FeatureLevel=2;FStaticParameterSet ParameterSet;TArray<FGuid>ReferencedFunctions{FGuid{20}};TArray<SD>ShaderTypeDependencies{SD{}};TArray<PD>ShaderPipelineTypeDependencies{PD{}};TArray<VD>VertexFactoryTypeDependencies{VD{}};};
+bool WSPMaterialInstanceIdentitySubset(const FMaterialShaderMapId&a,const FMaterialShaderMapId&b){return a.BaseMaterialId==b.BaseMaterialId&&a.QualityLevel==b.QualityLevel&&a.FeatureLevel==b.FeatureLevel&&a.ParameterSet.value==b.ParameterSet.value&&a.ReferencedFunctions==b.ReferencedFunctions;}
+static bool WSAOrdinaryIDEqual''' + comparator + r'''
+struct FMaterialResource{O*master=nullptr,*instance=nullptr;int quality=0;FMaterialResource(){++live;}virtual~FMaterialResource(){--live;}
+ virtual bool IsPersistent()const{return true;}virtual bool IsUsedWithStaticLighting()const{return master->bUsedWithStaticLighting;}
+ bool IsSpecialEngineMaterial(){return false;}
+ void SetMaterial(O*m,int q,bool hasq,int f,O*i){assert(m->bUsedWithStaticLighting&&m->StateId.v==100&&hasq&&f==2);master=m;instance=i;quality=q;}
+ void GetShaderMapId(int p,FMaterialShaderMapId&id){assert(p==9&&!IsPersistent()&&!IsUsedWithStaticLighting()&&master->bUsedWithStaticLighting);++ids;
+  id.BaseMaterialId=master->StateId;id.QualityLevel=quality;id.ParameterSet.value=instance->staticValue;
+  if(scenario==22)id.BaseMaterialId.v=99;if(scenario==23)id.QualityLevel=99;if(scenario==24)id.FeatureLevel=99;if(scenario==25)id.ReferencedFunctions={FGuid{30}};
+  if(scenario==26)id.ShaderTypeDependencies.clear();if(scenario==27)id.ParameterSet.value=99;}
+};
+struct FWeaponShaderResource:FMaterialResource{
+''' + overrides + r'''
+};
+bool WSADrain(){++drains;assert(live==0);return scenario!=7&&!(scenario==29&&drains==2);}
+bool WSAOwnedGraph(O*,O*,O* =nullptr,O* =nullptr){return scenario!=17;}
+struct State{O master,clone,layer,cloneLayer,one,child;O*Master=&master,*CloneMaster=&clone,*Layer=&layer,*CloneLayer=&cloneLayer,*MI=&one,*Child=&child,*CloneMI=&one,*CloneChild=&child;
+ bool AssetFlagChanged=false,OrdinaryLighting=false;void*Resource=nullptr;int Completed=0;TArray<FMaterialShaderMapId>RequestedIds,NoStaticReferences;TArray<O*>Roots;FGuid MasterId{10},LayerId{20};FString MasterHash,SourceStaticLightingText,OwnedStaticLightingText;
+ struct P{State*s;bool Check(const FString&){return scenario!=10&&!(scenario==37&&s->AssetFlagChanged);}}Proof{this};
+ State(){original=Master;master.StateId={5};clone.StateId=MasterId;layer.StateId={30};one.staticValue=1;child.staticValue=scenario==28?1:2;Roots.Add(CloneMaster);}
+ bool PairEquivalent(){assert(live==0);return scenario!=8&&!(scenario==35&&AssetFlagChanged);}
+ bool Unchanged(){return scenario!=9&&!(scenario==36&&AssetFlagChanged);}bool Contracts(O*,O*){return scenario!=11;}
+''' + block('ASSET_PREPARE') + r'''
+};
+int main(){for(scenario=0;scenario<=37;++scenario){drains=ids=live=0;State s;
+ if(scenario==1)s.AssetFlagChanged=true;if(scenario==2)s.Resource=&package;if(scenario==3)s.Completed=1;if(scenario==4)s.RequestedIds.Add({});if(scenario==5)s.NoStaticReferences.Add({});
+ if(scenario==6)s.OrdinaryLighting=true;if(scenario==12)s.master.bUsedWithStaticLighting=false;if(scenario==13)s.clone.bUsedWithStaticLighting=false;
+ if(scenario==14)s.clone.outer=&other;if(scenario==15)s.clone.transient=false;if(scenario==16)s.Roots.clear();
+ bool originalFlag=s.master.bUsedWithStaticLighting;assert(s.PrepareAssetFlag()==(scenario==0));assert(live==0&&s.master.bUsedWithStaticLighting==originalFlag);
+ if(scenario==0){assert(ids==6&&drains==2&&s.AssetFlagChanged&&!s.clone.bUsedWithStaticLighting&&s.master.bUsedWithStaticLighting);assert(s.clone.StateId.v==100);}
+ if(scenario>=1&&scenario<=21)assert(ids==0);
+ if(scenario>=22&&scenario<=27)assert(ids==1);
+ if(scenario==28)assert(ids==4);
+ if(scenario>=29)assert(ids==6);
+ if(scenario>=32)assert(!s.clone.bUsedWithStaticLighting);
+}}
+''')
+
     def test_actual_child_prepare_preserves_parent_bags_and_static_values(self):
         pair = block('PAIR_IMPLEMENTATION')
         methods = pair[pair.index('    bool PreparePair()'):pair.index('    // ALIAS_PAIR_COMPILE_ONE_BEGIN')]
@@ -131,7 +365,7 @@ bool pairFlag=false,ordinaryFlag=false;int pairCalls=0;
 struct FParse{static bool Param(const char*,const char*k){return std::string(k)=="SamplerAliasGrenadePair"?pairFlag:ordinaryFlag;}};
 int WFRStop(const char*){return 9;}int WSACompilePair(int,int){++pairCalls;return 7;}
 int route(){FString Params="";int Proof=0,Hash=0;
-''' + block('PAIR_DISPATCH') + r'''
+''' + block('PAIR_DISPATCH', without_asset(HEADER.read_text())) + r'''
 return 3;}
 int main(){
  const std::vector<std::pair<int,int>>expected{{0,0},{0,2},{0,1},{1,0},{1,2},{1,1}};
@@ -230,7 +464,7 @@ int main(){for(int s=0;s<=30;++s){scenario=s;caches=finishes=drains=destroyed=sa
 ''')
 
     def test_persistence_order_fix_inverse_to_native_pair_attempt(self):
-        s = HEADER.read_text()
+        s = without_asset(HEADER.read_text())
         old = '        if (Resource->IsSpecialEngineMaterial() || Resource->IsPersistent()) return false;\n'
         new = '        if (Resource->IsSpecialEngineMaterial()) return false;\n'
         pair = block('PAIR_COMPILE_ONE')
@@ -326,7 +560,7 @@ struct FWSAliasState{bool done=false,Attempted=false,OrdinaryLighting=false;FWSA
  bool Close(){assert(!done);done=true;++closed;return scenario!=18;}};
 void log(const char*f,...){++complete;completion=f;}
 #define UE_LOG(c,v,fmt,...) {log(fmt, ##__VA_ARGS__);}
-'''+re.sub(r'    // ALIAS_PAIR_DISPATCH_BEGIN\n.*?    // ALIAS_PAIR_DISPATCH_END\n', '', block('CONTROL'), flags=re.S)+r'''
+'''+re.sub(r'    // ALIAS_PAIR_DISPATCH_BEGIN\n.*?    // ALIAS_PAIR_DISPATCH_END\n', '', block('CONTROL', without_asset(HEADER.read_text())), flags=re.S)+r'''
 int main(){for(int o=0;o<2;++o)for(scenario=0;scenario<=19;++scenario){ordinary=o;completion.clear();verify=drains=captured=prepared=compiled=closed=complete=0;
  GIsEditor=scenario!=1;GShaderCompilingManager=scenario==7?nullptr:(void*)1;
  int result=WeaponSamplerAliasProbe("fixed");assert(result==(scenario?1:0));
