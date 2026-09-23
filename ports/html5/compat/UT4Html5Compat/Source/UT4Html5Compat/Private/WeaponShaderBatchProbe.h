@@ -22,14 +22,26 @@ static int32 WeaponShaderBatchProbe(const FString& Params)
         if (Seen.Contains(Target) || !MI || MI->GetMaterial() != Master) return WFRStop(TEXT("shader-batch-instance"), Target);
         Seen.Add(Target);
     }
+    // GRENADE_BASELINE_SELECTOR_BEGIN
+    // Selection only: keep the complete generation proof and all 18 prereads.
+    const bool GrenadeBaseline = FParse::Param(*Params, TEXT("WeaponShaderGrenade1PHigh"));
+    const FString Grenade1P = TEXT("/Game/RestrictedAssets/Weapons/GrenadeLauncher/Materials/MIC_Grenade_Launcher");
+    if (GrenadeBaseline && !Seen.Contains(Grenade1P)) return WFRStop(TEXT("shader-grenade-baseline-scope"));
+    // GRENADE_BASELINE_SELECTOR_END
     bool Success = true; int32 Resources = 0;
     for (const FString& Target : Targets)
     {
+        // GRENADE_BASELINE_TARGET_BEGIN
+        if (GrenadeBaseline && Target != Grenade1P) continue;
+        // GRENADE_BASELINE_TARGET_END
         auto* MI = FindObject<UMaterialInstanceConstant>(nullptr, *ObjectPath(Target));
         if (!MI || MI->GetMaterial() != Master) return WFRStop(TEXT("shader-batch-instance-recheck"), Target);
         FStaticParameterSet Effective; MI->GetStaticParameterValues(Effective);
         for (int32 Q = 0; Q < EMaterialQualityLevel::Num; ++Q)
         {
+            // GRENADE_BASELINE_QUALITY_BEGIN
+            if (GrenadeBaseline && Q != EMaterialQualityLevel::High) continue;
+            // GRENADE_BASELINE_QUALITY_END
             FWeaponShaderOwner Owner;
             auto* Resource = Owner.Resource;
             const auto Quality = static_cast<EMaterialQualityLevel::Type>(Q);
@@ -78,6 +90,15 @@ static int32 WeaponShaderBatchProbe(const FString& Params)
         }
     }
     if (!Proof.Check(MasterHash)) return WFRStop(TEXT("shader-batch-after-bytes"));
+    // GRENADE_BASELINE_COMPLETION_BEGIN
+    if (GrenadeBaseline)
+    {
+        UE_LOG(LogUT4Html5Compat, Display,
+            TEXT("COMPAT_WEAPON_SHADER_BATCH_DIAGNOSTIC complete selector=grenade1p-high resources=%d valid=%d staticLighting=0 persistent=0 assetsSaved=0 ordinaryAcceptance=0"),
+            Resources, Success ? 1 : 0);
+        return Success && Resources == 1 ? 0 : 1;
+    }
+    // GRENADE_BASELINE_COMPLETION_END
     UE_LOG(LogUT4Html5Compat, Display,
         TEXT("COMPAT_WEAPON_SHADER_BATCH complete materials=18 qualities=3 resources=%d valid=%d staticLighting=0 persistent=0 assetsSaved=0 ordinaryAcceptance=0"),
         Resources, Success ? 1 : 0);

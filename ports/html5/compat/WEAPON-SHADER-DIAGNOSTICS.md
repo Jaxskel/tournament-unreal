@@ -47,6 +47,15 @@ probe. Its explicit `-WeaponShaderEnforcer1PHigh` and
 `-WeaponShaderNoStaticLighting` modifiers retain their distinct one-resource
 diagnostic completion formats; they do not select arbitrary materials.
 
+For a bounded failed-shader capture, add `-WeaponShaderGrenade1PHigh` to
+`-Mode=WeaponShaderBatchProbe`. It retains the full generation verification and
+all 18 instance prereads, then compiles only Grenade Launcher first-person at
+High quality. The owned no-static-lighting override is unchanged; no static
+parameter is overridden. Completion uses `COMPAT_WEAPON_SHADER_BATCH_DIAGNOSTIC`
+with `selector=grenade1p-high` and exactly one resource, never the ordinary
+54-resource completion. A failed shader still exits1 and remains useful diagnostic
+evidence; it is not shader or appearance acceptance.
+
 ## Usage report and materials-only cohort
 
 `-Mode=WeaponUsageReport` is a separate read-only usage audit. Its default scope
