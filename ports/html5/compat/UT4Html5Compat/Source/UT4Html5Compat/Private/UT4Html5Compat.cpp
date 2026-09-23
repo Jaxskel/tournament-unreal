@@ -383,6 +383,7 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
 #include "WeaponTessellationUpgrade.h"
 #include "WeaponUsageReport.h"
 #include "WeaponGrenadeAssignmentReport.h"
+#include "EnforcerConsumerReport.h"
 #include "WeaponShaderProbe.h"
 #include "WeaponShaderBatchProbe.h"
 #include "WeaponSamplerAliasProbe.h"
@@ -555,6 +556,8 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
         return WeaponBlueprintReport(Params);
     if (Mode.Equals(TEXT("WeaponUsageReport"), ESearchCase::IgnoreCase))
         return WeaponUsageReport(Params);
+    if (Mode.Equals(TEXT("EnforcerConsumerReport"), ESearchCase::IgnoreCase))
+        return EnforcerConsumerReport(Params);
     if (Mode.Equals(TEXT("WeaponGrenadeAssignmentReport"), ESearchCase::IgnoreCase))
         return WeaponGrenadeAssignmentReport(Params);
     if (Mode.Equals(TEXT("WeaponShaderBatchProbe"), ESearchCase::IgnoreCase))

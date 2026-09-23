@@ -44,6 +44,9 @@ static bool WGARootAllowed(const FWURRoot& Root, const FString& Original)
 }
 struct FWGAReport
 {
+    // Optional labels for another fixed read-only consumer query; defaults preserve this report.
+    const TCHAR* Schema = TEXT("ut4-grenade-assignment-v1");
+    const TCHAR* Prefix = TEXT("COMPAT_WEAPON_GRENADE_ASSIGNMENT");
     FWURLedger Ledger;
     FString Run, Context;
     int32 Rows = 0, Characters = 0, Components = 0;
@@ -55,7 +58,7 @@ struct FWGAReport
     // WGA_DIAGNOSTIC_STATE_END
     bool Emit(const TCHAR* Kind, TSharedPtr<FJsonObject> J)
     {
-        J->SetStringField(TEXT("schema"), TEXT("ut4-grenade-assignment-v1")); J->SetStringField(TEXT("kind"), Kind);
+        J->SetStringField(TEXT("schema"), Schema); J->SetStringField(TEXT("kind"), Kind);
         J->SetStringField(TEXT("run"), Run); J->SetNumberField(TEXT("sequence"), Rows);
         J->SetBoolField(TEXT("read_only"), true); J->SetBoolField(TEXT("global_usage_complete"), false);
         J->SetBoolField(TEXT("exclusive_runtime_consumption_proven"), false);
@@ -71,7 +74,7 @@ struct FWGAReport
         FString Line;
         if (!FJsonSerializer::Serialize(J.ToSharedRef(), TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Line)) ||
             Rows >= 8192 || Line.Len() > 65536 || Characters > 8 * 1024 * 1024 - Line.Len()) return false;
-        ++Rows; Characters += Line.Len(); UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_GRENADE_ASSIGNMENT %s"), *Line); return true;
+        ++Rows; Characters += Line.Len(); UE_LOG(LogUT4Html5Compat, Display, TEXT("%s %s"), Prefix, *Line); return true;
     }
     int32 Stop(const TCHAR* Reason)
     {

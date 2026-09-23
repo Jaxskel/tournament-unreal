@@ -142,7 +142,8 @@ class GrenadeAssignment(unittest.TestCase):
         self.assertIn('TEXT("exclusive_runtime_consumption_proven"), false', s)
         self.assertIn('TEXT("normalization_attribution_claimed"), false', s)
         self.assertIn('TEXT("assetsSaved"), 0', s)
-        self.assertIn('COMPAT_WEAPON_GRENADE_ASSIGNMENT %s', s)
+        self.assertIn('const TCHAR* Prefix = TEXT("COMPAT_WEAPON_GRENADE_ASSIGNMENT")', s)
+        self.assertIn('TEXT("%s %s"), Prefix, *Line', s)
         self.assertIn('Rows >= 8192', s)
         self.assertIn('8 * 1024 * 1024 - Line.Len()', s)
         admission = body(s, 'static bool WGAInputs')
@@ -234,6 +235,12 @@ int main(){
         s = HEADER.read_text()
         inverse, count = re.subn(r'(?m)^[ \t]*// WGA_DIAGNOSTIC_([A-Z_]+)_BEGIN\n[\s\S]*?^[ \t]*// WGA_DIAGNOSTIC_\1_END\n', '', s)
         self.assertEqual(count, 8)
+        # Undo the separately tested optional output labels before the historical diagnostic inverse.
+        inverse = inverse.replace('    // Optional labels for another fixed read-only consumer query; defaults preserve this report.\n'
+                                  '    const TCHAR* Schema = TEXT("ut4-grenade-assignment-v1");\n'
+                                  '    const TCHAR* Prefix = TEXT("COMPAT_WEAPON_GRENADE_ASSIGNMENT");\n', '')
+        inverse = inverse.replace('J->SetStringField(TEXT("schema"), Schema);', 'J->SetStringField(TEXT("schema"), TEXT("ut4-grenade-assignment-v1"));')
+        inverse = inverse.replace('TEXT("%s %s"), Prefix, *Line', 'TEXT("COMPAT_WEAPON_GRENADE_ASSIGNMENT %s"), *Line')
         self.assertEqual(hashlib.sha256(inverse.encode()).hexdigest(),
                          '8e32b95f1dbe03d6bb6dbdd2ca8d821b8c63efa6a35de9bb1b46f8d01b042391')
         diagnostic = s.split('// WGA_DIAGNOSTIC_IMPLEMENTATION_BEGIN\n')[1].split('// WGA_DIAGNOSTIC_IMPLEMENTATION_END')[0]

@@ -2,6 +2,8 @@
 
 The [weapon shader and usage diagnostics](WEAPON-SHADER-DIAGNOSTICS.md) document the separate fixed-scope compilation counterfactual and materials-only usage cohort. Neither diagnostic authorizes an asset repair.
 
+The [Enforcer consumer report](ENFORCER-CONSUMER-REPORT.md) records a fixed-seven-package, read-only native query and its evidence limits; it authorizes no asset repair.
+
 Original editor-only plugin and bounded copy-on-write preparation. No engine source
 is bundled. The editor plugin now compiles against the isolated UT4 source, and Report has run on the recovered Malcolm and weapon assets. Twelve Python preparation tests pass. Apply/Verify and full browser appearance are tracked separately in the parent verification record.
 
