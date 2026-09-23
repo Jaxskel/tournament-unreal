@@ -67,3 +67,37 @@ discovered packages. A revised dependency manifest and explicit treatment of
 PostLoad changes need review before another run. No guard was relaxed by this
 first-run result. Material repair, shader cook and gameplay appearance remain
 separate checks.
+
+## Qualified post-load observation
+
+The opt-in `-GrenadePostLoadDefaultsDiagnostic` stops the normal load loop after
+its first Blueprint load and observes only already-loaded fixed objects. It uses
+existing class defaults and stored component templates, never resolves effective
+SCS templates through the engine's potentially loading accessor, and records
+unavailable observations explicitly. Unknown dependencies and dirty transitions
+remain failures; no whitelist or dirty baseline is extended.
+
+Rows collected by this branch have `diagnostic_` kinds and explicitly deny repair
+authority. Its `diagnostic_end` can describe a partial capture. The branch always
+returns **exit 1** and never emits the strict `complete` record, even if all six
+post-load roots are observed. Recorded file hashes are checked separately from
+dirty-state failure. Object/package checks establish stability only for objects
+visible to the engine iterator; unreachable and background-loading objects are
+excluded by that API. No universal absence of allocation, property changes, or
+runtime consumers is claimed. A diagnostic terminal is useful evidence for the
+next investigation, not approval to save or promote a material repair.
+
+The qualified branch subsequently compiled in the native editor module (three
+actions, 14.06 seconds). Its native run returned the required exit 1 and captured
+all six roots, with zero unavailable observations and no strict `complete` row.
+The existing first-person weapon Mesh and third-person attachment Mesh were
+skeletal components. Their body slots resolved to the expected first- and
+third-person Grenade Launcher material instances, with no slot-zero override in
+those observed defaults. The third-person instance inherited from the first-person
+instance. The pickup function had native code and no Blueprint script in the
+observed function record; it was not executed.
+
+All 659 externally captured file observations and 11 fixed input pins remained
+unchanged. Unknown-load and dirty-state failures remained present, so this is
+qualified default-assignment evidence, not strict load admission, a live pickup
+test, or global material-use closure. No asset was saved or promoted.

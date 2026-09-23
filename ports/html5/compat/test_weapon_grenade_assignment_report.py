@@ -60,7 +60,7 @@ HOST = r'''
 #include <cstdint>
 using int32=int;using int64=int64_t;using uint8=unsigned char;using TCHAR=char;
 #define TEXT(x) x
-constexpr int RF_NeedLoad=1,RF_NeedPostLoad=2,RF_Transient=4,CLASS_Native=8,FUNC_Native=16;
+constexpr int RF_NoFlags=0,RF_NeedLoad=1,RF_NeedPostLoad=2,RF_Transient=4,CLASS_Native=8,FUNC_Native=16,RF_NeedPostLoadSubobjects=32;
 struct FString:std::string{using std::string::string;FString(){}FString(const std::string&s):std::string(s){}int Len()const{return size();}bool StartsWith(const char*p)const{return rfind(p,0)==0;}};
 template<class T>struct TArray:std::vector<T>{using std::vector<T>::vector;void Add(const T&x){this->push_back(x);}int Num()const{return this->size();}bool Contains(const T&x)const{return std::find(this->begin(),this->end(),x)!=this->end();}void Empty(){this->clear();}bool IsValidIndex(int i)const{return i>=0&&i<Num();}T&Last(){return this->back();}T*GetData(){return this->data();}};
 template<class T>struct TSet:std::set<T>{void Add(const T&x){this->insert(x);}int Num()const{return this->size();}bool Contains(const T&x)const{return this->count(x);}};
@@ -175,7 +175,7 @@ int main(){
         methods = '\n'.join(body(s, x) for x in ('    bool Loaded(', '    bool Material(', '    bool Component(', '    bool Defaults(', '    bool Templates('))
         code = HOST + body(s, 'static bool WGAParentChain') + r'''
 struct FWGAReport{
- FWURLedger Ledger;FString Context;int Components=0,assetSlotsCalls=0,limit=8192;TSet<UPackage*>ObservedPackages;
+ FWURLedger Ledger;FString Context;int Components=0,assetSlotsCalls=0,limit=8192;TSet<UPackage*>ObservedPackages;bool DiagnosticRows=false;
  TArray<std::pair<FString,TSharedPtr<FJsonObject>>>rows;
  bool Emit(const char*kind,TSharedPtr<FJsonObject>j){if(rows.Num()>=limit)return false;rows.Add({kind,j});return true;}
  bool AssetSlots(UObject*mesh){assert(mesh);assetSlotsCalls++;return !mesh->HasAnyFlags(RF_NeedLoad|RF_NeedPostLoad);}
@@ -226,6 +226,183 @@ int main(){
  assert(!r.Loaded("after_load"));assert(r.rows.Num()==4);bool newDirty=false,unknown=false;
  for(auto&row:r.rows){auto&j=*row.second;if(j.s["package"]==dirty.path){newDirty=j.b["new_dirty"];assert(!j.b["normalization_attribution_claimed"]);}if(j.s["package"]==unexpected.path)unknown=j.b["unexpected_package"];}
  assert(newDirty&&unknown&&dirty.dirty);r.Ledger.InitiallyDirty.Add(&dirty);r.Ledger.InitiallyMemoryOnly.Add(&unexpected);assert(r.Loaded("later"));
+}
+'''
+        compile_run(code)
+
+    def test_diagnostic_inverse_and_no_active_resolution(self):
+        s = HEADER.read_text()
+        inverse, count = re.subn(r'(?m)^[ \t]*// WGA_DIAGNOSTIC_([A-Z_]+)_BEGIN\n[\s\S]*?^[ \t]*// WGA_DIAGNOSTIC_\1_END\n', '', s)
+        self.assertEqual(count, 8)
+        self.assertEqual(hashlib.sha256(inverse.encode()).hexdigest(),
+                         '8e32b95f1dbe03d6bb6dbdd2ca8d821b8c63efa6a35de9bb1b46f8d01b042391')
+        diagnostic = s.split('// WGA_DIAGNOSTIC_IMPLEMENTATION_BEGIN\n')[1].split('// WGA_DIAGNOSTIC_IMPLEMENTATION_END')[0]
+        for forbidden in ('LoadObject<', 'LoadPackage(', 'NewObject<', 'GetActualComponentTemplate(',
+                          'GetInheritableComponentHandler(', 'GetGeneratedClassesHierarchy(',
+                          'Compile', 'ProcessEvent(', 'SpawnActor', 'Save', 'ClearDirty',
+                          'SetDirtyFlag', 'GetDefaultObject()', 'InitiallyDirty.Add', 'InitiallyMemoryOnly.Add'):
+            # assetsSaved is a report field, not a callable Save API.
+            self.assertNotIn(forbidden, diagnostic.replace('assetsSaved', 'assets_saved'))
+        self.assertIn('GetDefaultObject(false)', diagnostic)
+        self.assertIn('G->InheritableComponentHandler', diagnostic)
+        self.assertIn('N->ComponentTemplate', diagnostic)
+        dispatch = s.split('// WGA_DIAGNOSTIC_DISPATCH_BEGIN\n')[1].split('// WGA_DIAGNOSTIC_DISPATCH_END')[0]
+        compile_run(r'''
+#include <cassert>
+#include <string>
+#define TEXT(x) x
+struct FString:std::string{using std::string::string;const char*operator*()const{return c_str();}};
+struct FParse{static bool Param(const char*p,const char*k){return std::string(p)==k;}};
+struct Report{struct LedgerType{bool pins=true;int calls=0;bool LoadPins(int){++calls;return pins;}}Ledger;int Stop(const char*){return 7;}};
+int diagCalls=0;bool lastLoaded=false;
+int WGAPostLoadDefaultsDiagnostic(Report&,int,int,bool loaded){++diagCalls;lastLoaded=loaded;return 1;}
+int entry(Report&R,int I,FString Params,bool Emitted,bool LoadedOK){int P=0,Fixed=0,Spec=0;
+''' + dispatch + r'''
+return 91;
+}
+int main(){Report r;
+ assert(entry(r,0,"",true,false)==91&&diagCalls==0&&r.Ledger.calls==0);
+ assert(entry(r,1,"GrenadePostLoadDefaultsDiagnostic",true,false)==91&&diagCalls==0);
+ assert(entry(r,0,"GrenadePostLoadDefaultsDiagnostic",true,false)==1&&diagCalls==1&&!lastLoaded);
+ assert(entry(r,0,"GrenadePostLoadDefaultsDiagnostic",true,true)==1&&diagCalls==2&&lastLoaded);
+ assert(entry(r,0,"GrenadePostLoadDefaultsDiagnostic",false,false)==7&&diagCalls==2);
+ r.Ledger.pins=false;assert(entry(r,0,"GrenadePostLoadDefaultsDiagnostic",true,false)==7&&diagCalls==2);
+}
+''')
+
+    def test_actual_diagnostic_file_check_independent_of_dirty(self):
+        # The host injects filesystem responses; the production comparison body
+        # executes unchanged. This does not simulate Windows handle semantics.
+        s = HEADER.read_text()
+        compile_run(r'''
+#include <cassert>
+#include <string>
+#include <vector>
+#include <algorithm>
+#define TEXT(x) x
+enum class ESearchCase{IgnoreCase};
+struct FString:std::string{using std::string::string;FString(const std::string&s):std::string(s){}FString(){}bool Equals(FString b,ESearchCase)const{FString a=*this;std::transform(a.begin(),a.end(),a.begin(),::tolower);std::transform(b.begin(),b.end(),b.begin(),::tolower);return a==b;}};
+FString Full(FString s){return s;}
+bool exists=true,inspect=true;FString resolved="F:/asset.uasset";int checks=0;bool expectedMapped=false;
+struct FWURRoot{};
+struct FWURFile{FString Path="F:/asset.uasset",Target="physical",Identity="identity",SHA1="hash";bool Missing=false,Mapped=false;long Size=12;FWURRoot Root;
+ static bool Inspect(const FString&,bool,FWURFile&,const FWURRoot*);
+};
+FWURFile observed;
+bool FWURFile::Inspect(const FString&p,bool missing,FWURFile&out,const FWURRoot*root){++checks;assert(p=="F:/asset.uasset");assert(!missing);assert((root!=nullptr)==expectedMapped);out=observed;return inspect;}
+struct FPackageName{static bool DoesPackageExist(const FString&,void*,FString*out){*out=resolved;return exists;}};
+template<class V>struct KV{FString Key;V Value;};
+struct Ledger{std::vector<KV<FString>>Packages;std::vector<KV<FWURFile>>Files;bool dirty=true,unknown=true;bool Loaded(){assert(false);return false;}};
+struct FWGAReport{Ledger Ledger;FString Context;};
+''' + body(s, 'static bool WGADiagnosticFileCheck') + r'''
+int main(){
+ for(int scenario=0;scenario<11;++scenario){FWGAReport r;r.Ledger.Packages.push_back({"package","F:/asset.uasset"});r.Ledger.Files.push_back({"file",FWURFile()});
+  observed=FWURFile();exists=inspect=true;resolved="f:/ASSET.uasset";checks=0;expectedMapped=scenario==10;r.Ledger.Files[0].Value.Mapped=expectedMapped;
+  if(scenario==1)exists=false;if(scenario==2)resolved="other";if(scenario==3)inspect=false;
+  if(scenario==4)observed.Target="other";if(scenario==5)observed.Missing=true;if(scenario==6)observed.Size++;
+  if(scenario==7)observed.Identity="other";if(scenario==8)observed.SHA1="other";
+  if(scenario==9){r.Ledger.dirty=false;r.Ledger.unknown=false;}
+  assert(WGADiagnosticFileCheck(r)==(scenario==0||scenario>=9));assert(checks==((scenario==1||scenario==2)?0:1));
+  assert(r.Ledger.dirty==(scenario!=9)&&r.Ledger.unknown==(scenario!=9));
+ }
+}
+''')
+
+    def test_actual_postload_collector_retains_failure_and_stops_new_objects(self):
+        # Actual boundary, collector and terminal control bodies. Reflection and
+        # file transport are instrumented stand-ins, tested separately above.
+        s = HEADER.read_text()
+        host = HOST.replace('int Len()const', 'const char*operator*()const{return c_str();}int Len()const')
+        host = host.replace('TSharedPtr<FJsonObject>object;', 'TSharedPtr<FJsonObject>object;TSharedPtr<FJsonObject>AsObject(){return object;}')
+        host = host.replace('void SetStringField(', 'const TArray<TSharedPtr<FJsonValue>>&GetArrayField(const char*k){return a[k];}void SetStringField(')
+        host = host.replace('UClass*GetClass()const', 'UPackage*GetOutermost()const;UClass*GetClass()const')
+        host = host.replace('struct USimpleConstructionScript{', 'struct USimpleConstructionScript:UObject{')
+        host = host.replace('struct UBlueprintGeneratedClass:UClass{', 'struct UBlueprintGeneratedClass:UClass{UObject*ClassGeneratedBy=nullptr;')
+        host = host.replace('TSet<UPackage*>InitiallyDirty,InitiallyMemoryOnly;', 'TSet<UPackage*>InitiallyDirty,InitiallyMemoryOnly;FString Phase;')
+        old_iterator = 'template<class T>struct TObjectIterator{int at=0;explicit operator bool()const{return at<Packages.Num();}void operator++(){++at;}T*operator*(){return Packages[at];}};'
+        host = host.replace(old_iterator, r'''
+TArray<UObject*>Objects;
+template<class T>struct TObjectIterator{TArray<T*>items;int at=0;TObjectIterator(int f=0){assert(f==RF_NoFlags);for(auto*o:Objects)if(auto*t=dynamic_cast<T*>(o))items.Add(t);}explicit operator bool()const{return at<items.Num();}void operator++(){++at;}T*operator*(){return items[at];}};
+UPackage*UObject::GetOutermost()const{return &transient;}
+''')
+        code = host + r'''
+struct UBlueprint:UObject{UClass*GeneratedClass=nullptr,*ParentClass=nullptr;static UClass*StaticClass(){static UClass c;return &c;}};
+struct UMaterialInstanceConstant:UMaterialInstance{static UClass*StaticClass(){static UClass c;return &c;}};
+struct USkeletalMesh:UObject{static UClass*StaticClass(){static UClass c;return &c;}};
+FString ObjectPath(const FString&s){return s+".Object";}
+FString Str(TSharedPtr<FJsonObject>s,const char*k){return s->s[k];}
+std::map<FString,UObject*>roots;int findCalls=0;
+template<class T>T*FindObject(void*,const char*p){++findCalls;return dynamic_cast<T*>(roots[p]);}
+int calls=0,changeKind=0;UObject late;UPackage latePackage;
+void observe(){++calls;if(calls!=1)return;if(changeKind==1)Objects.Add(&late);if(changeKind==2)Objects.Add(&latePackage);if(changeKind==3)Objects.pop_back();}
+struct FWGAReport{
+ FWURLedger Ledger;FString Context;bool DiagnosticRows=false,loadedOK=false,methodOK=true;int loadedCalls=0;
+ TArray<std::pair<FString,TSharedPtr<FJsonObject>>>rows;
+ bool Emit(const char*k,TSharedPtr<FJsonObject>j){auto J=j;
+''' + s.split('// WGA_DIAGNOSTIC_ROW_BEGIN\n')[1].split('// WGA_DIAGNOSTIC_ROW_END')[0].replace('Kind', 'k') + r'''
+ rows.Add({j->s["kind"],j});return true;}
+ bool Loaded(const char*){++loadedCalls;return loadedOK;}
+ bool Defaults(UObject*,const FString&){observe();return methodOK;}
+ bool Component(UActorComponent*,const FString&){observe();return methodOK;}
+ bool Material(UMaterialInterface*,const FString&,int){observe();return methodOK;}
+ bool AssetSlots(UObject*){observe();return methodOK;}
+};
+int pinCalls=0,pinFailure=0;
+bool WGADiagnosticFileCheck(FWGAReport&){++pinCalls;return pinCalls!=pinFailure;}
+''' + body(s, 'static bool WGAReady') + '\n' + body(s, 'struct FWGABoundary') + ';\n' + body(s, 'struct FWGADefaultSnapshot') + ';\n' + body(s, 'static int32 WGAPostLoadDefaultsDiagnostic') + r'''
+int main(){
+ for(int scenario=0;scenario<20;++scenario){
+  Objects.clear();roots.clear();findCalls=calls=pinCalls=changeKind=pinFailure=0;
+  UBlueprint bp[2];UBlueprintGeneratedClass generated[2];UClass parent,componentClass;parent.native=true;parent.path="/Script/Native";
+  AActor cdo[3];parent.cdo=&cdo[2];UActorComponent stored;stored.cls=&componentClass;
+  USCS_Node node;node.ComponentTemplate=&stored;node.actual=nullptr;USimpleConstructionScript scs;scs.nodes.Add(&node);
+  UInheritableComponentHandler handler;FComponentOverrideRecord rec;rec.ComponentClass=&componentClass;rec.ComponentTemplate=&stored;rec.ComponentKey.owner=&generated[0];handler.records.Add(rec);
+  generated[0].SimpleConstructionScript=&scs;generated[0].InheritableComponentHandler=&handler;generated[0].ComponentTemplates.Add(&stored);cdo[0].components.Add(&stored);
+  UMaterialInstanceConstant mic[2];USkeletalMesh mesh[2];UPackage package;
+  TArray<FString>fixed;auto spec=WURObject();
+  for(int i=0;i<6;++i){FString p="root"+std::to_string(i);fixed.Add(p);UObject*o=i<2?static_cast<UObject*>(&bp[i]):(i<4?static_cast<UObject*>(&mic[i-2]):static_cast<UObject*>(&mesh[i-4]));o->path=ObjectPath(p);roots[o->path]=o;Objects.Add(o);
+   o->cls=i<2?UBlueprint::StaticClass():(i<4?UMaterialInstanceConstant::StaticClass():USkeletalMesh::StaticClass());
+   auto row=WURObject();row->SetStringField("expected_native_parent",parent.path);spec->a["roots"].Add(MRValue(row));
+   if(i<2){bp[i].GeneratedClass=&generated[i];bp[i].ParentClass=&parent;generated[i].parent=&parent;generated[i].ClassGeneratedBy=&bp[i];generated[i].path=bp[i].path+"_C";generated[i].cdo=&cdo[i];Objects.Add(&generated[i]);Objects.Add(&cdo[i]);}
+  }
+  for(UObject*o:TArray<UObject*>{&package,&parent,&componentClass,&cdo[2],&stored,&node,&scs,&handler})Objects.Add(o);
+  FWGAReport r;bool first=false;
+  if(scenario==1){first=true;r.loadedOK=true;}
+  if(scenario==2)roots[ObjectPath(fixed[1])]=nullptr;
+  if(scenario==3)mic[0].flags=RF_NeedPostLoadSubobjects;
+  if(scenario==4)mesh[0].cls=UBlueprint::StaticClass();
+  if(scenario==5)generated[0].cdo=nullptr;
+  if(scenario==6)stored.flags=RF_NeedPostLoad;
+  if(scenario>=7&&scenario<=9)changeKind=scenario-6;
+  if(scenario==10)pinFailure=2;
+  if(scenario==11)pinFailure=1;
+  if(scenario==12)parent.parent=&generated[0];
+  if(scenario==13)handler.records[0].ComponentKey.valid=false;
+  if(scenario==14)r.methodOK=false;
+  if(scenario==15)scs.nodes.resize(257,&node);
+  if(scenario==16)generated[0].ClassGeneratedBy=&bp[1];
+  if(scenario==17)bp[1].path="other";
+  if(scenario==18)handler.flags=RF_NeedLoad;
+  if(scenario==19)node.ComponentTemplate=nullptr;
+  assert(WGAPostLoadDefaultsDiagnostic(r,fixed,spec,first)==1);
+  assert(pinCalls==2&&r.loadedCalls==1&&r.DiagnosticRows);
+  assert(r.Ledger.InitiallyDirty.Num()==0&&r.Ledger.InitiallyMemoryOnly.Num()==0);
+  auto end=r.rows.back();assert(end.first=="diagnostic_end");auto&e=*end.second;
+  assert(!e.b["strict_query_completed"]&&!e.b["effective_template_resolved"]&&!e.b["normalization_attribution_claimed"]&&e.n["assetsSaved"]==0);
+  assert(e.b["strict_loaded_gate_passed"]==(scenario==1));
+  assert(e.b["capture_complete"]==(scenario<=1));
+  assert(e.b["file_pins_unchanged"]!=(scenario==10||scenario==11));
+  if(changeKind){assert(!e.b["boundary_unchanged"]&&findCalls==1&&calls==1);}
+  if(scenario==11)assert(findCalls==0&&calls==0);
+  bool scsSeen=false,inheritSeen=false,missing=false,boundary=false;
+  for(auto&row:r.rows){assert(row.first!="complete");auto&j=*row.second;assert(j.b["qualified_postload_observation"]&&!j.b["repair_authority"]);
+   if(row.first=="diagnostic_stored_scs"){scsSeen=true;assert(!j.b["effective_template_resolved"]);}
+   if(row.first=="diagnostic_stored_inherited"){inheritSeen=true;assert(!j.b["effective_template_resolved"]);}
+   if(row.first=="diagnostic_unavailable")missing=true;if(row.first=="diagnostic_boundary_failure")boundary=true;
+  }
+  if(scenario<=1)assert(scsSeen&&inheritSeen&&!missing&&!boundary&&findCalls==6);
+  else if(!(scenario>=7&&scenario<=11))assert(missing);
+ }
 }
 '''
         compile_run(code)
