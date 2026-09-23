@@ -2,11 +2,11 @@
 
 This is an ordered operator recipe for the **licensed, locally recovered UT4 beta / UE4.15.0 CL3228288**. It uses only the original integration code in this repository; obtain the matching engine, source assets, SDKs and binaries from the user's authorized local installation. Do not add those files or generated game packages to this repository. Keep the public Vercel streaming demo and its running Windows installation unchanged.
 
-**The local browser game is not ready.** The isolated engine now renders Deck, hands and the first-person weapon locally at fixed 1920×1080. The HUD tile uniform-buffer fix passed its initial runtime check. Confirmed fall-through at a BSP floor and incomplete combat verification still block stable gameplay. The bounded late-join/reconnect regression now passes. Single-client reconnect passes with direct package loading. Commands below form a reproduction recipe; the complete sequence has not yet been replayed from a clean checkout.
+**Playable practice is demonstrated; the finished beta is not yet verified.** See the [current recorded status](CURRENT-STATUS.md) for the corrected floor regression, bounded gameplay/network results, actual 1080p/1440p measurements and remaining material/performance gates. The September 21 snapshot below is historical. Commands form a reproduction recipe; the complete sequence has not yet been replayed from a clean checkout.
 
 ## 1. Know which results exist
 
-Status recorded on 2026-09-21, using [verification.json](verification.json), the [port notes](README.md), [compatibility instructions](compat/README.md), [launcher instructions](client/README.md), and the latest operator update:
+Historical snapshot recorded on 2026-09-21, retained for provenance. Later results in [CURRENT-STATUS.md](CURRENT-STATUS.md) supersede its unresolved-floor and no-performance-result statements. Related records: [verification.json](verification.json), [port notes](README.md), [compatibility instructions](compat/README.md) and [launcher instructions](client/README.md).
 
 | Area | Recorded result and remaining gate |
 | --- | --- |

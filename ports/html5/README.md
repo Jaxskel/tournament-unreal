@@ -2,6 +2,9 @@
 
 This work targets the recovered **UT4 beta, UE4.15 CL3228288**. It does not substitute another game. It is not a production release and is not the client currently served by the public Vercel demo. That demo still streams from Windows.
 
+See [current recorded status](CURRENT-STATUS.md) for measured practice performance,
+verified gameplay scope and the remaining visual, pacing and multiplayer gates.
+
 The engine and game compile and link successfully with their bundled Emscripten 1.36.13 toolchain. Its output is asm.js/WebGL, not WebAssembly. A newer-linker experiment passed the standalone packet tests but exposed C library ABI differences in the full game. The current converter instead translates optimized asm.js using Binaryen while preserving the matching legacy JS runtime. The full engine now initializes as WebAssembly in Chrome and passes an allocator smoke test with 1.5 GiB memory. The corrected compiler build now loads Deck and Outpost. Bounded checks verify floor collision, real keyboard walking/jumping/landing, six-bot match activity, shortened-round automatic rotation, and two-context multiplayer input/reconnect. Outpost is overexposed; aiming, longer sessions and browser-specific frame pacing remain release gates. See [verification status](verification.json).
 
 ## Original changes in this directory

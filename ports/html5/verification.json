@@ -1,5 +1,6 @@
 {
   "date": "2026-09-22",
+  "currentStatusDocument": "CURRENT-STATUS.md",
   "engine": "UT4 beta / UE4.15 CL3228288",
   "liveSiteChanged": false,
   "localGameReady": false,
