@@ -29,8 +29,10 @@ private headless check completed accelerated Deck → Outpost → Deck travel in
 errors, and owned-browser exit 0. This resolves the recorded reproduction; it
 does not verify default-duration matches, network travel, FPS or visual fidelity.
 
-The checked runtime used the existing content package, independently of the
-ongoing material cook. It has not replaced the previous playable generation.
+The checked runtime uses the existing content package, independently of the
+ongoing material cook. The private practice preview on port 8078 now serves it;
+all fifteen served file hashes match the passing rotation capture. This runtime
+update does not include the new material content.
 Private evidence: `rotation-current-review/run-1790197355494/report.json`, SHA256
 `de58175b7a784a875f31e9c79e4a767f73b91c474247efcb383125e18111005e`;
 WASM `562456cd822d91a328ff0a14ef52f494902783c32a95baaa2c445ca1ae07fe86`.
