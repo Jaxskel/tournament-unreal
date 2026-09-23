@@ -15,6 +15,9 @@ were decoded and matched the new uncompressed payloads byte for byte. The new pa
 was 60,223,598 bytes (57.43 MiB) larger. These checks were performed separately;
 the response helper does not implement archive verification.
 
+The separate [archive verification workflow](STARTUP-PACKAGING.md) now provides
+read-only preflight and payload-equivalence checks for this fixed selection.
+
 Six fresh headless Chrome runs used the same runtime, client, initial map and
 1920×1080 viewport, alternating baseline/candidate in the order B,C,C,B,B,C.
 Launch-to-observed native Ready times were:
