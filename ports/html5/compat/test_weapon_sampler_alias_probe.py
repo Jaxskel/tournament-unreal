@@ -21,7 +21,33 @@ def block(name):
     return match.group(1)
 
 
+def without_ordinary_control(source):
+    for name, indent, extra in [('ORDINARY_RESOURCE', '', '\n'), ('ORDINARY_COMPILE', '    ', ''), ('ORDINARY_COMPLETION', '    ', '')]:
+        pattern = re.escape(indent + '// ALIAS_' + name + '_BEGIN\n') + r'.*?' + re.escape(indent + '// ALIAS_' + name + '_END\n' + extra)
+        source, count = re.subn(pattern, '', source, flags=re.S)
+        if count != 1:
+            raise AssertionError(name)
+    for tag in ('STATE', 'ROUTE', 'FLAG'):
+        source, count = re.subn(r'^.*// ALIAS_ORDINARY_' + tag + r'\n', '', source, flags=re.M)
+        if count != 1:
+            raise AssertionError(tag)
+    for new, old in [
+        ('FMaterialResource* Resource = nullptr;', 'FWeaponShaderResource* Resource = nullptr;'),
+        ('auto* Diagnostic = new FWeaponShaderResource; Resource = Diagnostic;', 'Resource = new FWeaponShaderResource;'),
+        ('Diagnostic->NoStaticLighting = true;', 'Resource->NoStaticLighting = true;'),
+        ('Diagnostic->TranslationRequests);', 'Resource->TranslationRequests);'),
+    ]:
+        if source.count(new) != 1:
+            raise AssertionError(new)
+        source = source.replace(new, old)
+    return source
+
+
 class SamplerAlias(unittest.TestCase):
+    def test_ordinary_delta_inverse_preserves_frozen_cp3(self):
+        old = without_ordinary_control(HEADER.read_text())
+        self.assertEqual(hashlib.sha256(old.encode()).hexdigest(), '1667b38e55f07e1e65516fe0dec947998f4d1c5585bb40ed4729957bfcc07fd4')
+
     def test_existing_probes_unchanged_and_owned_scope(self):
         pins = {
             'WeaponShaderProbe.h': 'a1f7d50fa9120eea13b6024f8da2188e08bc4aa7caab5013436fb48e34e902a4',
@@ -66,30 +92,31 @@ using TCHAR=char; using int32=int;
 #define TEXT(x) x
 struct FString:std::string{using std::string::string; FString(){} FString(const std::string&s):std::string(s){} const char*operator*()const{return c_str();}bool Equals(const FString&s,int)const{return *this==s;}};
 namespace ESearchCase{int IgnoreCase=0;}
-int scenario=0,verify=0,drains=0,captured=0,prepared=0,compiled=0,closed=0,complete=0;
+int scenario=0,verify=0,drains=0,captured=0,prepared=0,compiled=0,closed=0,complete=0;bool ordinary=false;std::string completion;
 bool GIsEditor=true;void*GShaderCompilingManager=(void*)1;
 bool IsRunningCommandlet(){return scenario!=2;}bool IsInGameThread(){return scenario!=3;}
 namespace FApp{bool CanEverRender(){return scenario!=4;}}
-struct FParse{static bool Value(const char*,const char*key,FString&out){bool mode=std::string(key)=="Mode=";out=mode?(scenario==6?"WeaponRepairApply":"WeaponSamplerAliasProbe"):"proof";return scenario!=(mode?5:9);}};
+struct FParse{static bool Param(const char*,const char*key){assert(std::string(key)=="SamplerAliasOrdinaryLighting");return ordinary;}static bool Value(const char*,const char*key,FString&out){bool mode=std::string(key)=="Mode=";out=mode?(scenario==6?"WeaponRepairApply":"WeaponSamplerAliasProbe"):"proof";return scenario!=(mode?5:9);}};
 int WFRStop(const char*){return 1;}
 int WeaponTessellationUpgrade(const FString&,bool v){assert(v);++verify;return scenario==8;}
 bool WSPQualityBranches(){return scenario!=11;}FString WTUMaster(){return "fixed-master";}FString HashFile(const FString&){return "hash";}
 struct Map{FString value="masterfile";const FString*Find(const FString&){return scenario==12?nullptr:&value;}};
 struct FWeaponTessProof{Map CurrentFiles;bool Read(const FString&){return scenario!=10;}bool Check(const FString&){return scenario!=13;}};
 bool WSADrain(){++drains;return scenario!=14;}
-struct FWSAliasState{bool done=false,Attempted=false;FWSAliasState(FWeaponTessProof&,const FString&){}~FWSAliasState(){if(!done)Close();}
- bool Capture(){++captured;return scenario!=15;}bool Prepare(){++prepared;return scenario!=16;}bool Compile(){++compiled;Attempted=scenario!=19;return scenario!=17&&scenario!=19;}
+struct FWSAliasState{bool done=false,Attempted=false,OrdinaryLighting=false;FWSAliasState(FWeaponTessProof&,const FString&){}~FWSAliasState(){if(!done)Close();}
+ bool Capture(){assert(OrdinaryLighting==ordinary);++captured;return scenario!=15;}bool Prepare(){++prepared;return scenario!=16;}bool Compile(){++compiled;Attempted=scenario!=19;return scenario!=17&&scenario!=19;}
  bool Close(){assert(!done);done=true;++closed;return scenario!=18;}};
-void log(const char*,...){++complete;}
+void log(const char*f,...){++complete;completion=f;}
 #define UE_LOG(c,v,fmt,...) {log(fmt, ##__VA_ARGS__);}
 '''+block('CONTROL')+r'''
-int main(){for(scenario=0;scenario<=19;++scenario){verify=drains=captured=prepared=compiled=closed=complete=0;
+int main(){for(int o=0;o<2;++o)for(scenario=0;scenario<=19;++scenario){ordinary=o;completion.clear();verify=drains=captured=prepared=compiled=closed=complete=0;
  GIsEditor=scenario!=1;GShaderCompilingManager=scenario==7?nullptr:(void*)1;
  int result=WeaponSamplerAliasProbe("fixed");assert(result==(scenario?1:0));
  assert(verify==(scenario==0||scenario>=8));
  assert(captured==(scenario==0||scenario>=15));assert(prepared==(scenario==0||scenario>=16));
  assert(compiled==(scenario==0||scenario>=17));assert(closed==(scenario==0||scenario>=15));
- assert(complete==(scenario==0||scenario==17));}}
+ assert(complete==(scenario==0||scenario==17));
+ if(complete){assert((completion.find("_ORDINARY complete")!=std::string::npos)==ordinary);assert(completion.find(ordinary?"staticLighting=1":"staticLighting=0")!=std::string::npos);}}}
 '''
         compile_run(code)
 
@@ -146,6 +173,82 @@ int main(){for(int s=0;s<=28;++s){Class cls,other;cls.path=s==1?"/Script/Engine.
         unchanged = source[source.index('    bool Unchanged()'):source.index('    bool Contracts(')]
         self.assertNotIn('Normalize', unchanged)
         self.assertNotIn('LightingGuid', unchanged)
+
+    def test_actual_ordinary_resource_id_and_compile_failure_paths(self):
+        # Exact new resource, dependency comparison and control compile body.
+        # Engine services are stubs; this is not a native compile or sampler-budget result.
+        code = r'''
+#include <cassert>
+#include <string>
+#include <vector>
+#include <algorithm>
+using int32=int;using TCHAR=char;
+struct FString:std::string{using std::string::string;const char*operator*()const{return c_str();}};
+#define TEXT(x) x
+template<class T>struct TArray:std::vector<T>{using std::vector<T>::vector;int Num()const{return this->size();}bool Contains(T x)const{return std::find(this->begin(),this->end(),x)!=this->end();}};
+namespace EMaterialQualityLevel{enum Type{High=1};}namespace ERHIFeatureLevel{enum Type{ES2=2};}
+enum EMaterialProperty{Property=3};enum EShaderFrequency{Frequency=4};struct FMaterialCompiler{};
+const int SP_OPENGL_ES2_WEBGL=5;
+struct SD{int ShaderType=1,SourceHash=2;};struct PD{int ShaderPipelineType=3,StagesSourceHash=4;};struct VD{int VertexFactoryType=5,VFSourceHash=6;};
+struct FMaterialShaderMapId{int BaseMaterialId=10,QualityLevel=1,FeatureLevel=2,identity=7;TArray<int>ReferencedFunctions{20};TArray<SD>ShaderTypeDependencies{SD{},SD{7,8}};TArray<PD>ShaderPipelineTypeDependencies{PD{}};TArray<VD>VertexFactoryTypeDependencies{VD{}};};
+bool WSPMaterialInstanceIdentitySubset(const FMaterialShaderMapId&a,const FMaterialShaderMapId&b){return a.BaseMaterialId==b.BaseMaterialId&&a.QualityLevel==b.QualityLevel&&a.FeatureLevel==b.FeatureLevel&&a.identity==b.identity&&a.ReferencedFunctions==b.ReferencedFunctions;}
+int scenario=0,ids=0,caches=0,finishes=0,drains=0,uniformReads=0,samplerReads=0,equivalences=0,logs=0,propertyCalls=0;
+bool sourceStatic=true;FMaterialShaderMapId referenceId;
+struct Map{FMaterialShaderMapId id;bool IsCompilationFinalized(){return scenario!=21;}bool CompiledSuccessfully(){return scenario!=22;}
+ int GetShaderPlatform(){return scenario==23?99:SP_OPENGL_ES2_WEBGL;}const FMaterialShaderMapId&GetShaderMapId(){return id;}};
+struct UMaterialFunction{int StateId=30;};
+struct FMaterialResource{
+ Map map;TArray<FString>errors;virtual~FMaterialResource(){}virtual bool IsPersistent()const{return true;}virtual bool IsUsedWithStaticLighting()const{return sourceStatic;}
+ virtual int32 CompilePropertyAndSetMaterialProperty(EMaterialProperty p,FMaterialCompiler*c,EShaderFrequency f,bool previous)const{assert(p==Property&&c&&f==Frequency&&previous);++propertyCalls;return 37;}
+ void SetMaterial(void*,int q,bool hasq,int f,void*){assert(q==1&&hasq&&f==2);}bool IsSpecialEngineMaterial(){return scenario==4;}
+ void GetShaderMapId(int platform,FMaterialShaderMapId&out){assert(platform==5);++ids;assert(IsUsedWithStaticLighting());out=FMaterialShaderMapId{};
+  if(IsPersistent()){referenceId=out;return;}assert(ids==2);
+  if(scenario==6)out.BaseMaterialId=99;if(scenario==7)out.QualityLevel=99;if(scenario==8)out.FeatureLevel=99;
+  if(scenario==9)out.ReferencedFunctions.clear();if(scenario==10)out.ReferencedFunctions.push_back(30);if(scenario==11)out.ShaderTypeDependencies.clear();
+  if(scenario==12)out.ShaderTypeDependencies[0].ShaderType=99;if(scenario==13)out.ShaderTypeDependencies[0].SourceHash=99;
+  if(scenario==30)out.identity=99;if(scenario==31)out.ShaderPipelineTypeDependencies[0].StagesSourceHash=99;if(scenario==32)out.VertexFactoryTypeDependencies[0].VertexFactoryType=99;
+ }
+ bool CacheShaders(const FMaterialShaderMapId&id,int platform,bool apply){assert(ids==2&&platform==5&&!apply&&!IsPersistent()&&IsUsedWithStaticLighting());++caches;map.id=id;
+  if(scenario==24)map.id.VertexFactoryTypeDependencies[0].VFSourceHash=99;if(scenario==25)errors.push_back("compile error");return scenario!=14;}
+ void FinishCompilation(){++finishes;}bool IsCompilationFinished(){return scenario!=16;}Map*GetGameThreadShaderMap(){return scenario==20?nullptr:&map;}
+ bool HasValidGameThreadShaderMap(){return scenario!=19;}const TArray<FString>&GetCompileErrors(){return errors;}
+ int GetSamplerUsage(){++samplerReads;return scenario==28?17:scenario==29?-1:16;}
+ TArray<int>GetUniform2DTextureExpressions(){++uniformReads;return TArray<int>(scenario==26?13:14);}
+ TArray<int>GetUniformCubeTextureExpressions(){++uniformReads;return TArray<int>(scenario==27?1:0);}
+};
+bool WSADrain(){++drains;return scenario!=15;}FString WFRContext(const FString&s){return s;}
+void log(const char*,...){++logs;}
+#define UE_LOG(c,v,...) log(__VA_ARGS__)
+'''+block('ORDINARY_RESOURCE')+r'''
+struct State{FMaterialResource*Resource=nullptr;void*MI=nullptr,*CloneMaster=nullptr,*CloneMI=nullptr;UMaterialFunction layer,*Layer=&layer;
+ int MasterId=10,LayerId=20;FString MasterHash="hash";bool Attempted=false;
+ struct P{bool Check(const FString&){return scenario!=3;}}Proof;
+ bool Contracts(void*,UMaterialFunction*){return scenario!=1;}bool Equivalent(){++equivalences;return scenario!=2&&!(scenario==17&&equivalences==2);}bool Unchanged(){return scenario!=18;}
+ ~State(){delete Resource;}
+'''+block('ORDINARY_COMPILE')+r'''
+};
+int main(){
+ // Exact dependency equality rejects same-size substitutions and hash drift.
+ for(int s=0;s<11;++s){FMaterialShaderMapId a,b;
+  if(s==1)b.identity=9;if(s==2)b.ShaderTypeDependencies.clear();if(s==3)b.ShaderTypeDependencies[0].ShaderType=9;
+  if(s==4)b.ShaderTypeDependencies[0].SourceHash=9;if(s==5)b.ShaderPipelineTypeDependencies.clear();
+  if(s==6)b.ShaderPipelineTypeDependencies[0].ShaderPipelineType=9;if(s==7)b.ShaderPipelineTypeDependencies[0].StagesSourceHash=9;
+  if(s==8)b.VertexFactoryTypeDependencies.clear();if(s==9)b.VertexFactoryTypeDependencies[0].VertexFactoryType=9;if(s==10)b.VertexFactoryTypeDependencies[0].VFSourceHash=9;
+  assert(WSAOrdinaryIDEqual(a,b)==(s==0));}
+ FWSAOrdinaryResource resource;FMaterialCompiler compiler;
+ for(bool flag:{false,true}){sourceStatic=flag;assert(resource.IsUsedWithStaticLighting()==flag);assert(!resource.IsPersistent());}
+ assert(resource.TranslationRequests==0);assert(resource.CompilePropertyAndSetMaterialProperty(Property,&compiler,Frequency,true)==37);
+ assert(resource.TranslationRequests==1&&propertyCalls==1);
+ for(scenario=0;scenario<=32;++scenario){sourceStatic=scenario!=5;ids=caches=finishes=drains=uniformReads=samplerReads=equivalences=logs=0;State s;
+  bool ok=s.CompileOrdinary();assert(ok==(scenario==0));bool submitted=scenario==0||(scenario>=14&&scenario<=29);
+  assert(s.Attempted==submitted);assert(caches==submitted);assert(finishes==submitted);assert(drains==submitted);
+  bool validMap=scenario==0||(scenario>=26&&scenario<=29);assert(uniformReads==(validMap?2:0));
+  if(!validMap)assert(samplerReads==0);
+  if(submitted)assert(ids==2);
+ }
+}
+'''
+        compile_run(code)
 
     def test_actual_close_drain_root_retention_and_idempotence(self):
         code = r'''
@@ -232,7 +335,7 @@ int main(){for(scenario=0;scenario<=18;++scenario){writes=0;writeTarget=nullptr;
         self.assertIn('Requested.ReferencedFunctions.Contains(Layer->StateId)', compile_body)
 
     def test_cp3_exact_inverse_to_frozen_cp2(self):
-        s = HEADER.read_text()
+        s = without_ordinary_control(HEADER.read_text())
         s = re.sub(r'// ALIAS_OWNERSHIP_BEGIN\n.*?// ALIAS_OWNERSHIP_END\n\n', '', s, count=1, flags=re.S)
         for args in ('Master, CloneMaster', 'Master, CloneMaster, Layer, CloneLayer'):
             line = f'        if (!WSAOwnedGraph({args}) || !WSAOwnedGraph(Layer, CloneLayer)) return false;\n'

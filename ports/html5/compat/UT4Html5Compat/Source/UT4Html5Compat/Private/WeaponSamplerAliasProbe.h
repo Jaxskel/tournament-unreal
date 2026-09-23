@@ -205,12 +205,46 @@ static bool WSAInterfaces(UMaterialExpressionMaterialFunctionCall* Call)
 }
 // ALIAS_OWNERSHIP_END
 
+// ALIAS_ORDINARY_RESOURCE_BEGIN
+// Ordinary ShouldCache/static-lighting policy; only shader-map persistence differs.
+class FWSAOrdinaryResource final : public FMaterialResource
+{
+public:
+    virtual bool IsPersistent() const override { return false; }
+    mutable int32 TranslationRequests = 0;
+    virtual int32 CompilePropertyAndSetMaterialProperty(EMaterialProperty Property, FMaterialCompiler* Compiler,
+        EShaderFrequency OverrideShaderFrequency, bool bUsePreviousFrameTime) const override
+    {
+        ++TranslationRequests;
+        return FMaterialResource::CompilePropertyAndSetMaterialProperty(Property, Compiler, OverrideShaderFrequency, bUsePreviousFrameTime);
+    }
+};
+// Public dependency fields from the pinned engine's ID comparison; do not call
+// the unexported FMaterialShaderMapId equality operator or compare only counts.
+static bool WSAOrdinaryIDEqual(const FMaterialShaderMapId& A, const FMaterialShaderMapId& B)
+{
+    if (!WSPMaterialInstanceIdentitySubset(A, B) || A.ShaderTypeDependencies.Num() != B.ShaderTypeDependencies.Num() ||
+        A.ShaderPipelineTypeDependencies.Num() != B.ShaderPipelineTypeDependencies.Num() ||
+        A.VertexFactoryTypeDependencies.Num() != B.VertexFactoryTypeDependencies.Num()) return false;
+    for (int32 I = 0; I < A.ShaderTypeDependencies.Num(); ++I)
+        if (A.ShaderTypeDependencies[I].ShaderType != B.ShaderTypeDependencies[I].ShaderType ||
+            A.ShaderTypeDependencies[I].SourceHash != B.ShaderTypeDependencies[I].SourceHash) return false;
+    for (int32 I = 0; I < A.ShaderPipelineTypeDependencies.Num(); ++I)
+        if (A.ShaderPipelineTypeDependencies[I].ShaderPipelineType != B.ShaderPipelineTypeDependencies[I].ShaderPipelineType ||
+            A.ShaderPipelineTypeDependencies[I].StagesSourceHash != B.ShaderPipelineTypeDependencies[I].StagesSourceHash) return false;
+    for (int32 I = 0; I < A.VertexFactoryTypeDependencies.Num(); ++I)
+        if (A.VertexFactoryTypeDependencies[I].VertexFactoryType != B.VertexFactoryTypeDependencies[I].VertexFactoryType ||
+            A.VertexFactoryTypeDependencies[I].VFSourceHash != B.VertexFactoryTypeDependencies[I].VFSourceHash) return false;
+    return true;
+}
+// ALIAS_ORDINARY_RESOURCE_END
+
 struct FWSAliasState
 {
     FWeaponTessProof& Proof; FString MasterHash;
     UMaterial* Master = nullptr; UMaterialFunction* Layer = nullptr; UMaterialInstanceConstant* MI = nullptr;
     UMaterial* CloneMaster = nullptr; UMaterialFunction* CloneLayer = nullptr; UMaterialInstanceConstant* CloneMI = nullptr;
-    FWeaponShaderResource* Resource = nullptr;
+    FMaterialResource* Resource = nullptr;
     TArray<UObject*> Roots, Sources;
     TMap<UObject*, TSharedPtr<FJsonObject>> Before;
     TMap<UPackage*, bool> Dirty;
@@ -218,6 +252,7 @@ struct FWSAliasState
     FGuid MasterId, LayerId;
     FWSALightingPolicy MasterLighting, MILighting;
     bool Captured = false, Closed = false, FinalOK = false, Attempted = false;
+    bool OrdinaryLighting = false; // ALIAS_ORDINARY_STATE
     explicit FWSAliasState(FWeaponTessProof& P, const FString& H) : Proof(P), MasterHash(H) {}
     ~FWSAliasState() { Close(); }
 
@@ -460,15 +495,53 @@ struct FWSAliasState
         FStaticParameterSet OS, NS; MI->GetStaticParameterValues(OS); CloneMI->GetStaticParameterValues(NS);
         return Redirects == 6 && Compare.Same(MRValue(MRStatic(OS)), MRValue(MRStatic(NS)));
     }
-    bool Compile()
+    // ALIAS_ORDINARY_COMPILE_BEGIN
+    bool CompileOrdinary()
     {
         if (!Contracts(MI, Layer) || !Equivalent() || !Proof.Check(MasterHash)) return false;
-        Resource = new FWeaponShaderResource;
+        auto* Control = new FWSAOrdinaryResource;
+        Resource = Control; // Same RAII/root retention and global drain as the default.
+        Control->SetMaterial(CloneMaster, EMaterialQualityLevel::High, true, ERHIFeatureLevel::ES2, CloneMI);
+        FMaterialResource Reference; // Generates an ordinary ID only; never submits jobs.
+        Reference.SetMaterial(CloneMaster, EMaterialQualityLevel::High, true, ERHIFeatureLevel::ES2, CloneMI);
+        if (Control->IsSpecialEngineMaterial() || Control->IsPersistent() ||
+            !Control->IsUsedWithStaticLighting() || !Reference.IsUsedWithStaticLighting()) return false;
+        FMaterialShaderMapId Ordinary, Requested;
+        Reference.GetShaderMapId(SP_OPENGL_ES2_WEBGL, Ordinary);
+        Control->GetShaderMapId(SP_OPENGL_ES2_WEBGL, Requested);
+        if (!WSAOrdinaryIDEqual(Requested, Ordinary) || Requested.BaseMaterialId != MasterId ||
+            Requested.QualityLevel != EMaterialQualityLevel::High || Requested.FeatureLevel != ERHIFeatureLevel::ES2 ||
+            !Requested.ReferencedFunctions.Contains(LayerId) || Requested.ReferencedFunctions.Contains(Layer->StateId) ||
+            Requested.ShaderTypeDependencies.Num() == 0) return false;
+        UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_SAMPLER_ALIAS_ORDINARY begin selector=grenade1p-high-ordinary-lighting redirects=6 staticLighting=1 persistent=0 ordinaryDependenciesEqual=1 shaderDependencies=%d pipelineDependencies=%d vertexFactoryDependencies=%d incidentalRenderingJobs=possible incidentalDDCSaves=possible"),
+            Requested.ShaderTypeDependencies.Num(), Requested.ShaderPipelineTypeDependencies.Num(), Requested.VertexFactoryTypeDependencies.Num());
+        Attempted = true;
+        const bool Cached = Control->CacheShaders(Requested, SP_OPENGL_ES2_WEBGL, false);
+        Control->FinishCompilation();
+        if (!WSADrain() || !Control->IsCompilationFinished() || !Equivalent() || !Unchanged()) return false;
+        auto* Map = Control->GetGameThreadShaderMap();
+        const bool Valid = Cached && Control->HasValidGameThreadShaderMap() && Map && Map->IsCompilationFinalized() && Map->CompiledSuccessfully() &&
+            Map->GetShaderPlatform() == SP_OPENGL_ES2_WEBGL && WSAOrdinaryIDEqual(Requested, Map->GetShaderMapId()) && Control->GetCompileErrors().Num() == 0;
+        UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_SAMPLER_ALIAS_ORDINARY result valid=%d samplers=%d translationRequests=%d ordinaryAcceptance=0"),
+            Valid ? 1 : 0, Valid ? Control->GetSamplerUsage() : -1, Control->TranslationRequests);
+        for (const FString& Error : Control->GetCompileErrors())
+            UE_LOG(LogUT4Html5Compat, Warning, TEXT("COMPAT_WEAPON_SAMPLER_ALIAS_ORDINARY error text=%s"), *WFRContext(Error));
+        if (!Valid) return false; // Failed-map uniform arrays and sampler usage are not evidence.
+        const int32 Textures = Control->GetUniform2DTextureExpressions().Num(), Cubes = Control->GetUniformCubeTextureExpressions().Num();
+        UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_SAMPLER_ALIAS_ORDINARY bindings material2D=%d materialCube=%d pairedBaselineMeasured=0"), Textures, Cubes);
+        return Textures == 14 && Cubes == 0 && Control->GetSamplerUsage() >= 0 && Control->GetSamplerUsage() <= 16;
+    }
+    // ALIAS_ORDINARY_COMPILE_END
+    bool Compile()
+    {
+        if (OrdinaryLighting) return CompileOrdinary(); // ALIAS_ORDINARY_ROUTE
+        if (!Contracts(MI, Layer) || !Equivalent() || !Proof.Check(MasterHash)) return false;
+        auto* Diagnostic = new FWeaponShaderResource; Resource = Diagnostic;
         Resource->SetMaterial(CloneMaster, EMaterialQualityLevel::High, true, ERHIFeatureLevel::ES2, CloneMI);
         if (Resource->IsSpecialEngineMaterial()) return false;
         FMaterialShaderMapId Ordinary, Requested;
         Resource->GetShaderMapId(SP_OPENGL_ES2_WEBGL, Ordinary);
-        Resource->NoStaticLighting = true;
+        Diagnostic->NoStaticLighting = true;
         Resource->GetShaderMapId(SP_OPENGL_ES2_WEBGL, Requested);
         FStaticParameterSet Effective; CloneMI->GetStaticParameterValues(Effective);
         FWeaponRepair Compare;
@@ -487,7 +560,7 @@ struct FWSAliasState
         const bool Valid = Cached && Resource->HasValidGameThreadShaderMap() && Map && Map->IsCompilationFinalized() && Map->CompiledSuccessfully() &&
             Map->GetShaderPlatform() == SP_OPENGL_ES2_WEBGL && WSPMaterialInstanceIdentitySubset(Requested, Map->GetShaderMapId()) && Resource->GetCompileErrors().Num() == 0;
         UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_SAMPLER_ALIAS result valid=%d samplers=%d translationRequests=%d ordinaryAcceptance=0"),
-            Valid ? 1 : 0, Valid ? Resource->GetSamplerUsage() : -1, Resource->TranslationRequests);
+            Valid ? 1 : 0, Valid ? Resource->GetSamplerUsage() : -1, Diagnostic->TranslationRequests);
         for (const FString& Error : Resource->GetCompileErrors())
             UE_LOG(LogUT4Html5Compat, Warning, TEXT("COMPAT_WEAPON_SAMPLER_ALIAS error text=%s"), *WFRContext(Error));
         if (!Valid) return false; // A failed map has no authoritative uniform array.
@@ -528,11 +601,19 @@ static int32 WeaponSamplerAliasProbe(const FString& Params)
     const FString Hash = HashFile(*MasterFile);
     if (!Proof.Check(Hash) || !WSADrain()) return WFRStop(TEXT("sampler-alias-before"));
     FWSAliasState State(Proof, Hash);
+    State.OrdinaryLighting = FParse::Param(*Params, TEXT("SamplerAliasOrdinaryLighting")); // ALIAS_ORDINARY_FLAG
     if (!State.Capture()) return WFRStop(TEXT("sampler-alias-source-contract"));
     if (!State.Prepare()) return WFRStop(TEXT("sampler-alias-clone-contract"));
     const bool Valid = State.Compile();
     if (!State.Close()) return WFRStop(TEXT("sampler-alias-final-snapshot-or-drain"));
     if (!State.Attempted) return WFRStop(TEXT("sampler-alias-not-compiled"));
+    // ALIAS_ORDINARY_COMPLETION_BEGIN
+    if (State.OrdinaryLighting)
+    {
+        UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_SAMPLER_ALIAS_ORDINARY complete selector=grenade1p-high-ordinary-lighting resources=1 valid=%d redirects=6 assetsSaved=0 staticLighting=1 persistent=0 incidentalDDCSaves=possible ordinaryAcceptance=0 runtimeImmutabilityProven=0"), Valid ? 1 : 0);
+        return Valid ? 0 : 1;
+    }
+    // ALIAS_ORDINARY_COMPLETION_END
     UE_LOG(LogUT4Html5Compat, Display, TEXT("COMPAT_WEAPON_SAMPLER_ALIAS complete selector=grenade1p-high resources=1 valid=%d redirects=6 assetsSaved=0 staticLighting=0 persistent=0 incidentalDDCSaves=possible ordinaryAcceptance=0 runtimeImmutabilityProven=0"), Valid ? 1 : 0);
     return Valid ? 0 : 1;
 }

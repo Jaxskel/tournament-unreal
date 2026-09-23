@@ -207,3 +207,40 @@ no-static-lighting policy. It does not authorize permanent parameter aliases,
 static-lighting changes, arbitrary skins, or a claim of browser visual parity.
 The focused suite passed ten tests with the private graph evidence; the full
 compatibility suite passed 147 tests with 26 explicit optional-evidence skips.
+
+### Ordinary-lighting control
+
+Add `-SamplerAliasOrdinaryLighting` to the same fixed alias mode to retain the
+ordinary static-lighting shader eligibility. The separate owned resource overrides
+only persistence and a translation counter that forwards all arguments unchanged.
+A plain resource independently generates the ordinary shader-map ID; comparison
+includes the exact ordered shader, pipeline and vertex-factory dependencies and
+their source hashes. Neither resource changes asset lighting flags. The existing
+default experiment remains unchanged when the flag is absent.
+
+This control uses `COMPAT_WEAPON_SAMPLER_ALIAS_ORDINARY` and selector
+`grenade1p-high-ordinary-lighting`, with `staticLighting=1 persistent=0`.
+It still reports `ordinaryAcceptance=0 runtimeImmutabilityProven=0`: it tests
+temporary parameter aliases, not an approved production material. Invalid maps
+report `samplers=-1` and compile errors without reading their uniform arrays.
+The shared resource/job drain and source checks precede completion. Native exit1
+must remain a failed compile, even when the diagnostic completed correctly.
+
+The control compiled and linked in 13.80 seconds. Its native diagnostic completed
+in 44.88 seconds and returned exit1 with 17- and 18-sampler errors against the
+16-sampler limit. Ordinary dependency equality passed (63 shader types, two
+pipelines, three vertex factories), with 18 property-translation requests.
+All eleven wrapper inputs remained unchanged, temporary settings were restored,
+and no assets were saved. All 888 captured WebGL files matched their recorded
+hashes and sizes. Metadata in 148 generated GLSL files identified twelve
+over-limit LocalVF pixel variants: eight at 17 and four at 18, all involving baked
+lighting policies. GPU4 and GPU8 families each retained the earlier distribution
+of 13 shaders at 0, eight at 14, twelve at 15 and eight at 16. Generated code alone
+does not establish a valid complete map or browser acceptance.
+
+The result rules out treating the earlier no-static-lighting pass as an ordinary
+material repair. Whole-material skin replacement can also introduce authored
+independent overrides even without runtime writes to the six aliased keys.
+Neither lighting removal nor permanent parameter aliasing is approved by these
+diagnostics. The extended focused suite passed 12 tests with private evidence;
+the compatibility suite passed 149 with 26 explicit optional-evidence skips.
