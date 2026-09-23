@@ -19,6 +19,11 @@
 #include "UObject/LinkerLoad.h"
 #include "UObject/UObjectGlobals.h"
 #include "Engine/SkeletalMesh.h"
+// ENFORCER_MESH_DECLARATIONS_BEGIN
+#include "SkeletalMeshTypes.h"
+#include "RawIndexBuffer.h"
+#include "Serialization/BulkData.h"
+// ENFORCER_MESH_DECLARATIONS_END
 #include "RHIDefinitions.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
@@ -389,6 +394,8 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
 #include "WeaponSamplerAliasProbe.h"
 #include "WeaponGrenadeRepair.h"
 #include "EnforcerMaterialCandidate.h"
+#include "EnforcerMeshInvariant.h"
+#include "EnforcerMeshReport.h"
 #include "WeaponBlueprintReport.h"
 #include "BlobShadowExperiment.h"
 static bool ReportMeshes(const TArray<FString>& Meshes)
@@ -557,6 +564,8 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
         return WeaponBlueprintReport(Params);
     if (Mode.Equals(TEXT("WeaponUsageReport"), ESearchCase::IgnoreCase))
         return WeaponUsageReport(Params);
+    if (Mode.Equals(TEXT("EnforcerMeshReport"), ESearchCase::IgnoreCase))
+        return EnforcerMeshReport(Params);
     if (Mode.Equals(TEXT("EnforcerMaterialCandidate"), ESearchCase::IgnoreCase))
         return EnforcerMaterialCandidate(Params);
     if (Mode.Equals(TEXT("EnforcerConsumerReport"), ESearchCase::IgnoreCase))

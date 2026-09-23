@@ -9,6 +9,13 @@ CPP = Path(__file__).parent / 'UT4Html5Compat/Source/UT4Html5Compat/Private/UT4H
 PATTERN = r'    // EXPLICIT_MODE_ADMISSION_BEGIN\n(.*?)    // EXPLICIT_MODE_ADMISSION_END\n'
 
 def without_enforcer_dispatches(source):
+    mesh_blocks = ['// ENFORCER_MESH_DECLARATIONS_BEGIN\n#include "SkeletalMeshTypes.h"\n#include "RawIndexBuffer.h"\n#include "Serialization/BulkData.h"\n// ENFORCER_MESH_DECLARATIONS_END\n',
+        '#include "EnforcerMeshInvariant.h"\n', '#include "EnforcerMeshReport.h"\n',
+        '    if (Mode.Equals(TEXT("EnforcerMeshReport"), ESearchCase::IgnoreCase))\n        return EnforcerMeshReport(Params);\n']
+    for block in mesh_blocks:
+        if source.count(block) != 1:
+            raise AssertionError('Expected one Enforcer mesh integration block: ' + block)
+        source = source.replace(block, '')
     for name in ('EnforcerMaterialCandidate', 'EnforcerConsumerReport'):
         blocks = ['#include "%s.h"\n' % name,
                   '    if (Mode.Equals(TEXT("%s"), ESearchCase::IgnoreCase))\n        return %s(Params);\n' % (name, name)]
@@ -89,7 +96,7 @@ class Admission(unittest.TestCase):
         source = CPP.read_text()
         self.assertEqual(hashlib.sha256(without_enforcer_dispatches(source).encode()).hexdigest(),
                          'd297876135b5a8fdfa773d6e67965bdf3465212766730c184e6e885c8ed6bbef')
-        for name in ('EnforcerConsumerReport', 'EnforcerMaterialCandidate'):
+        for name in ('EnforcerConsumerReport', 'EnforcerMaterialCandidate', 'EnforcerMeshReport'):
             self.assertLess(source.index('// EXPLICIT_MODE_ADMISSION_END'), source.index('return ' + name + '(Params);'))
 
     def test_grenade_repair_dispatch_inverse_preserves_prior_commandlet(self):
@@ -143,7 +150,7 @@ BLOCK
  ++reached;return 0;
 }
 int main(){
- const char* modes[]={"","WeaponRepairApply","WeaponRepairVerify","Apply","Verify","WeaponReport","BlobShadowExperiment","WeaponUsageReport","WeaponShaderBatchProbe","WeaponBlueprintReport","WeaponSamplerAliasProbe","EnforcerConsumerReport","EnforcerMaterialCandidate"};
+ const char* modes[]={"","WeaponRepairApply","WeaponRepairVerify","Apply","Verify","WeaponReport","BlobShadowExperiment","WeaponUsageReport","WeaponShaderBatchProbe","WeaponBlueprintReport","WeaponSamplerAliasProbe","EnforcerConsumerReport","EnforcerMaterialCandidate","EnforcerMeshReport"};
  const char* flags[]={"WeaponTessUpgrade","WeaponTessVerify","WeaponShaderProbe","WeaponShaderEnforcer1PHigh","WeaponShaderNoStaticLighting"};
  for(const char* mode:modes)for(int bits=0;bits<32;bits++){
   FString args;for(int i=0;i<5;i++)if(bits&(1<<i)){args+=" -";args+=flags[i];}

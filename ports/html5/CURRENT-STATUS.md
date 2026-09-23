@@ -89,3 +89,5 @@ Raw evidence identifiers and SHA256 digests (private artifacts, not bundled):
 - Headed performance: `comparable-perf-1790130131271/report.json`, `eda525798efda50bb20897da65df70b01959ef9c009bab311ef2b63a8560aefd`.
 - Six-run startup comparison: `startup-file-read-review/comparison-run-1/report.json`, `9bcdd6d36b3cf24f3572477e0336c63a3b25fb548cc9c654e28c282725be5f85`.
 - GPU draw source qualification: `gpu8-r001-diagnostic/observation-1/offline-source-qualification.json`, `2956d8bfcb049145b92af09012ff853e6c968e28f4646b3d25cce9808d6a6e6d`.
+
+- Enforcer pre-repair geometry and explicit four-slot baseline: native module 32 compiled; a fresh read-only report completed with both meshes, zero saves and unchanged selected bytes. Raw report `enforcer-mesh-native-2/report.log`, `1d65aec50a437c983da956a9524b38a2ba80a88daf71d9916009f9a08aa6a8ed`. Geometry matched the preceding process exactly. See [coverage and limitations](compat/ENFORCER-MESH-INVARIANT.md); material-slot changes, save-roundtrip verification and browser appearance remain pending.
