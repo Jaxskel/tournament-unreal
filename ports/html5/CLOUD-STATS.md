@@ -22,7 +22,15 @@ the fresh compile/link. It does not edit game assets or served runtime files.
 python3 -B ports/html5/test_patch_browser_cloud_stats.py -v
 ```
 
-Source/fixture tests are not native compilation or browser acceptance. The next
-matching engine build must be converted and tested through match completion,
-with the endpoint absent and actual map travel still verified. The current
-playable generation predates this guard; no runtime fix is claimed yet.
+The matching native build and WASM conversion passed on September 23. A separate
+private headless check completed accelerated Deck → Outpost → Deck travel in
+70.1 seconds, with Ready epochs 1 → 2 → 3, unpaused native frames, matching
+1920×1080 native/canvas dimensions, unchanged served inputs, no HTTP or page
+errors, and owned-browser exit 0. This resolves the recorded reproduction; it
+does not verify default-duration matches, network travel, FPS or visual fidelity.
+
+The checked runtime used the existing content package, independently of the
+ongoing material cook. It has not replaced the previous playable generation.
+Private evidence: `rotation-current-review/run-1790197355494/report.json`, SHA256
+`de58175b7a784a875f31e9c79e4a767f73b91c474247efcb383125e18111005e`;
+WASM `562456cd822d91a328ff0a14ef52f494902783c32a95baaa2c445ca1ae07fe86`.
