@@ -386,6 +386,7 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
 #include "WeaponShaderProbe.h"
 #include "WeaponShaderBatchProbe.h"
 #include "WeaponSamplerAliasProbe.h"
+#include "WeaponGrenadeRepair.h"
 #include "WeaponBlueprintReport.h"
 #include "BlobShadowExperiment.h"
 static bool ReportMeshes(const TArray<FString>& Meshes)
@@ -560,6 +561,10 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
         return WeaponShaderBatchProbe(Params);
     if (Mode.Equals(TEXT("WeaponSamplerAliasProbe"), ESearchCase::IgnoreCase))
         return WeaponSamplerAliasProbe(Params);
+    if (Mode.Equals(TEXT("WeaponGrenadeRepairApply"), ESearchCase::IgnoreCase))
+        return WeaponGrenadeRepair(Params, false);
+    if (Mode.Equals(TEXT("WeaponGrenadeRepairVerify"), ESearchCase::IgnoreCase))
+        return WeaponGrenadeRepair(Params, true);
     if (Mode.Equals(TEXT("WeaponSupplementReport"), ESearchCase::IgnoreCase))
         return WeaponSupplementReport(Params);
     if (Mode.Equals(TEXT("FidelityReport"), ESearchCase::IgnoreCase))

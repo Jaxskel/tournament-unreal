@@ -8,7 +8,18 @@ from test_weapon_tessellation import compile_run
 CPP = Path(__file__).parent / 'UT4Html5Compat/Source/UT4Html5Compat/Private/UT4Html5Compat.cpp'
 PATTERN = r'    // EXPLICIT_MODE_ADMISSION_BEGIN\n(.*?)    // EXPLICIT_MODE_ADMISSION_END\n'
 
+def without_grenade_repair_dispatch(source):
+    blocks = ['#include "WeaponGrenadeRepair.h"\n',
+        '    if (Mode.Equals(TEXT("WeaponGrenadeRepairApply"), ESearchCase::IgnoreCase))\n        return WeaponGrenadeRepair(Params, false);\n',
+        '    if (Mode.Equals(TEXT("WeaponGrenadeRepairVerify"), ESearchCase::IgnoreCase))\n        return WeaponGrenadeRepair(Params, true);\n']
+    for block in blocks:
+        if source.count(block) != 1:
+            raise AssertionError('Expected exactly one Grenade repair integration block: ' + block)
+        source = source.replace(block, '')
+    return source
+
 def without_grenade_assignment_dispatch(source):
+    source = without_grenade_repair_dispatch(source)
     blocks = ['#include "WeaponGrenadeAssignmentReport.h"\n',
         '    if (Mode.Equals(TEXT("WeaponGrenadeAssignmentReport"), ESearchCase::IgnoreCase))\n        return WeaponGrenadeAssignmentReport(Params);\n']
     for block in blocks:
@@ -42,7 +53,7 @@ def without_blueprint_dispatch(source):
     return source
 
 def without_readonly_dispatches(source):
-    """Remove only the exact later read-only integration, preserving old hash proof."""
+    """Remove exact later dispatch additions, preserving each old hash proof."""
     names = ('AssetData.h', 'IAssetRegistry.h', 'HAL/FileManager.h', 'GameFramework/Actor.h',
              'Components/ActorComponent.h', 'Components/SceneComponent.h', 'Components/SkinnedMeshComponent.h',
              'Engine/BlueprintGeneratedClass.h', 'Engine/SimpleConstructionScript.h', 'Engine/SCS_Node.h',
@@ -62,6 +73,14 @@ def without_readonly_dispatches(source):
     return source
 
 class Admission(unittest.TestCase):
+    def test_grenade_repair_dispatch_inverse_preserves_prior_commandlet(self):
+        source = CPP.read_text()
+        self.assertEqual(hashlib.sha256(without_grenade_repair_dispatch(source).encode()).hexdigest(),
+                         '2606a68f6b34924229ec322ccebbe82ab61eef2b02e9bd828fad580ff37358b6')
+        self.assertLess(source.index('#include "WeaponSamplerAliasProbe.h"'), source.index('#include "WeaponGrenadeRepair.h"'))
+        self.assertLess(source.index('// EXPLICIT_MODE_ADMISSION_END'), source.index('return WeaponGrenadeRepair(Params, false);'))
+        self.assertLess(source.index('// EXPLICIT_MODE_ADMISSION_END'), source.index('return WeaponGrenadeRepair(Params, true);'))
+
     def test_only_admission_changed_and_it_precedes_every_dispatch(self):
         source = CPP.read_text()
         original, count = re.subn(PATTERN, '', without_readonly_dispatches(source), flags=re.S)
