@@ -17,7 +17,19 @@ gameplay or native visual parity.
 | Current rotation retry | The [browser NoMCP writer guard](CLOUD-STATS.md) passed native build/conversion and a separate accelerated headless Deck → Outpost → Deck check: advancing Ready epochs, no HTTP/page errors, unchanged inputs and owned-browser exit 0. This resolves the recorded legacy stats-404 reproduction. The private port-8078 practice preview now serves that runtime with the previous content package; all fifteen served file hashes match the passing capture. Default-duration and multiplayer rotation remain open. Earlier failed runs remain failed. |
 | Multiplayer | Two browser clients joined, sustained simultaneous traffic and native frames for about 27 seconds, then one reconnected while the other remained connected. Network combat, complete matches and multiplayer travel remain open. |
 | Character skinning | Captured browser programs and bound draw streams demonstrate an eight-influence GPU skinning path. This is not per-mesh identity, morph activation, pixel correctness or a measured FPS improvement. |
-| Weapons and other assets | Wrong/gray weapon materials remain visible in the playable generation. The scoped Grenade repair saved exactly two new material/function packages and one parent change, preserving 22 other packages. A fresh process verified all 18 selected instances and six Grenade shader resources with zero saves. Its new cook is in progress; browser appearance is not yet verified. Other weapon, foot-shadow, lighting, effects, animation and placement fidelity remain open. |
+| Weapons and other assets | Wrong/gray weapon materials remain visible in the playable generation. The scoped Grenade repair saved exactly two new material/function packages and one parent change, preserving 22 other packages. A fresh process verified all 18 selected instances and six Grenade shader resources with zero saves. Its fresh cook and packaged archive passed their scoped checks, and that package passed a new accelerated browser roundtrip. The current port-8079 preview contains the repaired content; actual Grenade appearance is not yet verified. The Enforcer remains visibly gray. Other weapon, foot-shadow, lighting, effects, animation and placement fidelity remain open. |
+
+The latest private playable preview is **http://127.0.0.1:8079/index.html**. Its
+Grenade content cook finished in 2,266 seconds with zero selected-family failures
+and zero engine errors; 388 unrelated material-failure lines remain recorded.
+Packaging matched all six staged data slices, and the archive integrity test
+passed for 9,175 files. The separate legacy list command returned 1; its output
+was checked independently for all nine required map, registry, shader and repaired
+asset entries. A 68.818-second accelerated headless Deck → Outpost → Deck run
+then passed with advancing epochs, 1920×1080 native/canvas dimensions, no
+HTTP/page errors, unchanged assets and owned-browser exit 0. This is not a new
+FPS, weapon-appearance or default-duration-match result. Port 8078 retains the
+previous content for comparison.
 
 The old unresolved-floor wording in the September 21 build snapshot is
 superseded by the bounded movement result above. Other historical failures remain
@@ -70,6 +82,8 @@ Raw evidence identifiers and SHA256 digests (private artifacts, not bundled):
 - Pause: `scene-motion-1790039549298/report.json`, `bf18693609bf7346a5d161d579b9c5d6baf11d30ca2f03cf3d21b2af9b926cba`.
 - Historical rotation: `scene-motion-1790036016516/report.json`, `cf8fb4b5fb1ec42d2347da01297b529c613f03a66f674570d51aff2cdcc589a5`.
 - Cloud-stats guard rotation: `rotation-current-review/run-1790197355494/report.json`, `de58175b7a784a875f31e9c79e4a767f73b91c474247efcb383125e18111005e`.
+- Grenade packaged browser rotation: `rotation-current-review/run-1790200036022/report.json`, `1b1b3a81f5597c7a2b7089b1e533ffd8844fcadda9fbaf4f4f4f6bec822fd1d8`.
+- Grenade cook: `grenade-cook-1/result.raw.json`, `1f54d7c27bef7ecb878acdaeba71bb22b87a68ca0e0dc18f703f0d3a30b90443`; packaging: `grenade-package-1/result.json`, `35f59fa7eacebdb95edc3088a2ec98302183fc047cdc464ecc00da43ba9c0dca`.
 - Grenade fresh native verification: `weapon-grenade-repair-build/verify1/report.log`, `190092c8c853e2e7bf30b15d5e9363321e55d3a49c498b05b11d56f82b8b8ddf` (shader/serialization evidence, not browser appearance).
 - Multiplayer lifecycle: `mp-gameplay-3D9viO/report.json`, `e0ea1e36aef1a0b4a8e8448da43d02358ad6036ee3cbe477fbe1efcf8eaaeb4b`.
 - Headed performance: `comparable-perf-1790130131271/report.json`, `eda525798efda50bb20897da65df70b01959ef9c009bab311ef2b63a8560aefd`.
