@@ -8,7 +8,18 @@ from test_weapon_tessellation import compile_run
 CPP = Path(__file__).parent / 'UT4Html5Compat/Source/UT4Html5Compat/Private/UT4Html5Compat.cpp'
 PATTERN = r'    // EXPLICIT_MODE_ADMISSION_BEGIN\n(.*?)    // EXPLICIT_MODE_ADMISSION_END\n'
 
+def without_alias_dispatch(source):
+    blocks = ['// SAMPLER_ALIAS_DECLARATIONS_BEGIN\n#include "ShaderCompiler.h"\n// SAMPLER_ALIAS_DECLARATIONS_END\n',
+        '#include "WeaponSamplerAliasProbe.h"\n',
+        '    if (Mode.Equals(TEXT("WeaponSamplerAliasProbe"), ESearchCase::IgnoreCase))\n        return WeaponSamplerAliasProbe(Params);\n']
+    for block in blocks:
+        if source.count(block) != 1:
+            raise AssertionError('Expected exactly one sampler alias integration block: ' + block)
+        source = source.replace(block, '')
+    return source
+
 def without_blueprint_dispatch(source):
+    source = without_alias_dispatch(source)
     declarations = ('// WEAPON_BLUEPRINT_DECLARATIONS_BEGIN\n' +
         ''.join('#include "%s"\n' % n for n in ('Engine/Blueprint.h', 'EdGraph/EdGraph.h',
             'EdGraph/EdGraphNode.h', 'EdGraph/EdGraphPin.h')) + '// WEAPON_BLUEPRINT_DECLARATIONS_END\n')
@@ -54,6 +65,7 @@ class Admission(unittest.TestCase):
         self.assertLess(main.index('// EXPLICIT_MODE_ADMISSION_END'), main.index('return WeaponUsageReport('))
         self.assertLess(main.index('// EXPLICIT_MODE_ADMISSION_END'), main.index('return WeaponShaderBatchProbe('))
         self.assertLess(main.index('// EXPLICIT_MODE_ADMISSION_END'), main.index('return WeaponBlueprintReport('))
+        self.assertLess(main.index('// EXPLICIT_MODE_ADMISSION_END'), main.index('return WeaponSamplerAliasProbe('))
 
     def test_compiled_actual_guard_rejects_ambiguous_modes_before_side_effects(self):
         block = re.search(PATTERN, CPP.read_text(), re.S).group(1)
@@ -82,7 +94,7 @@ BLOCK
  ++reached;return 0;
 }
 int main(){
- const char* modes[]={"","WeaponRepairApply","WeaponRepairVerify","Apply","Verify","WeaponReport","BlobShadowExperiment","WeaponUsageReport","WeaponShaderBatchProbe","WeaponBlueprintReport"};
+ const char* modes[]={"","WeaponRepairApply","WeaponRepairVerify","Apply","Verify","WeaponReport","BlobShadowExperiment","WeaponUsageReport","WeaponShaderBatchProbe","WeaponBlueprintReport","WeaponSamplerAliasProbe"};
  const char* flags[]={"WeaponTessUpgrade","WeaponTessVerify","WeaponShaderProbe","WeaponShaderEnforcer1PHigh","WeaponShaderNoStaticLighting"};
  for(const char* mode:modes)for(int bits=0;bits<32;bits++){
   FString args;for(int i=0;i<5;i++)if(bits&(1<<i)){args+=" -";args+=flags[i];}

@@ -37,6 +37,9 @@
 #include "Materials/MaterialExpressionMaterialFunctionCall.h"
 #include "Materials/MaterialFunction.h"
 #include "MaterialShared.h"
+// SAMPLER_ALIAS_DECLARATIONS_BEGIN
+#include "ShaderCompiler.h"
+// SAMPLER_ALIAS_DECLARATIONS_END
 #include "AssetRegistryModule.h"
 #include "UObject/UnrealType.h"
 #include "UObject/UObjectIterator.h"
@@ -381,6 +384,7 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
 #include "WeaponUsageReport.h"
 #include "WeaponShaderProbe.h"
 #include "WeaponShaderBatchProbe.h"
+#include "WeaponSamplerAliasProbe.h"
 #include "WeaponBlueprintReport.h"
 #include "BlobShadowExperiment.h"
 static bool ReportMeshes(const TArray<FString>& Meshes)
@@ -551,6 +555,8 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
         return WeaponUsageReport(Params);
     if (Mode.Equals(TEXT("WeaponShaderBatchProbe"), ESearchCase::IgnoreCase))
         return WeaponShaderBatchProbe(Params);
+    if (Mode.Equals(TEXT("WeaponSamplerAliasProbe"), ESearchCase::IgnoreCase))
+        return WeaponSamplerAliasProbe(Params);
     if (Mode.Equals(TEXT("WeaponSupplementReport"), ESearchCase::IgnoreCase))
         return WeaponSupplementReport(Params);
     if (Mode.Equals(TEXT("FidelityReport"), ESearchCase::IgnoreCase))

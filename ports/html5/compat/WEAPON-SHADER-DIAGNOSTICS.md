@@ -152,3 +152,58 @@ asset fingerprints remained unchanged. No assets were saved. The attachment
 Blueprint had already loaded as a dependency before its explicit request, which
 the report records. This is bounded post-load graph evidence, not proof of all
 runtime texture mutations or permission to merge material parameters.
+
+## Fixed transient sampler-alias experiment
+
+`-Mode=WeaponSamplerAliasProbe` requires the same verified Tess/UV0 generation
+and proof arguments as the existing shader probe. It targets only Grenade
+Launcher first-person High. It duplicates the master, `MF_LayerSet` and MIC into
+owned transient objects, then redirects three layer-normal parameter names to
+the base-layer normal and three diffuse names to the base-layer diffuse.
+Admission requires the effective textures to match within each group. Every
+sample, UV, mip mode, scalar/vector calculation and static switch is preserved.
+The original objects and package bytes are checked before and after; no package
+save is permitted.
+
+This intentionally removes independent override semantics in the **temporary
+experiment**, so success cannot authorize a production alias. The separate live
+material/skin contract and visual comparisons remain required. It retains the
+previous owned-resource no-static-lighting policy and requests 14 material 2D
+bindings, compared with 20 in the earlier captured baseline. A fresh valid map
+and its full material binding array must establish that reduction. Default
+normal and undercoat diffuse samples are unchanged.
+
+Cloned-MIC parenting can start additional rendering-platform jobs and write
+private DDC entries. These are distinct from the one nonpersistent WebGL
+resource. Global and owned-resource jobs drain before cleanup; a failed drain
+retains roots until process exit. The `COMPAT_WEAPON_SAMPLER_ALIAS` completion
+record labels `ordinaryAcceptance=0` and `runtimeImmutabilityProven=0`.
+
+```sh
+python3 -B ports/html5/compat/test_weapon_sampler_alias_probe.py -v
+```
+
+Host tests and graph fixtures do not prove native compilation, binding reduction
+or rendering equivalence.
+
+The fixed experiment compiled and linked in the private UE4.15 module in 14.34
+seconds. Its native commandlet returned exit0: one High resource, a valid WebGL
+map, 16 maximum samplers, 14 material 2D bindings and no cube bindings. The earlier
+captured baseline had 20 material 2D bindings; it was not remeasured in the same
+run. All eleven wrapper input fingerprints remained unchanged, the source
+object/graph checks passed, no assets were saved, and temporary debug settings
+were restored. All 738 captured WebGL files matched their recorded sizes and
+hashes. Independent comparison matched all 123 GLSL and 123 preprocessed USF
+pairs to the captured baseline after only the intended binding merges, slot
+renumbering and duplicate declarations. UV/mip and remaining shading calculations
+were preserved. All 84 textured shaders still perform 22 material lookups: this
+reduces bindings, not sampling work. Each of the three vertex-factory families
+has 13 shaders with zero samplers, 8 with 14, 12 with 15 and 8 with 16.
+Additional desktop-platform compilation from cloned-MIC parenting was
+allowed and recorded separately from the nonpersistent WebGL resource.
+
+This proves the fixed transient candidate compiles under the diagnostic's
+no-static-lighting policy. It does not authorize permanent parameter aliases,
+static-lighting changes, arbitrary skins, or a claim of browser visual parity.
+The focused suite passed ten tests with the private graph evidence; the full
+compatibility suite passed 147 tests with 26 explicit optional-evidence skips.
