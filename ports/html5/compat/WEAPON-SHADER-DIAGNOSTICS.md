@@ -263,6 +263,15 @@ static-lighting changes, arbitrary skins, or a claim of browser visual parity.
 The focused suite passed ten tests with the private graph evidence; the full
 compatibility suite passed 147 tests with 26 explicit optional-evidence skips.
 
+The asset-flag comparison accepts a present empty-string property export for
+an owned `false` value, as observed in this UE4 version. It still requires the
+field to exist with string type, match the captured export, and agree with the
+actual source/owned flags. Missing fields and other property drift remain errors.
+Two earlier nonempty checks incorrectly rejected that valid representation;
+regression tests reconstruct those checks and reproduce the rejection. The
+focused private-evidence suite passes 23 tests. This correction does not itself
+establish native shader or saved-material acceptance.
+
 ### Ordinary-lighting control
 
 Add `-SamplerAliasOrdinaryLighting` to the same fixed alias mode to retain the

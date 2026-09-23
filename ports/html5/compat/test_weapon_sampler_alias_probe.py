@@ -203,8 +203,8 @@ struct State{Material*Master=nullptr,*CloneMaster=nullptr;
 ''' + block('ASSET_STATE') + r'''
 };
 int main(){for(int n=0;n<14;++n){Material source,owned;owned.bUsedWithStaticLighting=false;State s;s.Master=&source;s.CloneMaster=&owned;
- s.AssetFlagChanged=n!=1;s.SourceStaticLightingText="True";s.OwnedStaticLightingText="False";
- auto a=std::make_shared<FJsonObject>(),b=std::make_shared<FJsonObject>();a->values={{"bUsedWithStaticLighting","True"},{"other","original"}};b->values={{"bUsedWithStaticLighting","False"},{"other","candidate"}};
+ s.AssetFlagChanged=n!=1;s.SourceStaticLightingText="True";s.OwnedStaticLightingText="";
+ auto a=std::make_shared<FJsonObject>(),b=std::make_shared<FJsonObject>();a->values={{"bUsedWithStaticLighting","True"},{"other","original"}};b->values={{"bUsedWithStaticLighting",""},{"other","candidate"}};
  if(n==2)s.Master=nullptr;if(n==3)s.CloneMaster=nullptr;if(n==4)s.CloneMaster=s.Master;if(n==5)source.bUsedWithStaticLighting=false;
  if(n==6)owned.bUsedWithStaticLighting=true;if(n==7)owned.outer=&other;if(n==8)owned.transient=false;if(n==9)s.SourceStaticLightingText="";
  if(n==10)s.OwnedStaticLightingText="True";if(n==11)a->values.erase("bUsedWithStaticLighting");if(n==12)b->values.erase("bUsedWithStaticLighting");if(n==13)b->values["bUsedWithStaticLighting"]="True";
@@ -238,7 +238,7 @@ struct O{FGuid StateId;bool bUsedWithStaticLighting=true,transient=true;void*out
 struct FJsonObject{std::map<FString,FString>values;bool TryGetStringField(const char*k,FString&v){if(!values.count(k))return false;v=values[k];return true;}void SetStringField(const char*k,const FString&v){values[k]=v;}};
 template<class T>using TSharedPtr=std::shared_ptr<T>;
 O*original=nullptr;
-TSharedPtr<FJsonObject>MRProperties(O*o,bool){auto p=std::make_shared<FJsonObject>();p->values={{"bUsedWithStaticLighting",o->bUsedWithStaticLighting?"True":"False"},{"other","same"}};
+TSharedPtr<FJsonObject>MRProperties(O*o,bool){auto p=std::make_shared<FJsonObject>();p->values={{"bUsedWithStaticLighting",o->bUsedWithStaticLighting?"True":""},{"other","same"}};
  if(scenario==30&&o!=original&&o->bUsedWithStaticLighting)p->values.erase("bUsedWithStaticLighting");
  if(scenario==31&&o==original)p->values["bUsedWithStaticLighting"]="different";
  if(scenario==32&&!o->bUsedWithStaticLighting)p->values.erase("bUsedWithStaticLighting");
@@ -287,6 +287,44 @@ int main(){for(scenario=0;scenario<=37;++scenario){drains=ids=live=0;State s;
  if(scenario>=32)assert(!s.clone.bUsedWithStaticLighting);
 }}
 ''')
+
+    def test_empty_false_export_inverse_and_prior_body_rejection(self):
+        # Native MRProperties/ExportText default-false is a PRESENT empty string.
+        # Restoring only the two old checks reconstructs the compiled fcb bridge.
+        source = HEADER.read_text()
+        replacements = [
+            ('SourceStaticLightingText.IsEmpty() || SourceStaticLightingText == OwnedStaticLightingText',
+             'SourceStaticLightingText.IsEmpty() || OwnedStaticLightingText.IsEmpty() || SourceStaticLightingText == OwnedStaticLightingText'),
+            ('            OwnedStaticLightingText == SourceStaticLightingText) return false;',
+             '            OwnedStaticLightingText.IsEmpty() || OwnedStaticLightingText == SourceStaticLightingText) return false;'),
+        ]
+        prior = source
+        for new, old in replacements:
+            self.assertEqual(prior.count(new), 1)
+            prior = prior.replace(new, old)
+        self.assertEqual(hashlib.sha256(prior.encode()).hexdigest(),
+                         'fcb4ac626e66ce605bce03f94f8f2240882c27ee94e6b58adfa6d22cd37f520a')
+        captured = []
+        global compile_run
+        original_compile = compile_run
+        try:
+            compile_run = captured.append
+            self.test_asset_inverse_and_narrow_normalization()
+            self.test_actual_asset_preparation_reference_only_and_one_owned_flag()
+        finally:
+            compile_run = original_compile
+        self.assertEqual(len(captured), 2)
+        normalize, prepare = captured
+        self.assertEqual(normalize.count(block('ASSET_STATE')), 1)
+        normalize = normalize.replace(block('ASSET_STATE'), block('ASSET_STATE', prior))
+        normalize = normalize.replace('==(n<2)', '==(n==1)')
+        normalize = normalize.replace('if(n==0){assert', 'if(false){assert')
+        original_compile(normalize)
+        self.assertEqual(prepare.count(block('ASSET_PREPARE')), 1)
+        prepare = prepare.replace(block('ASSET_PREPARE'), block('ASSET_PREPARE', prior))
+        prepare = prepare.replace('s.PrepareAssetFlag()==(scenario==0)', 's.PrepareAssetFlag()==false')
+        prepare = prepare.replace('ids==6&&drains==2&&s.AssetFlagChanged', 'ids==6&&drains==2&&!s.AssetFlagChanged')
+        original_compile(prepare)
 
     def test_actual_child_prepare_preserves_parent_bags_and_static_values(self):
         pair = block('PAIR_IMPLEMENTATION')
@@ -918,6 +956,12 @@ int main(){
         self.assertEqual(hashlib.sha256(raw).hexdigest(), '16f27d2dac0919264119a1cab0148f91cf69dac116354402f920dfe190ef331e')
         records = json.loads(raw)
         master = next(x for x in records if x.get('material', '').endswith('/M_WeaponsBase.M_WeaponsBase'))
+        # Pin actual native text representation, including field presence.
+        self.assertEqual(master['properties']['bUsedWithStaticLighting'], 'True')
+        blob = next(x for x in records if x.get('material', '').endswith('/M_Robust_BlobShadow.M_Robust_BlobShadow'))
+        self.assertEqual(blob['properties']['bUsedWithStaticLighting'], '')
+        self.assertIs(blob['two_sided'], False)
+        self.assertEqual(blob['properties']['TwoSided'], '')
         layer = {x['name']: x for x in master['nodes'] if x['owner'].endswith('/MF_LayerSet.MF_LayerSet')}
         rows = re.findall(r'\{TEXT\("(MaterialExpressionTextureObjectParameter_\d+)"\), TEXT\("([^"]+)"\), TEXT\("([^"]+)"\), TEXT\("([0-9A-F]+)"\)\}', HEADER.read_text())
         for name, old, new, guid in rows:

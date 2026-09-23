@@ -261,7 +261,7 @@ struct FWSAliasState
         if (!AssetFlagChanged) return true;
         if (!Master || !CloneMaster || Master == CloneMaster || !Master->bUsedWithStaticLighting || CloneMaster->bUsedWithStaticLighting ||
             CloneMaster->GetOuter() != GetTransientPackage() || !CloneMaster->HasAnyFlags(RF_Transient) ||
-            SourceStaticLightingText.IsEmpty() || OwnedStaticLightingText.IsEmpty() || SourceStaticLightingText == OwnedStaticLightingText ||
+            SourceStaticLightingText.IsEmpty() || SourceStaticLightingText == OwnedStaticLightingText ||
             !WSAField(Original, TEXT("bUsedWithStaticLighting"), SourceStaticLightingText) ||
             !WSAField(Candidate, TEXT("bUsedWithStaticLighting"), OwnedStaticLightingText)) return false;
         Candidate->SetStringField(TEXT("bUsedWithStaticLighting"), SourceStaticLightingText);
@@ -783,7 +783,7 @@ struct FWSAliasAssetState : FWSAliasPairState
         CloneMaster->bUsedWithStaticLighting = false;
         auto AfterFlag = MRProperties(CloneMaster, true);
         if (!AfterFlag->TryGetStringField(TEXT("bUsedWithStaticLighting"), OwnedStaticLightingText) ||
-            OwnedStaticLightingText.IsEmpty() || OwnedStaticLightingText == SourceStaticLightingText) return false;
+            OwnedStaticLightingText == SourceStaticLightingText) return false;
         // Comparison copies only. No source or owned object is normalized back.
         AfterFlag->SetStringField(TEXT("bUsedWithStaticLighting"), SourceStaticLightingText);
         FWeaponRepair Compare;
