@@ -21,7 +21,17 @@ def block(name):
     return match.group(1)
 
 
+def without_pair(source):
+    for name, indent in [('IMPLEMENTATION', ''), ('DISPATCH', '    ')]:
+        pattern = re.escape(indent + '// ALIAS_PAIR_' + name + '_BEGIN\n') + r'.*?' + re.escape(indent + '// ALIAS_PAIR_' + name + '_END\n')
+        source, count = re.subn(pattern, '', source, flags=re.S)
+        if count != 1:
+            raise AssertionError(name)
+    return source
+
+
 def without_ordinary_control(source):
+    source = without_pair(source)
     for name, indent, extra in [('ORDINARY_RESOURCE', '', '\n'), ('ORDINARY_COMPILE', '    ', ''), ('ORDINARY_COMPLETION', '    ', '')]:
         pattern = re.escape(indent + '// ALIAS_' + name + '_BEGIN\n') + r'.*?' + re.escape(indent + '// ALIAS_' + name + '_END\n' + extra)
         source, count = re.subn(pattern, '', source, flags=re.S)
@@ -44,6 +54,214 @@ def without_ordinary_control(source):
 
 
 class SamplerAlias(unittest.TestCase):
+    def test_actual_child_prepare_preserves_parent_bags_and_static_values(self):
+        pair = block('PAIR_IMPLEMENTATION')
+        methods = pair[pair.index('    bool PreparePair()'):pair.index('    // ALIAS_PAIR_COMPILE_ONE_BEGIN')]
+        # Exact child preparation/comparison bodies. Duplication/reflection are
+        # instrumented; this proves control/comparison rejection, not UE behavior.
+        compile_run(r'''
+#include <cassert>
+#include <string>
+#include <map>
+#include <memory>
+using FString=std::string;
+#define TEXT(x) x
+const int RF_Transient=1;
+int scenario=0,prepares=0,duplicates=0,setters=0,drains=0;
+int package,otherPackage;void*GetTransientPackage(){return &package;}
+struct UObject{};
+template<class T>T*FindObject(void*,const char*){return scenario==1?reinterpret_cast<T*>(1):nullptr;}
+template<class T>using TSharedPtr=std::shared_ptr<T>;
+struct FJsonObject{std::map<FString,FString>values;TSharedPtr<FJsonObject>properties;
+ TSharedPtr<FJsonObject>GetObjectField(const char*){return properties;}};
+struct FStaticParameterSet{int value=0;};
+struct Obj:UObject{Obj*Parent=nullptr,*material=nullptr;void*outer=&package;bool transient=true;int cls=1,staticValue=42;FString path,guid="old",bag="Panini=false;child-overrides";
+ Obj*GetMaterial(){return material;}void*GetOuter(){return outer;}bool HasAnyFlags(int){return transient;}int GetClass(){return cls;}FString GetPathName(){return path;}
+ void GetStaticParameterValues(FStaticParameterSet&s){s.value=staticValue;}
+ void SetParentEditorOnly(Obj*p){++setters;Parent=p;material=p->material;}
+};
+TSharedPtr<FJsonObject>WSAObject(Obj*o){auto j=std::make_shared<FJsonObject>();j->properties=std::make_shared<FJsonObject>();j->properties->values={{"guid",o->guid},{"parent",o->Parent->path},{"bag",o->bag}};return j;}
+FString MRValue(TSharedPtr<FJsonObject>j){FString s;for(auto&kv:j->properties->values)s+=kv.first+":"+kv.second+";";return s;}
+FString MRStatic(const FStaticParameterSet&s){return std::to_string(s.value);}FString MRValue(FString s){return s;}
+struct FWeaponRepair{struct C:std::map<FString,FString>{void Add(FString a,FString b){(*this)[a]=b;}}Canonical;
+ bool Same(FString a,FString b){for(auto&kv:Canonical){size_t i;while((i=b.find(kv.first))!=FString::npos)b.replace(i,kv.first.size(),kv.second);}return a==b;}};
+struct Lighting{bool Capture(Obj*,Obj*){return scenario!=4;}bool Normalize(TSharedPtr<FJsonObject>a,TSharedPtr<FJsonObject>b)const{
+ if(scenario==14||a->values["guid"]!="old"||b->values["guid"]!="new")return false;b->values["guid"]=a->values["guid"];return true;}};
+bool WSAOwnedGraph(Obj*,Obj*,Obj* =nullptr,Obj* =nullptr){return scenario!=7;}
+bool WSADrain(){++drains;return scenario!=8;}
+struct State{Obj master,cloneMaster,layer,cloneLayer,one,cloneOne,child,cloneChild;
+ Obj*Master=&master,*CloneMaster=&cloneMaster,*Layer=&layer,*CloneLayer=&cloneLayer,*MI=&one,*CloneMI=&cloneOne,*Child=&child,*CloneChild=nullptr;Lighting ChildLighting;
+ State(){master.path="original-master";cloneMaster.path="owned-master";one.path="original-one";cloneOne.path="owned-one";child.path="original-child";cloneChild.path="owned-child";
+ child.Parent=&one;child.material=&master;one.material=&master;cloneOne.material=&cloneMaster;}
+ bool Prepare(){++prepares;return scenario!=2;}bool Equivalent()const{return scenario!=6;}bool Unchanged(){return scenario!=15;}
+ Obj*Duplicate(Obj*o,const char*){++duplicates;cloneChild=*o;cloneChild.path="owned-child";cloneChild.guid="new";
+  if(scenario==5)cloneChild.Parent=&master;if(scenario==9)cloneChild.bag="flattened";if(scenario==10)cloneChild.staticValue=7;
+  if(scenario==11)cloneChild.transient=false;if(scenario==12)cloneChild.outer=&otherPackage;if(scenario==13)cloneChild.cls=2;
+  return scenario==3?nullptr:&cloneChild;}
+''' + methods + r'''
+};
+int main(){for(scenario=0;scenario<=15;++scenario){prepares=duplicates=setters=drains=0;State s;auto oldBag=s.child.bag,oldGuid=s.child.guid;auto oldParent=s.child.Parent;
+ assert(s.PreparePair()==(scenario==0));assert(prepares==(scenario!=1));assert(duplicates==(scenario!=1&&scenario!=2));
+ bool set=scenario==0||scenario>=8;assert(setters==set&&drains==set);
+ assert(s.child.bag==oldBag&&s.child.guid==oldGuid&&s.child.Parent==oldParent);
+ if(scenario==0){assert(s.CloneChild->Parent==s.CloneMI&&s.CloneChild->bag==oldBag);assert(s.PairEquivalent());s.CloneChild->Parent=s.CloneMaster;assert(!s.PairEquivalent());}
+}}
+''')
+
+    def test_actual_pair_loop_and_opt_in(self):
+        # Production loop and dispatch, with an instrumented compile boundary.
+        # Enum deliberately uses High=1, Medium=2 as in the pinned old engine.
+        compile_run(r'''
+#include <cassert>
+#include <vector>
+#include <utility>
+#include <string>
+using int32=int;
+#define TEXT(x) x
+namespace EMaterialQualityLevel{enum Type{Low=0,High=1,Medium=2,Num=3};}
+struct IDs{int count=0;int Num(){return count;}};
+struct S{int Completed=0,ValidResources=0,fail=-1;bool equivalent=true,unchanged=true;IDs RequestedIds;
+ std::vector<std::pair<int,int>>calls;
+ bool CompileOne(int m,EMaterialQualityLevel::Type q){int i=calls.size();calls.push_back({m,q});if(i==fail)return false;++Completed;++RequestedIds.count;if(i%2)++ValidResources;return true;}
+ bool PairEquivalent(){return equivalent;}bool Unchanged(){return unchanged;}
+''' + block('PAIR_LOOP') + r'''
+};
+struct FString:std::string{using std::string::string;const char*operator*()const{return c_str();}};
+bool pairFlag=false,ordinaryFlag=false;int pairCalls=0;
+struct FParse{static bool Param(const char*,const char*k){return std::string(k)=="SamplerAliasGrenadePair"?pairFlag:ordinaryFlag;}};
+int WFRStop(const char*){return 9;}int WSACompilePair(int,int){++pairCalls;return 7;}
+int route(){FString Params="";int Proof=0,Hash=0;
+''' + block('PAIR_DISPATCH') + r'''
+return 3;}
+int main(){
+ const std::vector<std::pair<int,int>>expected{{0,0},{0,2},{0,1},{1,0},{1,2},{1,1}};
+ for(int f=-1;f<6;++f){S s;s.fail=f;assert(s.CompilePair()==(f<0));assert(s.calls.size()==(f<0?6:f+1));
+  for(int i=0;i<int(s.calls.size());++i)assert(s.calls[i]==expected[i]);
+  assert(s.Completed==(f<0?6:f));assert(s.ValidResources==(f<0?3:f/2));}
+ for(int x=0;x<5;++x){S s;if(x==0)s.Completed=1;if(x==1)s.ValidResources=1;if(x==2)s.RequestedIds.count=1;if(x==3)s.equivalent=false;if(x==4)s.unchanged=false;
+  assert(!s.CompilePair());assert(s.calls.size()==(x<3?0:6));}
+ for(int p=0;p<2;++p)for(int o=0;o<2;++o){pairFlag=p;ordinaryFlag=o;pairCalls=0;assert(route()==(p?(o?9:7):3));assert(pairCalls==(p&&!o));}
+}
+''')
+
+    def test_actual_pair_resource_map_guards_and_failure_rows(self):
+        # Actual per-resource body, ordinary full-ID comparator and static check.
+        # No UE shader/DDC/device behavior is represented by these stand-ins.
+        ordinary = block('ORDINARY_RESOURCE')
+        comparator = ordinary[ordinary.index('static bool WSAOrdinaryIDEqual'):]
+        probe = (PRIVATE / 'WeaponShaderProbe.h').read_text()
+        overrides = probe.split('// WSP_CF_OVERRIDES_BEGIN\n', 1)[1].split('// WSP_CF_OVERRIDES_END', 1)[0]
+        compile_run(r'''
+#include <cassert>
+#include <string>
+#include <vector>
+#include <algorithm>
+using int32=int;using TCHAR=char;
+#define TEXT(x) x
+struct FString:std::string{using std::string::string;FString(){}FString(const std::string&s):std::string(s){}const char*operator*()const{return c_str();}};
+template<class T>struct TArray:std::vector<T>{using std::vector<T>::vector;int Num()const{return this->size();}bool Contains(T x)const{return std::find(this->begin(),this->end(),x)!=this->end();}void Add(const T&v){this->push_back(v);}};
+namespace EMaterialQualityLevel{enum Type{Low=0,High=1,Medium=2,Num=3};}namespace ERHIFeatureLevel{enum Type{ES2=2};}
+const int SP_OPENGL_ES2_WEBGL=5;
+struct Guid{int n=0;bool operator==(const Guid&b)const{return n==b.n;}bool operator!=(const Guid&b)const{return n!=b.n;}FString ToString()const{return std::to_string(n);}};
+struct FStaticParameterSet{int value=0;};int MRStatic(const FStaticParameterSet&s){return s.value;}int MRValue(int x){return x;}
+struct FWeaponRepair{bool Same(int a,int b){return a==b;}};
+struct SD{int ShaderType=1,SourceHash=2;};struct PD{int ShaderPipelineType=3,StagesSourceHash=4;};struct VD{int VertexFactoryType=5,VFSourceHash=6;};
+struct FMaterialShaderMapId{Guid BaseMaterialId{10};int QualityLevel=0,FeatureLevel=2;FStaticParameterSet ParameterSet;TArray<Guid>ReferencedFunctions{Guid{20}};TArray<SD>ShaderTypeDependencies{SD{}};TArray<PD>ShaderPipelineTypeDependencies{PD{}};TArray<VD>VertexFactoryTypeDependencies{VD{}};};
+bool WSPMaterialInstanceIdentitySubset(const FMaterialShaderMapId&a,const FMaterialShaderMapId&b){return a.BaseMaterialId==b.BaseMaterialId&&a.QualityLevel==b.QualityLevel&&a.FeatureLevel==b.FeatureLevel&&a.ParameterSet.value==b.ParameterSet.value&&a.ReferencedFunctions==b.ReferencedFunctions;}
+''' + comparator + r'''
+int scenario=0,caches=0,finishes=0,drains=0,destroyed=0,samplerReads=0,uniformReads=0,proofs=0,contracts=0,bindings=0,results=0,equivalences=0;
+struct MI{int identity=0;void GetStaticParameterValues(FStaticParameterSet&s){s.value=identity;}};
+struct LayerType{Guid StateId{30};};struct UTexture{FString GetPathName(){return "texture";}};
+struct FMaterialResource;
+struct ExprType{const char*GetName(){return "texture-expression";}};
+struct Expr{ExprType type;UTexture tex;ExprType*GetType(){return scenario==23?nullptr:&type;}int GetTextureIndex(){return 0;}
+ void GetGameThreadTextureValue(MI*,FMaterialResource&,UTexture*&t){++bindings;t=scenario==24?nullptr:&tex;}};
+struct Binding{Expr e;Expr*GetReference()const{return scenario==22?nullptr:const_cast<Expr*>(&e);}};
+struct Map{FMaterialShaderMapId id;bool IsCompilationFinalized(){return scenario!=12;}bool CompiledSuccessfully(){return scenario!=13;}
+ int GetShaderPlatform(){return scenario==14?99:5;}const FMaterialShaderMapId&GetShaderMapId(){return id;}};
+struct FMaterialResource{int TranslationRequests=1,q=0;MI*instance=nullptr;Map map;TArray<FString>errors;TArray<Binding>textures;
+ virtual~FMaterialResource(){++destroyed;}
+ void SetMaterial(void*,int quality,bool hasq,int f,MI*m){assert(hasq&&f==2);q=quality;instance=m;}
+ bool IsSpecialEngineMaterial(){return scenario==1;}virtual bool IsPersistent()const{return true;}virtual bool IsUsedWithStaticLighting()const{return true;}
+ void GetShaderMapId(int platform,FMaterialShaderMapId&out){assert(platform==5);out=FMaterialShaderMapId{};out.QualityLevel=q;out.ParameterSet.value=instance->identity;
+  if(IsUsedWithStaticLighting())out.ShaderTypeDependencies.push_back(SD{});
+  if(!IsUsedWithStaticLighting()){if(scenario==3)out.ParameterSet.value=99;if(scenario==4)out.BaseMaterialId.n=99;if(scenario==5)out.ReferencedFunctions={Guid{30}};}}
+ bool CacheShaders(const FMaterialShaderMapId&id,int platform,bool apply){assert(platform==5&&!apply&&!IsUsedWithStaticLighting()&&!IsPersistent());++caches;map.id=id;
+  if(scenario==15)map.id.ShaderTypeDependencies[0].SourceHash=99;if(scenario==16)map.id.ShaderPipelineTypeDependencies[0].StagesSourceHash=99;
+  if(scenario==17)map.id.VertexFactoryTypeDependencies[0].VFSourceHash=99;
+  if(scenario==18)errors.push_back("compile failed");if(scenario==25)errors.resize(65,"compile failed");return scenario!=7;}
+ void FinishCompilation(){++finishes;}bool IsCompilationFinished(){return scenario!=9;}Map*GetGameThreadShaderMap(){return scenario==11?nullptr:&map;}
+ bool HasValidGameThreadShaderMap(){return scenario!=10;}const TArray<FString>&GetCompileErrors(){return errors;}
+ int GetSamplerUsage(){++samplerReads;return scenario==19?17:scenario==20?-1:16;}
+ const TArray<Binding>&GetUniform2DTextureExpressions(){++uniformReads;textures.resize(scenario==21?13:14);return textures;}
+ TArray<int>GetUniformCubeTextureExpressions(){++uniformReads;return TArray<int>(scenario==26?1:0);}
+};
+struct FWeaponShaderResource:FMaterialResource{
+''' + overrides + r'''
+};
+bool WSADrain(){++drains;return scenario!=8;}FString WFRContext(const FString&s){return s;}FString WSATarget(){return "1p";}
+void log(const char*f,...){if(std::string(f).find("_PAIR result")!=std::string::npos)++results;}
+#define UE_LOG(c,v,...) log(__VA_ARGS__)
+struct State{MI one{1},child{2};MI*MI=&one,*Child=&child,*CloneMI=&one,*CloneChild=&child;void*CloneMaster=nullptr;LayerType layer,*Layer=&layer;
+ FMaterialResource*Resource=nullptr;bool OrdinaryLighting=false,Attempted=false;int Completed=0,ValidResources=0;
+ Guid MasterId{10},LayerId{20};FString MasterHash="hash";TArray<FMaterialShaderMapId>RequestedIds;
+ struct P{bool Check(const FString&){++proofs;return scenario!=27;}}Proof;
+ bool Contracts(struct MI*,LayerType*){++contracts;return scenario!=28;}
+ bool PairEquivalent(){++equivalences;return scenario!=29;}bool Unchanged(){return scenario!=30;}
+ FString ChildTarget(){return "3p";}~State(){delete Resource;}
+''' + block('PAIR_COMPILE_ONE') + r'''
+};
+int main(){for(int s=0;s<=30;++s){scenario=s;caches=finishes=drains=destroyed=samplerReads=uniformReads=proofs=contracts=bindings=results=equivalences=0;
+ {State x;if(s==6){FMaterialShaderMapId old;old.ParameterSet.value=1;x.RequestedIds.Add(old);}
+ bool finished=x.CompileOne(0,EMaterialQualityLevel::Low);
+ bool pre=s==1||s>=3&&s<=6||s>=27;bool aborted=pre||s==8||s==9||s==22||s==23||s==24||s==25;
+ assert(finished==!aborted);assert(x.Completed==!aborted);assert(results==!aborted);
+ assert(x.ValidResources==(s==0||s==2));assert(caches==!pre);assert(finishes==caches);assert(drains==caches);
+ bool readable=s==0||s==2||s>=19&&s<=24||s==26;assert(samplerReads==readable);
+ if(!readable)assert(uniformReads==0);assert(destroyed==!aborted);
+ if(!aborted)assert(x.Resource==nullptr);
+ }assert(destroyed==(s>=27?0:1));}
+ // Medium is numerically greater than High in this engine; both must compile.
+ scenario=0;for(int m=0;m<2;++m)for(auto q:{EMaterialQualityLevel::Low,EMaterialQualityLevel::High,EMaterialQualityLevel::Medium}){State x;assert(x.CompileOne(m,q)&&x.ValidResources==1);}
+ for(int m:{-1,2}){State x;assert(!x.CompileOne(m,EMaterialQualityLevel::High)&&!x.Resource);}
+ {State x;assert(!x.CompileOne(0,static_cast<EMaterialQualityLevel::Type>(3))&&!x.Resource);}
+ {FWeaponShaderResource x;assert(x.IsPersistent()&&x.IsUsedWithStaticLighting());x.NoStaticLighting=true;assert(!x.IsPersistent()&&!x.IsUsedWithStaticLighting());}
+}
+''')
+
+    def test_persistence_order_fix_inverse_to_native_pair_attempt(self):
+        s = HEADER.read_text()
+        old = '        if (Resource->IsSpecialEngineMaterial() || Resource->IsPersistent()) return false;\n'
+        new = '        if (Resource->IsSpecialEngineMaterial()) return false;\n'
+        pair = block('PAIR_COMPILE_ONE')
+        self.assertLess(pair.index('GetShaderMapId(SP_OPENGL_ES2_WEBGL, Ordinary)'), pair.index('Diagnostic->NoStaticLighting = true'))
+        self.assertLess(pair.index('Diagnostic->NoStaticLighting = true'), pair.index('if (Resource->IsPersistent())'))
+        self.assertLess(pair.index('if (Resource->IsPersistent())'), pair.index('GetShaderMapId(SP_OPENGL_ES2_WEBGL, Requested)'))
+        restored = pair.replace(new, old).replace('        if (Resource->IsPersistent()) return false;\n', '')
+        self.assertEqual(s.count(pair), 1)
+        inverse = s.replace(pair, restored)
+        self.assertEqual(hashlib.sha256(inverse.encode()).hexdigest(),
+                         '9535b297136b8d50988e987b4ec2ad268497f46fb92482dcdb7184175c661533')
+
+    def test_pair_inverse_and_child_hierarchy_guards(self):
+        s = HEADER.read_text()
+        self.assertEqual(hashlib.sha256(without_pair(s).encode()).hexdigest(),
+                         'f68c8acb8112f8096a67aa7de9bdd77fab2a7921800659a316e68573427b2d10')
+        pair = block('PAIR_IMPLEMENTATION')
+        self.assertIn('Child->Parent != MI', pair)
+        self.assertIn('CloneChild->Parent != CloneMI', pair)
+        self.assertIn('ChildLighting.Normalize', pair)
+        self.assertIn('Compare.Canonical.Add(CloneMI->GetPathName(), MI->GetPathName())', pair)
+        self.assertIn('Compare.Same(MRValue(A), MRValue(B))', pair)
+        self.assertIn('MRStatic(Old)', pair)
+        prepare = pair[pair.index('bool PreparePair()'):pair.index('bool PairEquivalent()')]
+        self.assertLess(prepare.index('FindObject<UObject>'), prepare.index('!Prepare()'))
+        self.assertLess(prepare.index('WSAOwnedGraph(Layer, CloneLayer)'), prepare.index('SetParentEditorOnly'))
+        self.assertIn('CloneChild->SetParentEditorOnly(CloneMI)', prepare)
+        self.assertNotIn('CloneChild->SetParentEditorOnly(CloneMaster)', pair)
+        for forbidden in ('LoadObject<', 'LoadPackage(', 'NewObject<', 'SetTextureParameterValue', 'SetScalarParameterValue', 'SavePackage('):
+            self.assertNotIn(forbidden, pair)
+
     def test_ordinary_delta_inverse_preserves_frozen_cp3(self):
         old = without_ordinary_control(HEADER.read_text())
         self.assertEqual(hashlib.sha256(old.encode()).hexdigest(), '1667b38e55f07e1e65516fe0dec947998f4d1c5585bb40ed4729957bfcc07fd4')
@@ -108,7 +326,7 @@ struct FWSAliasState{bool done=false,Attempted=false,OrdinaryLighting=false;FWSA
  bool Close(){assert(!done);done=true;++closed;return scenario!=18;}};
 void log(const char*f,...){++complete;completion=f;}
 #define UE_LOG(c,v,fmt,...) {log(fmt, ##__VA_ARGS__);}
-'''+block('CONTROL')+r'''
+'''+re.sub(r'    // ALIAS_PAIR_DISPATCH_BEGIN\n.*?    // ALIAS_PAIR_DISPATCH_END\n', '', block('CONTROL'), flags=re.S)+r'''
 int main(){for(int o=0;o<2;++o)for(scenario=0;scenario<=19;++scenario){ordinary=o;completion.clear();verify=drains=captured=prepared=compiled=closed=complete=0;
  GIsEditor=scenario!=1;GShaderCompilingManager=scenario==7?nullptr:(void*)1;
  int result=WeaponSamplerAliasProbe("fixed");assert(result==(scenario?1:0));

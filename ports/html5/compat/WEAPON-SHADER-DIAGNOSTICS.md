@@ -155,6 +155,34 @@ runtime texture mutations or permission to merge material parameters.
 
 ## Fixed transient sampler-alias experiment
 
+### Fixed Grenade pair across quality levels
+
+Add `-SamplerAliasGrenadePair` to `-Mode=WeaponSamplerAliasProbe` to compile the
+fixed Grenade Launcher first- and third-person material instances at Low, Medium
+and High quality. This option cannot be combined with
+`-SamplerAliasOrdinaryLighting`. The existing single-instance modes remain
+unchanged.
+
+The third-person clone inherits from the owned first-person clone; its stored
+parameter overrides are preserved. Both original instances enter the source
+snapshot and file-hash checks. The same six texture-name aliases are applied only
+to the owned function clone. No constant texture substitution is made.
+
+Each of the six resources generates its own shader-map ID, uses the diagnostic
+static-lighting override, and must return a finalized successful map with the full
+requested identity, no compile errors, fourteen material texture bindings and at
+most sixteen total samplers. Resources are drained before release. Failed shader
+maps do not expose uniform arrays as evidence. Only six complete results can emit
+`COMPAT_WEAPON_SAMPLER_ALIAS_PAIR complete`; exit zero additionally requires all
+six to pass. No assets are saved. This still does not prove that changing a saved
+material's usage flag is equivalent or that runtime appearance is correct.
+
+The first native pair attempt stopped before resource compilation because the
+new persistence guard ran before enabling the diagnostic policy. The corrected
+order is covered by a host test that extracts the production policy getters;
+the former order fails that regression. The failed run is retained separately
+from any retry. Native shader results remain separate from host-test success.
+
 `-Mode=WeaponSamplerAliasProbe` requires the same verified Tess/UV0 generation
 and proof arguments as the existing shader probe. It targets only Grenade
 Launcher first-person High. It duplicates the master, `MF_LayerSet` and MIC into
