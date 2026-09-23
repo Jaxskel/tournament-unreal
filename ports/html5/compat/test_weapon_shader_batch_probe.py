@@ -37,7 +37,8 @@ class BatchProbe(unittest.TestCase):
         self.assertEqual(set(paths) - {master}, set(recipe['instances']))
 
     def test_cpp_delta_leaves_existing_modes_and_probe_unchanged(self):
-        source = (PRIVATE / 'UT4Html5Compat.cpp').read_bytes()
+        from test_commandlet_mode_admission import without_blueprint_dispatch
+        source = without_blueprint_dispatch((PRIVATE / 'UT4Html5Compat.cpp').read_text()).encode()
         include = b'#include "WeaponShaderBatchProbe.h"\n'
         branch = (b'    if (Mode.Equals(TEXT("WeaponShaderBatchProbe"), ESearchCase::IgnoreCase))\n'
                   b'        return WeaponShaderBatchProbe(Params);\n')

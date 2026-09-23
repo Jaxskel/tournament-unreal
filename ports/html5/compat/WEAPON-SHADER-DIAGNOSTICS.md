@@ -111,3 +111,44 @@ references the absent `Lea_ArrowThingGradient` texture. This establishes neither
 membership in the native 20-MIC closure nor a complete materials cohort. The
 missing file was also absent from the original source tree; no replacement or
 guard exception was introduced. The report and failed validation are retained.
+
+## Fixed Grenade Blueprint graph observation
+
+`-Mode=WeaponBlueprintReport -BlueprintOriginalContent=<absolute-original-Content>`
+observes exactly the Grenade Launcher and its attachment Blueprint. Run in a fresh
+editor commandlet process with `-nullrhi`. It compares both selected packages with
+the operator-supplied original files before loading and again after the report.
+It never saves packages, executes gameplay or explicitly compiles Blueprints.
+Normal engine PostLoad may regenerate classes or normalize graph data; this is a
+post-load observation, not a raw package or bytecode proof.
+
+Rows with prefix `COMPAT_WEAPON_BLUEPRINT` enumerate graph ownership, nodes,
+nontransient reflected properties, pin types/defaults/links and generated/native
+function metadata. Bounds fail rather than report truncated completion. Interface
+graphs outside this fixed capture are rejected. External member references remain
+unresolved; implicit dependency loads and their bytes are not a complete audited
+closure. Text defaults are exported display strings.
+
+Successful observation requires exit0, contiguous sequences, two exact Blueprint
+and after rows with unchanged hashes, and one terminal `kind="complete"` record
+with `roots=2`, `assets_saved=false` and `global_immutability_proven=false`.
+Dirty-after-load and final dirty states are observations; the helper never clears
+them. A complete graph capture alone does not authorize sampler aliasing or claim
+that all runtime material mutation paths have been covered.
+
+```sh
+python3 -B ports/html5/compat/test_weapon_blueprint_report.py -v
+```
+
+The optional `--private-source` argument exercises the captured matching UE4
+public field declarations. Host fixtures are distinct from native UE execution.
+
+The observer compiled and linked in the private editor module. A subsequent
+native run returned exit0 with 623 contiguous records: two Blueprints, four
+graphs, 50 nodes, 179 pins and 94 directed link records. Both selected package
+hashes matched their original files before and after observation; both were
+clean at the recorded dirty-state checks. Nine source, binary, configuration and
+asset fingerprints remained unchanged. No assets were saved. The attachment
+Blueprint had already loaded as a dependency before its explicit request, which
+the report records. This is bounded post-load graph evidence, not proof of all
+runtime texture mutations or permission to merge material parameters.

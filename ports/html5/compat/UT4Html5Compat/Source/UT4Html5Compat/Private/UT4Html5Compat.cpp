@@ -47,6 +47,12 @@
 #include "PhysicsEngine/BodySetup.h"
 #include "CollisionQueryParams.h"
 #include "EngineUtils.h"
+// WEAPON_BLUEPRINT_DECLARATIONS_BEGIN
+#include "Engine/Blueprint.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphNode.h"
+#include "EdGraph/EdGraphPin.h"
+// WEAPON_BLUEPRINT_DECLARATIONS_END
 // WEAPON_USAGE_DECLARATIONS_BEGIN
 #include "AssetData.h"
 #include "IAssetRegistry.h"
@@ -375,6 +381,7 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
 #include "WeaponUsageReport.h"
 #include "WeaponShaderProbe.h"
 #include "WeaponShaderBatchProbe.h"
+#include "WeaponBlueprintReport.h"
 #include "BlobShadowExperiment.h"
 static bool ReportMeshes(const TArray<FString>& Meshes)
 {
@@ -538,6 +545,8 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
         return BlobShadowPreflightReport(Params);
     if (Mode.Equals(TEXT("WeaponReport"), ESearchCase::IgnoreCase))
         return WeaponPreflightReport(Params);
+    if (Mode.Equals(TEXT("WeaponBlueprintReport"), ESearchCase::IgnoreCase))
+        return WeaponBlueprintReport(Params);
     if (Mode.Equals(TEXT("WeaponUsageReport"), ESearchCase::IgnoreCase))
         return WeaponUsageReport(Params);
     if (Mode.Equals(TEXT("WeaponShaderBatchProbe"), ESearchCase::IgnoreCase))

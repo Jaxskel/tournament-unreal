@@ -8,8 +8,20 @@ from test_weapon_tessellation import compile_run
 CPP = Path(__file__).parent / 'UT4Html5Compat/Source/UT4Html5Compat/Private/UT4Html5Compat.cpp'
 PATTERN = r'    // EXPLICIT_MODE_ADMISSION_BEGIN\n(.*?)    // EXPLICIT_MODE_ADMISSION_END\n'
 
+def without_blueprint_dispatch(source):
+    declarations = ('// WEAPON_BLUEPRINT_DECLARATIONS_BEGIN\n' +
+        ''.join('#include "%s"\n' % n for n in ('Engine/Blueprint.h', 'EdGraph/EdGraph.h',
+            'EdGraph/EdGraphNode.h', 'EdGraph/EdGraphPin.h')) + '// WEAPON_BLUEPRINT_DECLARATIONS_END\n')
+    blocks = [declarations, '#include "WeaponBlueprintReport.h"\n',
+        '    if (Mode.Equals(TEXT("WeaponBlueprintReport"), ESearchCase::IgnoreCase))\n        return WeaponBlueprintReport(Params);\n']
+    for block in blocks:
+        if source.count(block) != 1:
+            raise AssertionError('Expected exactly one Blueprint observer integration block: ' + block)
+        source = source.replace(block, '')
+    return source
+
 def without_readonly_dispatches(source):
-    """Remove only the exact later usage/batch integration, preserving old hash proof."""
+    """Remove only the exact later read-only integration, preserving old hash proof."""
     names = ('AssetData.h', 'IAssetRegistry.h', 'HAL/FileManager.h', 'GameFramework/Actor.h',
              'Components/ActorComponent.h', 'Components/SceneComponent.h', 'Components/SkinnedMeshComponent.h',
              'Engine/BlueprintGeneratedClass.h', 'Engine/SimpleConstructionScript.h', 'Engine/SCS_Node.h',
@@ -17,6 +29,7 @@ def without_readonly_dispatches(source):
              'LightMap.h', 'UObject/UObjectAnnotation.h')
     declarations = ('// WEAPON_USAGE_DECLARATIONS_BEGIN\n' + ''.join('#include "%s"\n' % n for n in names)
                     + '// WEAPON_USAGE_DECLARATIONS_END\n')
+    source = without_blueprint_dispatch(source)
     blocks = [declarations]
     for name in ('WeaponUsageReport', 'WeaponShaderBatchProbe'):
         blocks += ['#include "%s.h"\n' % name,
@@ -40,6 +53,7 @@ class Admission(unittest.TestCase):
         self.assertLess(main.index('// EXPLICIT_MODE_ADMISSION_END'), main.index('return WeaponFidelityRepair('))
         self.assertLess(main.index('// EXPLICIT_MODE_ADMISSION_END'), main.index('return WeaponUsageReport('))
         self.assertLess(main.index('// EXPLICIT_MODE_ADMISSION_END'), main.index('return WeaponShaderBatchProbe('))
+        self.assertLess(main.index('// EXPLICIT_MODE_ADMISSION_END'), main.index('return WeaponBlueprintReport('))
 
     def test_compiled_actual_guard_rejects_ambiguous_modes_before_side_effects(self):
         block = re.search(PATTERN, CPP.read_text(), re.S).group(1)
@@ -68,7 +82,7 @@ BLOCK
  ++reached;return 0;
 }
 int main(){
- const char* modes[]={"","WeaponRepairApply","WeaponRepairVerify","Apply","Verify","WeaponReport","BlobShadowExperiment","WeaponUsageReport","WeaponShaderBatchProbe"};
+ const char* modes[]={"","WeaponRepairApply","WeaponRepairVerify","Apply","Verify","WeaponReport","BlobShadowExperiment","WeaponUsageReport","WeaponShaderBatchProbe","WeaponBlueprintReport"};
  const char* flags[]={"WeaponTessUpgrade","WeaponTessVerify","WeaponShaderProbe","WeaponShaderEnforcer1PHigh","WeaponShaderNoStaticLighting"};
  for(const char* mode:modes)for(int bits=0;bits<32;bits++){
   FString args;for(int i=0;i<5;i++)if(bits&(1<<i)){args+=" -";args+=flags[i];}
