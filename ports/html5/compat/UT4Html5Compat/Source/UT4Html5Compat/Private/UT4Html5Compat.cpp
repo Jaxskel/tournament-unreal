@@ -47,6 +47,23 @@
 #include "PhysicsEngine/BodySetup.h"
 #include "CollisionQueryParams.h"
 #include "EngineUtils.h"
+// WEAPON_USAGE_DECLARATIONS_BEGIN
+#include "AssetData.h"
+#include "IAssetRegistry.h"
+#include "HAL/FileManager.h"
+#include "GameFramework/Actor.h"
+#include "Components/ActorComponent.h"
+#include "Components/SceneComponent.h"
+#include "Components/SkinnedMeshComponent.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Engine/SCS_Node.h"
+#include "Engine/InheritableComponentHandler.h"
+#include "Engine/LevelStreaming.h"
+#include "Engine/MapBuildDataRegistry.h"
+#include "LightMap.h"
+#include "UObject/UObjectAnnotation.h"
+// WEAPON_USAGE_DECLARATIONS_END
 #include "GameFramework/PlayerStart.h"
 #include "Components/CapsuleComponent.h"
 #if PLATFORM_WINDOWS
@@ -355,7 +372,9 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
 #include "PhysicsPreflightReport.h"
 #include "WeaponFidelityRepair.h"
 #include "WeaponTessellationUpgrade.h"
+#include "WeaponUsageReport.h"
 #include "WeaponShaderProbe.h"
+#include "WeaponShaderBatchProbe.h"
 #include "BlobShadowExperiment.h"
 static bool ReportMeshes(const TArray<FString>& Meshes)
 {
@@ -519,6 +538,10 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
         return BlobShadowPreflightReport(Params);
     if (Mode.Equals(TEXT("WeaponReport"), ESearchCase::IgnoreCase))
         return WeaponPreflightReport(Params);
+    if (Mode.Equals(TEXT("WeaponUsageReport"), ESearchCase::IgnoreCase))
+        return WeaponUsageReport(Params);
+    if (Mode.Equals(TEXT("WeaponShaderBatchProbe"), ESearchCase::IgnoreCase))
+        return WeaponShaderBatchProbe(Params);
     if (Mode.Equals(TEXT("WeaponSupplementReport"), ESearchCase::IgnoreCase))
         return WeaponSupplementReport(Params);
     if (Mode.Equals(TEXT("FidelityReport"), ESearchCase::IgnoreCase))

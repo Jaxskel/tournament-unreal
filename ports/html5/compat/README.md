@@ -1,5 +1,7 @@
 # UT4 UE4.15 HTML5 material compatibility tools
 
+The [weapon shader and usage diagnostics](WEAPON-SHADER-DIAGNOSTICS.md) document the separate fixed-scope compilation counterfactual and materials-only usage cohort. Neither diagnostic authorizes an asset repair.
+
 Original editor-only plugin and bounded copy-on-write preparation. No engine source
 is bundled. The editor plugin now compiles against the isolated UT4 source, and Report has run on the recovered Malcolm and weapon assets. Twelve Python preparation tests pass. Apply/Verify and full browser appearance are tracked separately in the parent verification record.
 

@@ -270,7 +270,8 @@ int main() {
             self.assertIn(fragment, text)
 
     def test_dispatch_inverse_preserves_frozen_existing_modes(self):
-        cpp = HEADER.with_name('UT4Html5Compat.cpp').read_text()
+        from test_commandlet_mode_admission import without_readonly_dispatches
+        cpp = without_readonly_dispatches(HEADER.with_name('UT4Html5Compat.cpp').read_text())
         cpp, count = re.subn(r'    // EXPLICIT_MODE_ADMISSION_BEGIN\n.*?    // EXPLICIT_MODE_ADMISSION_END\n', '', cpp, flags=re.S)
         self.assertEqual(count, 1)
         for name in ('Constant', 'FeatureLevelSwitch', 'SetMaterialAttributes', 'Custom', 'SceneDepth', 'CameraVectorWS'):
