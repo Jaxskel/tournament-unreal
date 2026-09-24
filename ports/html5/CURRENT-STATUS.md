@@ -103,6 +103,14 @@ confirmed all 9,173 entries: the twelve selected decoded payloads and all
 unselected stored payloads were preserved. The candidate is not promoted. This
 is neither cold-network timing nor a gameplay-performance result.
 
+The same optional twelve-entry experiment has now been repeated against the
+newer scene-color package and pending-startup runtime. All 9,179 archive entries
+and six packaged slices passed equivalence checks. Across six fresh headless
+launches, median startup fell from **14.6627 to 14.2094 seconds (3.09%)**, with
+60,223,598 additional bytes. Inputs were unchanged and all owned browsers exited
+0. It remains unpromoted: the larger download could outweigh this smaller local
+gain. This newer measurement does not establish FPS or native visual parity.
+
 ## Remaining acceptance
 
 Finish material repair, fresh cook and visual comparison; rerun collision and

@@ -35,6 +35,40 @@ It does not establish gameplay FPS, GPU time, visual parity or a benefit on othe
 machines. The larger download is a tradeoff. Neither public/canonical runtime was
 replaced by this experiment.
 
+## Current scene-color generation comparison
+
+The same fixed selection was rebuilt against the newer scene-color cook and
+pending-startup runtime. This is a separate experiment: all **9,179 entries**
+passed actual archive equivalence, including the twelve decoded texture
+payloads and the other 9,167 stored payloads/compression layouts. The matching
+legacy packager generated a new data/loader pair, and all six data slices matched
+the private staging files. Engine source, cooked assets and playable preview
+were unchanged.
+
+Six fresh headless Chrome launches again used B,C,C,B,B,C, identical runtime,
+client, manifest and 1080p startup settings:
+
+| Package | Runs, seconds | Median, seconds |
+| --- | --- | --- |
+| Current baseline | 16.4789, 14.6627, 14.5688 | 14.6627 |
+| Twelve entries uncompressed | 13.6107, 14.2513, 14.2094 | 14.2094 |
+
+The measured median reduction was **0.4533 seconds (3.09%)**, while the data file
+increased from 1,874,318,212 to 1,934,541,810 bytes: **60,223,598 additional bytes**.
+All six browsers exited cleanly; input pins were rechecked after the comparison.
+This smaller local benefit does not justify a default change without considering
+the larger download. The candidate remains **optional and unpromoted**. The
+historical 8.58% result must not be presented as the newer generation's result.
+The same pre-read, headless and first-observed-Ready limitations above apply;
+this is not a cold-network, visual-fidelity or gameplay-FPS measurement.
+
+Private evidence SHA-256:
+
+- Package result: `66d7abf81e826fe7fa83f541e941428373d851fb4fe2228218d74934121f8ae9`.
+- Archive equivalence: `675ec204a5078ebbef100303f4c48e8b9e18a5cae81c258fe99dc3f8b5265a72`.
+- Six-run report: `477726a27aa735bb7491a1bf292364e445fc8e036f10634c24dc0f75e85cb06f`.
+- Candidate data: `8f00094304caa411c5ae067ca28330ca766e76e92442be9cb2e5687331d833bb`.
+
 ## Prepare a response
 
 Use the matching engine's response generated for the intended cooked generation.
