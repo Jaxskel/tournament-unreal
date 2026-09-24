@@ -1,6 +1,6 @@
 # Local browser beta: recorded status
 
-Updated 2026-09-23. **Playable practice is demonstrated; the requested finished
+Updated 2026-09-24. **Playable practice is demonstrated; the requested finished
 beta is not yet verified.** The game executes locally as WASM/WebGL, not video
 streamed from the Windows GPU. Licensed game payloads and raw operator evidence
 remain private. Repository tests and shader compilation alone do not establish
@@ -12,30 +12,30 @@ gameplay or native visual parity.
 | --- | --- |
 | Floor collision and movement | A matching corrected-optimizer build passed the exact Deck floor regression, horizontal movement, jumping and landing. This fixes the previously reported reproduction; it is not a claim about every surface or map. |
 | Bots, combat and respawn | An earlier six-bot practice capture shows bot scores and two recorded player deaths, alongside a live first-person view at 100 health. This supports a bounded respawn observation, not a captured death-to-respawn timeline, player-shot kills or every weapon. |
-| Menu and resolution | Native standalone pause/resume was observed twice, including a paused 1080p→1440p change. Earlier headed practice confirmed native window, canvas and drawing-buffer dimensions at both resolutions. The new Enforcer generation completed 1080p→1440p→1080p UI changes with matching native/canvas sizes and the same Ready epoch, but its test failed browser cleanup; the raw run remains failed. Audio behavior and direct world-clock freeze were not measured. |
+| Menu and resolution | The current Supplement generation passed 1080p → 1440p → 1080p with matching native/canvas sizes, centered 16:9 layout, confirmed pause/resume and owned-browser exit 0. Its CSS presentation is scaled, not a full-screen performance measurement. Earlier cleanup-failed runs remain failed. Audio and direct world-clock freeze remain unmeasured. |
 | Rotation | An earlier accelerated `GoalScore=1 / TimeLimit=1` practice fixture logged five completed alternating Deck/Outpost loads, continuing Ready samples and clean owned-browser exit. Its old boolean checker missed the logs. This does not establish default-duration or multiplayer rotation, or recertify newer generations. |
-| Current rotation retry | The [browser NoMCP writer guard](CLOUD-STATS.md) passed native build/conversion and a separate accelerated headless Deck → Outpost → Deck check: advancing Ready epochs, no HTTP/page errors, unchanged inputs and owned-browser exit 0. This resolves the recorded legacy stats-404 reproduction. The private port-8078 practice preview now serves that runtime with the previous content package; all fifteen served file hashes match the passing capture. Default-duration and multiplayer rotation remain open. Earlier failed runs remain failed. |
-| Multiplayer | Two browser clients joined, sustained simultaneous traffic and native frames for about 27 seconds, then one reconnected while the other remained connected. Network combat, complete matches and multiplayer travel remain open. |
+| Current rotation | The current Supplement package passed accelerated headless Deck → Outpost → Deck in 68.133 seconds: Ready epochs 1 → 2 → 3, matching 1080p dimensions, no HTTP/page errors, fifteen unchanged served pins and owned-browser exit 0. The browser NoMCP writer guard remains included. Default-duration and multiplayer rotation remain open. |
+| Multiplayer | Historical two-client traffic and reconnect passed. Current-generation strict tests stopped on startup engine errors, despite observed network traffic and subsequent Deck loading. The matching source logs an error for a pending initial network connection; the entry map also reports missing reflection-capture data. These strict runs remain failed. A separate diagnostic retained only those exact startup errors, observed 30 seconds of two-client traffic and native-frame advancement, and reconnected one client through a new iframe while the other stayed Ready. It exited cleanly but explicitly did not claim clean engine acceptance. Combat and multiplayer travel remain open. |
 | Character skinning | Captured browser programs and bound draw streams demonstrate an eight-influence GPU skinning path. This is not per-mesh identity, morph activation, pixel correctness or a measured FPS improvement. |
 | Weapons and other assets | The dedicated Enforcer repair passed native Apply/fresh Verify, a new cook and package, and a browser roundtrip. The starting first-person gun now visibly has blue/metallic material detail in the captured scene instead of the earlier gray fallback. This is a bounded visual improvement, not a native-reference match. All six ordinary shader resources passed (15/16/16 samplers for each view); geometry and other slots were preserved. The preceding Grenade repair remains included, but its browser appearance is not yet verified. Other weapons, foot shadows, lighting, effects, animation and placement fidelity remain open. |
 
-A separate [Bio Rifle body and grenade-ammunition diagnostic](compat/SUPPLEMENT-MATERIAL-CANDIDATE.md) passed all twelve native shader resources with original parameter and source-hash checks intact, using 15–16 samplers. It saved no assets; those four material repairs are not yet in the playable package. Bio glass is excluded.
+The [Bio Rifle body and grenade-ammunition repair](compat/SUPPLEMENT-MATERIAL-REPAIR.md) now passed native Apply/fresh Verify, fresh cook, packaging and browser observation. Twelve shader resources passed at 15–16 samplers. Nine scoped assets were saved; protected source packages, mesh geometry and vertex colors were preserved. The first-person Bio body now visibly has dark metallic surface detail instead of the prior white-gray fallback. The grenade view also shows detailed exposed rounds. Different spawn positions and lighting prevent a pixel-equivalent comparison; native parity, third-person fidelity and normal pickup/combat remain unverified. Bio glass is excluded and still needs repair.
 
-The latest private playable preview is **http://127.0.0.1:8080/index.html**.
-Its Enforcer cook finished in 2,471.298 seconds with zero selected-family
-failures and zero engine errors; **399 unrelated material-failure lines remain**.
-Packaging passed the archive integrity test, exact staged-data-slice comparison,
-and decoded-byte comparison for all fourteen required cooked entries. The new
-1,865,902,770-byte data file has SHA-256
-`a1323130b8fd9d6c9b62f098b54349a8f624d3ba6fc473ea109214848e726aec`.
-The runtime JS/WASM/memory generation is unchanged.
+The latest private playable preview is **http://127.0.0.1:8081/index.html**.
+Its cook finished in 2,307.428 seconds with zero selected-family failures and zero
+engine errors; **291 unrelated material-failure lines remain**. Packaging passed
+the 9,179-file archive integrity test, exact staged-data-slice comparison and
+decoded-byte comparison for all 23 required cooked entries. All three downloaded
+package files matched their full hashes. The new 1,872,697,632-byte data file has
+SHA-256 `fb28c01286a7e72472529d531d9b13b82f8b457cea0961aeb7d7a4089d3ee837`.
+Runtime JS/WASM/memory are unchanged. Port 8080 retains the previous content for
+comparison.
 
-A separate 90.948-second accelerated headless Deck → Outpost → Deck run passed:
-Ready epochs 1 → 2 → 3, 1920×1080 native/canvas dimensions, no HTTP/page errors,
-fifteen unchanged served-file hashes and owned-browser exit 0. Its starting
-screenshot shows the repaired Enforcer material. This does not establish
-third-person/dual-wield fidelity, player-input combat, presented FPS or normal
-match-duration acceptance. Port 8079 retains the previous content for comparison.
+The current settings check passed in 47.243 seconds, and the weapon-view
+collection finished in 47.671 seconds. Both retained all fifteen served-file
+hashes and exited the owned browser cleanly. Weapon collection used a private
+one-player fixture and the standard `Loaded` console command; it is not evidence
+of normal pickups, player kills, sustained performance or every weapon.
 
 The old unresolved-floor wording in the September 21 build snapshot is
 superseded by the bounded movement result above. Other historical failures remain
@@ -105,3 +105,15 @@ Raw evidence identifiers and SHA256 digests (private artifacts, not bundled):
 - Enforcer packaged browser rotation: `enforcer-rotation-review/run-1790212162998/report.json`, `9d2f248241896c229e821ed6f429a1b5821fd00576990f7ebdbc8bc7b3e1128d`. Starting screenshot: `33e0ad2bd38dfcef6331e978a12e50401958cd3bbb36dbc29f0bde3a0812624a`; ending screenshot: `3105a4fc15aa6ae0b58d7f596091bc9d4f85cc9ba0e7b6db808f467430c1f4e7`. Headless only; these images are not a new FPS benchmark or native-parity proof.
 
 - Enforcer settings observation: `enforcer-settings-review/run-1790212598560/report.json`, `a952c172718c2527f6a88d890538d5852760a21e75d8299682c8acc5185002dd`. Both UI resolution/pause cycles and fifteen served-file comparisons completed; browser close/kill timed out, so the run is **failed**, not acceptance. A separate OS snapshot found its owned browser PID/process group absent; only its remaining Node runner was terminated. No FPS, pointer-lock, player-shot or jump-outcome claim.
+
+
+Latest Supplement generation private evidence (raw reports retained):
+
+- Cook: `supplement-cook-1/result.raw.json`, `5bd2861742e049618ab5f4c56155daa54492df6bf41c99fef4e2b06b3036e81e`.
+- Package: `supplement-package-1/result.raw.json`, `5b4a2ab4922715e1d398797a8877c26831f7a50a65628f50f74f75625aac5751`.
+- Downloaded-package review: `supplement-package-1/independent-download-review.json`, `f293a5e228a4391e09f067b95511a9ddfcdcd072760d4a08da2fb9d6b42b79f4`.
+- Weapon views: `supplement-weapon-views/run-1790223271824/report.json`, `231b5494f8c0fca5ab862467e771ad283a338d4ffa2595bf46e2e565bc2e6ff3`.
+- Settings: `supplement-settings-review/run-1790223354308/report.json`, `32991f54742fd0f8d33e730cb0544485f5d83d501cde31e821f7345dca2f15d1`.
+- Rotation: `supplement-rotation-review/run-1790223635305/report.json`, `95ec177e40d08e158a38ffd999e4110173f9ce91cd2e3873bc2c9f859e32fa1c`.
+- Failed strict multiplayer diagnostic: `probe-supplement-multiplayer-diagnostic/run-1790223552912/report.json`, `177a498f8064e8ad50ca30ec1f232d1baadfe1265737eb26c81913202dc097ce`.
+- Multiplayer observation with retained startup errors: `probe-supplement-multiplayer-observation/run-1790223839337/report.json`, `1d6691c945f5eecc30bca425dd9992394f0618a83c2548a34bae49e7d202689b`. Status is `diagnostic-connectivity-observed`, **not** clean engine acceptance; 30.075-second input-dispatch interval and 73.459-second total, new iframe/postRun/socket for reconnect, other client remains Ready, owned-browser exit 0, gateway returns to zero clients. No player-input consumption, kills, respawn or travel claim.
