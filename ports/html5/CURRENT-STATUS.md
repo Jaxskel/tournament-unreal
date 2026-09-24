@@ -12,24 +12,28 @@ gameplay or native visual parity.
 | --- | --- |
 | Floor collision and movement | A matching corrected-optimizer build passed the exact Deck floor regression, horizontal movement, jumping and landing. This fixes the previously reported reproduction; it is not a claim about every surface or map. |
 | Bots, combat and respawn | An earlier six-bot practice capture shows bot scores and two recorded player deaths, alongside a live first-person view at 100 health. This supports a bounded respawn observation, not a captured death-to-respawn timeline, player-shot kills or every weapon. |
-| Menu and resolution | Native standalone pause/resume was observed twice, including a paused 1080p→1440p change. The latest headed practice capture separately confirmed native window, canvas and drawing-buffer dimensions at both resolutions. Audio behavior and direct world-clock freeze were not measured by the pause probe. |
+| Menu and resolution | Native standalone pause/resume was observed twice, including a paused 1080p→1440p change. Earlier headed practice confirmed native window, canvas and drawing-buffer dimensions at both resolutions. The new Enforcer generation completed 1080p→1440p→1080p UI changes with matching native/canvas sizes and the same Ready epoch, but its test failed browser cleanup; the raw run remains failed. Audio behavior and direct world-clock freeze were not measured. |
 | Rotation | An earlier accelerated `GoalScore=1 / TimeLimit=1` practice fixture logged five completed alternating Deck/Outpost loads, continuing Ready samples and clean owned-browser exit. Its old boolean checker missed the logs. This does not establish default-duration or multiplayer rotation, or recertify newer generations. |
 | Current rotation retry | The [browser NoMCP writer guard](CLOUD-STATS.md) passed native build/conversion and a separate accelerated headless Deck → Outpost → Deck check: advancing Ready epochs, no HTTP/page errors, unchanged inputs and owned-browser exit 0. This resolves the recorded legacy stats-404 reproduction. The private port-8078 practice preview now serves that runtime with the previous content package; all fifteen served file hashes match the passing capture. Default-duration and multiplayer rotation remain open. Earlier failed runs remain failed. |
 | Multiplayer | Two browser clients joined, sustained simultaneous traffic and native frames for about 27 seconds, then one reconnected while the other remained connected. Network combat, complete matches and multiplayer travel remain open. |
 | Character skinning | Captured browser programs and bound draw streams demonstrate an eight-influence GPU skinning path. This is not per-mesh identity, morph activation, pixel correctness or a measured FPS improvement. |
-| Weapons and other assets | Wrong/gray weapon materials remain visible in the playable generation. The scoped Grenade repair saved exactly two new material/function packages and one parent change, preserving 22 other packages. A fresh process verified all 18 selected instances and six Grenade shader resources with zero saves. Its fresh cook and packaged archive passed their scoped checks, and that package passed a new accelerated browser roundtrip. The current port-8079 preview contains the repaired content; actual Grenade appearance is not yet verified. The Enforcer remains visibly gray. The dedicated Enforcer repair has now saved exactly three new materials and the two gun meshes. A fresh Unreal process verified the saved material semantics, geometry and all slot metadata, with all six ordinary shader resources passing (15/16/16 samplers for each view), zero additional saves and unchanged identities/hashes for the other 28 tracked packages. Its cook, package and browser appearance are still pending. Other weapon, foot-shadow, lighting, effects, animation and placement fidelity remain open. |
+| Weapons and other assets | The dedicated Enforcer repair passed native Apply/fresh Verify, a new cook and package, and a browser roundtrip. The starting first-person gun now visibly has blue/metallic material detail in the captured scene instead of the earlier gray fallback. This is a bounded visual improvement, not a native-reference match. All six ordinary shader resources passed (15/16/16 samplers for each view); geometry and other slots were preserved. The preceding Grenade repair remains included, but its browser appearance is not yet verified. Other weapons, foot shadows, lighting, effects, animation and placement fidelity remain open. |
 
-The latest private playable preview is **http://127.0.0.1:8079/index.html**. Its
-Grenade content cook finished in 2,266 seconds with zero selected-family failures
-and zero engine errors; 388 unrelated material-failure lines remain recorded.
-Packaging matched all six staged data slices, and the archive integrity test
-passed for 9,175 files. The separate legacy list command returned 1; its output
-was checked independently for all nine required map, registry, shader and repaired
-asset entries. A 68.818-second accelerated headless Deck → Outpost → Deck run
-then passed with advancing epochs, 1920×1080 native/canvas dimensions, no
-HTTP/page errors, unchanged assets and owned-browser exit 0. This is not a new
-FPS, weapon-appearance or default-duration-match result. Port 8078 retains the
-previous content for comparison.
+The latest private playable preview is **http://127.0.0.1:8080/index.html**.
+Its Enforcer cook finished in 2,471.298 seconds with zero selected-family
+failures and zero engine errors; **399 unrelated material-failure lines remain**.
+Packaging passed the archive integrity test, exact staged-data-slice comparison,
+and decoded-byte comparison for all fourteen required cooked entries. The new
+1,865,902,770-byte data file has SHA-256
+`a1323130b8fd9d6c9b62f098b54349a8f624d3ba6fc473ea109214848e726aec`.
+The runtime JS/WASM/memory generation is unchanged.
+
+A separate 90.948-second accelerated headless Deck → Outpost → Deck run passed:
+Ready epochs 1 → 2 → 3, 1920×1080 native/canvas dimensions, no HTTP/page errors,
+fifteen unchanged served-file hashes and owned-browser exit 0. Its starting
+screenshot shows the repaired Enforcer material. This does not establish
+third-person/dual-wield fidelity, player-input combat, presented FPS or normal
+match-duration acceptance. Port 8079 retains the previous content for comparison.
 
 The old unresolved-floor wording in the September 21 build snapshot is
 superseded by the bounded movement result above. Other historical failures remain
@@ -90,7 +94,12 @@ Raw evidence identifiers and SHA256 digests (private artifacts, not bundled):
 - Six-run startup comparison: `startup-file-read-review/comparison-run-1/report.json`, `9bcdd6d36b3cf24f3572477e0336c63a3b25fb548cc9c654e28c282725be5f85`.
 - GPU draw source qualification: `gpu8-r001-diagnostic/observation-1/offline-source-qualification.json`, `2956d8bfcb049145b92af09012ff853e6c968e28f4646b3d25cce9808d6a6e6d`.
 
-- Enforcer pre-repair geometry and explicit four-slot baseline: native module 32 compiled; a fresh read-only report completed with both meshes, zero saves and unchanged selected bytes. Raw report `enforcer-mesh-native-2/report.log`, `1d65aec50a437c983da956a9524b38a2ba80a88daf71d9916009f9a08aa6a8ed`. Geometry matched the preceding process exactly. See [coverage and limitations](compat/ENFORCER-MESH-INVARIANT.md); material-slot changes, save-roundtrip verification and browser appearance remain pending.
-- Enforcer persistent repair tool: native module 33 built successfully in 14.594 seconds; raw result `enforcer-repair-native-1/build-result.json`, SHA-256 `711d6f8b449c3f600d16cf35f6c888939adadfad18f82e7d76cfda4095437eef`. The [fixed five-asset operation](compat/ENFORCER-MATERIAL-REPAIR.md) creates dedicated materials and changes only the two gun-body slots. Seven extracted-body host tests cover the bounded save/failure paths and mesh comparisons. This build-only checkpoint was followed by the native Apply/fresh Verify recorded below. Cook and browser visual acceptance remain pending; the current playable package is unchanged.
+- Enforcer pre-repair geometry and explicit four-slot baseline: native module 32 compiled; a fresh read-only report completed with both meshes, zero saves and unchanged selected bytes. Raw report `enforcer-mesh-native-2/report.log`, `1d65aec50a437c983da956a9524b38a2ba80a88daf71d9916009f9a08aa6a8ed`. Geometry matched the preceding process exactly. See [coverage and limitations](compat/ENFORCER-MESH-INVARIANT.md). This pre-repair checkpoint was followed by the scoped repair and browser observation below.
+- Enforcer persistent repair tool: native module 33 built successfully in 14.594 seconds; raw result `enforcer-repair-native-1/build-result.json`, SHA-256 `711d6f8b449c3f600d16cf35f6c888939adadfad18f82e7d76cfda4095437eef`. The [fixed five-asset operation](compat/ENFORCER-MATERIAL-REPAIR.md) creates dedicated materials and changes only the two gun-body slots. Seven extracted-body host tests cover the bounded save/failure paths and mesh comparisons. This build-only checkpoint was followed by the native Apply/fresh Verify recorded below. The later cook/package and bounded first-person browser observation are recorded below; broader visual acceptance remains open.
 
 - Enforcer native Apply/fresh Verify: Apply saved five assets in 123.052 seconds; fresh Verify saved zero in 114.564 seconds. Apply result `enforcer-repair-native-1/apply/result.json`, SHA-256 `2ae00aad8b9506dad8836ca81dfe91fcfdf88e12ea02a0629e6bff84486b5edd`; Verify result `enforcer-repair-native-1/verify/result.json`, `73abffe87cb3eca25bb66b8f0e4227cae11c5c7663ff1f4c5a4118e467f3ba0b`. Both views passed all three shader qualities; geometry, other material slots and 28 protected packages remained unchanged. This is serialization/shader evidence only. Port 8079 still serves the previous package with the visibly gray Enforcer.
+
+- Enforcer cook: `enforcer-cook-1/result.raw.json`, `dd1834c7a16a9d9ef544de874a098a2265cd21acc9e16bd21e0667c731fc06ed`; package: `enforcer-package-1/result.json`, `c00bf5051523bb32e4287430191e43cbe4a03343db7bd0676efb40e1785bce41`. All fourteen required archive entries were decoded and matched to the fresh cooked bytes.
+- Enforcer packaged browser rotation: `enforcer-rotation-review/run-1790212162998/report.json`, `9d2f248241896c229e821ed6f429a1b5821fd00576990f7ebdbc8bc7b3e1128d`. Starting screenshot: `33e0ad2bd38dfcef6331e978a12e50401958cd3bbb36dbc29f0bde3a0812624a`; ending screenshot: `3105a4fc15aa6ae0b58d7f596091bc9d4f85cc9ba0e7b6db808f467430c1f4e7`. Headless only; these images are not a new FPS benchmark or native-parity proof.
+
+- Enforcer settings observation: `enforcer-settings-review/run-1790212598560/report.json`, `a952c172718c2527f6a88d890538d5852760a21e75d8299682c8acc5185002dd`. Both UI resolution/pause cycles and fifteen served-file comparisons completed; browser close/kill timed out, so the run is **failed**, not acceptance. A separate OS snapshot found its owned browser PID/process group absent; only its remaining Node runner was terminated. No FPS, pointer-lock, player-shot or jump-outcome claim.
