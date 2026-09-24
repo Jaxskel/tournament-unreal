@@ -502,3 +502,36 @@ matched before/after; the owned browser exited 0. This headless check uses a
 scaled CSS presentation and supplies no FPS, combat, audio or pointer-lock claim.
 Settings report SHA-256:
 `7cbce71707c8c34cae3716c8fd12f367d7ae8563019b82b527b247a4424ee81d`.
+
+
+## Accelerated multiplayer rotation
+
+The same fourteen asset records, with a separate exact-origin preview/gateway
+and an isolated `GoalScore=1 / TimeLimit=1` native server, completed two-client
+Deck → Outpost → Deck in **157.217 seconds**. Both clients reached Ready epochs
+1 → 2 → 3 at 1920×1080, with advancing native frames and fresh sent/received
+traffic on an open socket after every load. They remained live after the final
+hash scan. All fifteen served hashes were unchanged; no page/network/socket
+error was recorded. The owned browser exited 0 and gateway clients returned to
+zero. Independent review confirmed the report; the temporary server, gateway,
+tunnel and preview were then stopped by verified ownership. The playable 8086
+preview and its default-duration server remain separate and running.
+
+Report SHA-256:
+`f236ef52ad65afde24cdd30025f8eb8407345f33458b9b0ede4a6d59bfab3fdc`.
+Map identity is correlated from matching engine load logs and native Ready epochs,
+not a new map-name export. This does not certify normal player combat, respawn,
+default-duration rotation, frame pacing or native visual parity.
+
+The first travel attempt remains failed: the verifier classified the legacy
+adapter's periodic dependency-wait message as fatal. The matching generated
+`addRunDependency` watcher emits that inventory every ten seconds without
+aborting. The corrected classifier accepts an **explicit optional** initialization
+context containing the pinned loader's exact dependency IDs. Only exact inventory
+lines/header/footer are exempt before the matching iframe postRun event; generic
+callers remain strict, fatal signatures take precedence, unknown IDs/errors remain
+fatal, and startup deadlines do not reset. The private probe derives six file IDs
+plus the data-file ID from the independently hashed served loader. Four focused
+classifier/deadline tests, 113 unchanged diagnostic checks, and a private execution
+of the actual pinned watcher validate the distinction. No product runtime or
+licensed generated code was changed for this correction.

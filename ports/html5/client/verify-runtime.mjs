@@ -148,7 +148,7 @@ export async function cleanupVerification(server,result,primaryError,{closeMs=10
 }
 const delay = ms => new Promise(resolve=>setTimeout(resolve,ms));
 const fatalPattern = /DebugBreak|\bfatal(?: error)?\b|Assertion failed|Ensure condition failed|\bcheckf? failed|\babort(?:ed|ing|\()|\bRuntimeError\b|memory access out of bounds|out of memory|\bLog\w*:\s*Error:/i;
-export function isFailureDiagnostic(type, text) {
+export function isFailureDiagnostic(type, text, context = {}) {
   // Verified in the actual matching legacy adapter: run() prints dependency wait
   // and integer Date.now() elapsed time; _sigaction prints its notice and returns 0.
   // Keep every notice in the report. Do not exempt other stubs or generic stderr.
@@ -156,7 +156,17 @@ export function isFailureDiagnostic(type, text) {
   const expectedNotice = text === '[UT4] run() called, but dependencies remain, so not running'
     || text === '[UT4] Calling stub instead of sigaction()'
     || /^\[UT4\] pre-main prep time: (?:0|[1-9][0-9]*) ms(?![\s\S])/.test(text);
-  return fatalPattern.test(text) || (type === 'error' && !expectedNotice);
+  // Opt-in only for a pinned loader's exact dependency inventory, before its
+  // matching iframe postRun event. Generic callers remain strict. These notices
+  // never extend a startup deadline or establish readiness.
+  const ids = context?.knownDependencyIds;
+  const inventoryValid = ids instanceof Set && ids.size > 0 && ids.size <= 128
+    && [...ids].every(id => typeof id === 'string' && id.length > 0 && id.length <= 4096 && !/[\r\n]/.test(id));
+  const dependencyNotice = context?.initializing === true && inventoryValid && (
+    text === '[UT4] still waiting on run dependencies:' || text === '[UT4] (end of list)'
+    || (text.startsWith('[UT4] dependency: ') && ids.has(text.slice('[UT4] dependency: '.length)))
+  );
+  return fatalPattern.test(text) || (type === 'error' && !expectedNotice && !dependencyNotice);
 }
 
 // Installed before page code; observes the real canvas context without creating one.
