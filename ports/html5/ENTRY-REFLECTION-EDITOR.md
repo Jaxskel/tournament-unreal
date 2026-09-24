@@ -455,3 +455,50 @@ error while the second client remained Ready. That run is **failed**, not clean
 multiplayer acceptance; its after-run served-file comparison was not reached.
 Owned-browser exit was 0 and gateway sessions returned to zero. The next bounded
 diagnostic records package-request metadata to distinguish the reconnect failure.
+
+
+## Direct-package reconnect verification
+
+The inherited candidate manifest had omitted `packageFiles`. Consequently the
+existing client downloaded the large archive as a Blob before the generated
+packager mounted an ArrayBuffer. An independent source review confirmed the
+actual path. A detach-only diagnostic observed delayed natural backing-storage
+reclamation; this did not identify a specific allocator failure or require forced
+collection. Both failed reconnect records remain unchanged.
+
+The corrected private manifest adds only:
+
+```json
+"packageFiles": ["UnrealTournament.data"]
+```
+
+All fourteen client/runtime/payload records remain identical. The existing
+`Module.locateFile`/package-XHR path consumes that explicit declaration without
+editing generated code. This matches `client/runtime.example.json`; operators
+must retain it when constructing manifests from older generations. It also uses
+a separate exact-origin gateway rather than weakening origin checks.
+
+A fresh strict two-client run passed in 143.201 seconds. Both clients reached
+postRun then Ready at 1080p, exchanged traffic through 31.092 seconds of paired
+input dispatch, and advanced native frames. A reconnected through a new iframe,
+new postRun event and new bidirectional socket; its old socket closed. B stayed
+Ready at the same epoch while its native frames advanced. All fifteen served
+hashes stayed unchanged, no page/network/socket errors were recorded, and no
+fatal engine diagnostic fired. The owned browser exited 0 and gateway sessions
+returned to zero. An independent read-only audit confirmed these results.
+
+Generation SHA-256:
+`978721029e146edd326f1a5a12d236d6e53d6cb7ac32142853fc4b6df81d91e9`.
+Strict report SHA-256:
+`62f676ed985af07ba2d485c5a2ebee8584547ee8ff93b4aac6a1dcb5c1fe66e5`.
+This establishes bounded connectivity/reconnect, not player-shot combat, respawn,
+multiplayer travel, FPS, whole-map script equivalence or native visual parity.
+
+
+The same candidate subsequently passed practice menu/resolution verification in
+50.458 seconds: 1080p → 1440p → 1080p, native/canvas agreement, centered contained
+16:9 layout, pause/resume and unchanged Ready epoch. All fifteen served hashes
+matched before/after; the owned browser exited 0. This headless check uses a
+scaled CSS presentation and supplies no FPS, combat, audio or pointer-lock claim.
+Settings report SHA-256:
+`7cbce71707c8c34cae3716c8fd12f367d7ae8563019b82b527b247a4424ee81d`.

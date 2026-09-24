@@ -15,7 +15,7 @@ gameplay or native visual parity.
 | Menu and resolution | The current Supplement generation passed 1080p → 1440p → 1080p with matching native/canvas sizes, centered 16:9 layout, confirmed pause/resume and owned-browser exit 0. Its CSS presentation is scaled, not a full-screen performance measurement. Earlier cleanup-failed runs remain failed. Audio and direct world-clock freeze remain unmeasured. |
 | Rotation | An earlier accelerated `GoalScore=1 / TimeLimit=1` practice fixture logged five completed alternating Deck/Outpost loads, continuing Ready samples and clean owned-browser exit. Its old boolean checker missed the logs. This does not establish default-duration or multiplayer rotation, or recertify newer generations. |
 | Current rotation | The current Supplement package passed accelerated headless Deck → Outpost → Deck in 68.133 seconds: Ready epochs 1 → 2 → 3, matching 1080p dimensions, no HTTP/page errors, fifteen unchanged served pins and owned-browser exit 0. The browser NoMCP writer guard remains included. Default-duration and multiplayer rotation remain open. |
-| Multiplayer | Historical two-client traffic and reconnect passed. Current-generation strict tests stopped on startup engine errors, despite observed network traffic and subsequent Deck loading. The matching source logs an error for a pending initial network connection; the entry map also reports missing reflection-capture data. These strict runs remain failed. A separate diagnostic retained only those exact startup errors, observed 30 seconds of two-client traffic and native-frame advancement, and reconnected one client through a new iframe while the other stayed Ready. It exited cleanly but explicitly did not claim clean engine acceptance. Combat and multiplayer travel remain open. |
+| Multiplayer | The separate Entry/direct-package candidate passed a strict two-client join and reconnect run: both postRun/Ready, 31.092 seconds of traffic and advancing native frames, then a new iframe/socket for A while B stayed Ready at the same epoch. All fifteen served hashes were unchanged, no page/network/socket or fatal engine error was detected, owned-browser exit was 0 and gateway sessions drained. This supersedes the earlier startup-error and reconnect-download failures only for this exact generation. Input is dispatch evidence; player combat, respawn and multiplayer travel remain open. |
 | Character skinning | Captured browser programs and bound draw streams demonstrate an eight-influence GPU skinning path. This is not per-mesh identity, morph activation, pixel correctness or a measured FPS improvement. |
 | Weapons and other assets | The dedicated Enforcer repair passed native Apply/fresh Verify, a new cook and package, and a browser roundtrip. The starting first-person gun now visibly has blue/metallic material detail in the captured scene instead of the earlier gray fallback. This is a bounded visual improvement, not a native-reference match. All six ordinary shader resources passed (15/16/16 samplers for each view); geometry and other slots were preserved. The preceding Grenade repair remains included, but its browser appearance is not yet verified. Other weapons, foot shadows, lighting, effects, animation and placement fidelity remain open. |
 
@@ -124,9 +124,22 @@ native frames. No fatal engine diagnostic fired during that interval. Reconnecti
 one client failed with a real game-package download error; the other remained
 Ready. The owned browser exited 0 and gateway sessions drained to zero. The whole
 run remains failed, after-run asset equality was not reached, and reconnect,
-combat and travel remain unverified. The existing playable preview is unchanged.
+combat and travel remain unverified in that failed run.
 
-The latest private playable preview is **http://127.0.0.1:8081/index.html**.
+The subsequent configuration correction explicitly declares
+`packageFiles: ["UnrealTournament.data"]`, as in the checked-in example. The
+inherited manifest omitted it, taking the eager Blob route despite client support
+for direct ArrayBuffer package loading. The corrected candidate then passed the
+strict join/reconnect test above in 143.201 seconds. No delay, forced garbage
+collection, new engine build, asset rewrite or relaxed error gate was used.
+The separate candidate is on **http://127.0.0.1:8086/index.html**. It also passed
+practice 1080p → 1440p → 1080p in 50.458 seconds, with native/canvas dimensions,
+centered 16:9 presentation, menu pause/resume, the same Ready epoch, fifteen
+unchanged served hashes and owned-browser exit 0. CSS scales the presentation;
+this is not a full-screen performance test. Complete gameplay/visual acceptance
+is open; the previous preview remains unchanged.
+
+The previous Supplement practice preview remains **http://127.0.0.1:8081/index.html**.
 Its cook finished in 2,307.428 seconds with zero selected-family failures and zero
 engine errors; **291 unrelated material-failure lines remain**. Packaging passed
 the 9,179-file archive integrity test, exact staged-data-slice comparison and
