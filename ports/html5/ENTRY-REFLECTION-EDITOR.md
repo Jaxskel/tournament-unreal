@@ -212,5 +212,22 @@ raw-equality/reload-ID and read-only-inspection code, plus source/API checks. Th
 matching Windows plugin-only build passed with complete process-tree drain and no
 external assist. Plugin DLL SHA-256:
 `e8397155a18bb313f65c8ef727222be0f60a59a16847107e004b8352b00737d9`.
-This establishes compilation only. The original-map fresh-load inspection and
-subsequent save/reload acceptance remain separate gates.
+This establishes compilation only; subsequent save/reload acceptance remains open.
+
+Two original-map synchronous inspections then passed with native exit 0 and
+complete owned-process drain. All eighteen raw evidence files matched remote
+pins, and all 46 audited file/link rows matched within each run. Both captured
+60 objects, with canonical digest
+`ac7d121f2682ce525598ec3f9e990ca4ea1c6337`; only the generated level GUID
+differed between runs. Neither load had a migrated build-data registry. No map
+was saved or captured.
+
+The running-editor snapshot contains eighteen additional objects and initialized
+world transforms/editor helper fields. Thus its 78-object raw digest is not a
+valid synchronous-reload baseline. The current strict persistence verifier will
+remain held until it compares the appropriate load-state evidence while retaining
+full pre/post-save editor-state equality, the saved GUID, registry linkage and HDR
+payload checks. This is a verifier limitation discovered before any map write,
+not evidence of lost map objects. Public light-volume getters also do not expose
+all serialized samples; registry-content preservation needs an appropriate exported
+serializer or another verified readback path before it can be claimed.

@@ -67,9 +67,12 @@ cross-process snapshot differed. Two further read-only editor loads isolated the
 change to `PersistentLevel.LevelBuildDataId`; the other 78-object snapshot fields
 and all 46 audited file/link records matched. The original legacy map has no
 serialized value for that field, and the matching engine generates it during
-object initialization. The preservation contract is being corrected to distinguish
-that per-load initialization from changes during capture/save. No map save or
-fresh-load persistence result is claimed; matching cook/package and strict
+object initialization. The correction compiled successfully. Two synchronous original-map inspections
+then agreed on 60 objects, differing only in the generated GUID, with all files
+unchanged. The running editor has additional objects and initialized transform
+values, so fresh persistence verification must compare matching load states rather
+than those editor-only values. That verifier adjustment remains pending. No map
+save or fresh-load persistence result is claimed; matching cook/package and strict
 multiplayer rerun remain pending.
 
 The latest private playable preview is **http://127.0.0.1:8081/index.html**.
