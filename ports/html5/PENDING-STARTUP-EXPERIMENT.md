@@ -13,7 +13,12 @@ behavior, and the later default-map failure/exit path is unchanged. Pending
 connectivity is not treated as successful multiplayer acceptance: subsequent
 socket, handshake, and travel failures must still be observed and handled.
 
-This candidate is **not applied and not UE-compiled**. It does not repair the
+The exact candidate is now applied to the isolated source tree, with the pinned
+original backup verified and the original project unchanged. The local private
+suite passed all six tests (including the extracted control-flow matrix); Windows
+passed five synthetic tests with the optional private-source test skipped. The
+matching browser build is in progress, so compiled/runtime acceptance is still
+unproven. It does not repair the
 separate UT-Entry reflection-capture error. Strict multiplayer acceptance
 remains pending; this log correction alone cannot establish a successful join.
 The patcher’s identity snapshots and rechecks are not a process lock, so apply
