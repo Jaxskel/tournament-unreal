@@ -19,7 +19,25 @@ gameplay or native visual parity.
 | Character skinning | Captured browser programs and bound draw streams demonstrate an eight-influence GPU skinning path. This is not per-mesh identity, morph activation, pixel correctness or a measured FPS improvement. |
 | Weapons and other assets | The dedicated Enforcer repair passed native Apply/fresh Verify, a new cook and package, and a browser roundtrip. The starting first-person gun now visibly has blue/metallic material detail in the captured scene instead of the earlier gray fallback. This is a bounded visual improvement, not a native-reference match. All six ordinary shader resources passed (15/16/16 samplers for each view); geometry and other slots were preserved. The preceding Grenade repair remains included, but its browser appearance is not yet verified. Other weapons, foot shadows, lighting, effects, animation and placement fidelity remain open. |
 
-The [Bio Rifle body and grenade-ammunition repair](compat/SUPPLEMENT-MATERIAL-REPAIR.md) now passed native Apply/fresh Verify, fresh cook, packaging and browser observation. Twelve shader resources passed at 15–16 samplers. Nine scoped assets were saved; protected source packages, mesh geometry and vertex colors were preserved. The first-person Bio body now visibly has dark metallic surface detail instead of the prior white-gray fallback. The grenade view also shows detailed exposed rounds. Different spawn positions and lighting prevent a pixel-equivalent comparison; native parity, third-person fidelity and normal pickup/combat remain unverified. Bio glass is excluded and still needs repair.
+The [Bio Rifle body and grenade-ammunition repair](compat/SUPPLEMENT-MATERIAL-REPAIR.md) now passed native Apply/fresh Verify, fresh cook, packaging and browser observation. Twelve shader resources passed at 15–16 samplers. Nine scoped assets were saved; protected source packages, mesh geometry and vertex colors were preserved. The first-person Bio body now visibly has dark metallic surface detail instead of the prior white-gray fallback. The grenade view also shows detailed exposed rounds. Different spawn positions and lighting prevent a pixel-equivalent comparison; native parity, third-person fidelity and normal pickup/combat remain unverified. Bio glass was excluded from that asset repair; the separate engine-path milestone below does not yet establish native visual parity.
+
+A newer, separate **scene-color diagnostic generation** completed its native/browser
+builds, three-map cook and packaging. The cook recorded zero selected-family
+failures and zero engine errors; **286 other material-failure lines remain**.
+All 25 required cooked payloads matched their decoded archive entries, the
+9,179-file archive integrity test passed, and the downloaded package hashes
+matched. Original Bio glass materials were retained.
+
+Its browser capture at 1080p → 1440p → 1080p recorded eighteen paired draws:
+a scene-color encoder writes a separate texture, then a shader with the native
+decode expression samples that texture while writing to a different color
+attachment. Independent offline review confirmed the source and observed
+bindings, complete framebuffers and correct dimensions. Shader compile/link
+succeeded with extension-order warnings retained. All fifteen served pins
+remained unchanged and the owned browser exited 0. This establishes the recorded
+copy/decode draw path, **not Bio mesh identity, pixel correctness, native visual
+parity, normal pickups/combat or FPS**. The private diagnostic is on port 8082;
+it has not replaced the practice preview below.
 
 The latest private playable preview is **http://127.0.0.1:8081/index.html**.
 Its cook finished in 2,307.428 seconds with zero selected-family failures and zero
@@ -117,3 +135,11 @@ Latest Supplement generation private evidence (raw reports retained):
 - Rotation: `supplement-rotation-review/run-1790223635305/report.json`, `95ec177e40d08e158a38ffd999e4110173f9ce91cd2e3873bc2c9f859e32fa1c`.
 - Failed strict multiplayer diagnostic: `probe-supplement-multiplayer-diagnostic/run-1790223552912/report.json`, `177a498f8064e8ad50ca30ec1f232d1baadfe1265737eb26c81913202dc097ce`.
 - Multiplayer observation with retained startup errors: `probe-supplement-multiplayer-observation/run-1790223839337/report.json`, `1d6691c945f5eecc30bca425dd9992394f0618a83c2548a34bae49e7d202689b`. Status is `diagnostic-connectivity-observed`, **not** clean engine acceptance; 30.075-second input-dispatch interval and 73.459-second total, new iframe/postRun/socket for reconnect, other client remains Ready, owned-browser exit 0, gateway returns to zero clients. No player-input consumption, kills, respawn or travel claim.
+
+Scene-color diagnostic generation evidence (private):
+
+- Cook: `scene-color-cook-1/final/result.json`, `3617306c2e656e0cde2b28c88d877ea4a2689d30edd58c2bf5b1fe6b2a8229f6`.
+- Package: `scene-color-package-1/final/result.json`, `276cb18a1b37adc63fc1bfeef37b9c703dadf8a40d1bacb0d00b379e482fe100`.
+- Browser generation: `scene-color-browser-review/generation-receipt-1.json`, `55974abae80a6d898a47ca990f2be803e797057e8607d92948b499feae71074b`.
+- Raw draw capture: `scene-color-browser-review/runs/run-1790239141816/report.json`, `5eea39c8f03d13ff84524a9e26926e939ed0785e367c8ee0e1761d2cb51b4205`.
+- Separate source/state qualification: `scene-color-browser-review/runs/run-1790239141816/offline-qualification-main.json`, `2bc12e0fae8978cc7b3770800eb0b1ffa950b66c2a32f40db1792c6bf58df8e5`.
