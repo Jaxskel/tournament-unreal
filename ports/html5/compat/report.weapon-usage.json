@@ -1,0 +1,121 @@
+{
+  "schema": "ut4-weapon-usage-spec-v2",
+  "read_only": true,
+  "master": "/Game/HTML5Compat/Weapons/V1/M_WeaponsBase",
+  "proof_sha1": "f86076971bcdd3f4adee45ca27d1ec22da9f5f9b",
+  "expected_mic_count": 20,
+  "cook_maps": [
+    "/Game/RestrictedAssets/Maps/WIP/DM-DeckTest",
+    "/Game/RestrictedAssets/Maps/UT-Entry",
+    "/Game/RestrictedAssets/Maps/DM-Outpost23"
+  ],
+  "native_bases": [
+    "/Script/UnrealTournament.UTWeapon",
+    "/Script/UnrealTournament.UTWeaponAttachment",
+    "/Script/UnrealTournament.UTPickupInventory",
+    "/Script/UnrealTournament.UTDroppedPickup"
+  ],
+  "limits": {
+    "assets": 200000,
+    "files": 100000,
+    "bytes": 68719476736,
+    "referencer_packages": 32768,
+    "edges": 262144,
+    "classes": 8192,
+    "maps": 512,
+    "actors": 262144,
+    "components": 524288,
+    "slots_per_mesh": 256,
+    "lods_per_component": 64,
+    "hierarchy_depth": 64,
+    "rows": 2000000,
+    "row_characters": 65536,
+    "output_characters": 536870912,
+    "file_bytes": 1073741824,
+    "packages": 32768,
+    "read_only_roots": 1024,
+    "input_manifest_bytes": 1048576,
+    "config_entries_per_root": 8192
+  },
+  "input_manifest_schema": "ut4-weapon-usage-inputs-v2",
+  "input_manifest_required_roles": [
+    "cook-scope",
+    "html5-config",
+    "engine-api-manifest"
+  ],
+  "lighting_evidence": "Enumerate serialized own-level, scenario, override and legacy data. No active-world or runtime rendering assertion.",
+  "class_scope": "All registry-derived weapon-family classes (a superset of cook), native classes, and transitive Blueprint referencers.",
+  "completion": "Only the final complete record after exact coverage, native generation Verify and all before/after fingerprints pass. Partial logs are not completion.",
+  "authorizes_material_flag_change": false,
+  "read_only_roots": "SHA-bound manifest mappings with logical_root, physical_root and source/selected role. Longest logical prefix; exact handle-resolved target suffix; strict physical target validation. External proof/save paths retain strict Physical.",
+  "fingerprint_scope": "Relevant transitive package referencers, registry-derived family classes, cook maps, preloaded disk packages and their forward hard/soft dependencies. Missing soft dependencies are reported and rechecked; required unresolved packages fail.",
+  "dirty_policy": "New dirty packages fail closed with package and observation phase, even when PostLoad normalization may explain them. Initially dirty packages are identified; no dirty clearing, normalization attribution, or in-memory mutation audit is claimed.",
+  "registry_query_policy": "False query returns are unknown and prevent completion. Successful empty queries are accepted; the captured declarations do not establish false-versus-empty implementation semantics.",
+  "native_read_boundary": "Observer hashes use held read-only handles; explicit native loads recheck package and sidecar mapping/identity before and after. Native internal dependency opens are not intercepted. Source directories and files must remain frozen throughout; all ledger bytes are compared before loads and at completion.",
+  "materials_diagnostic": {
+    "flag": "UsageDiagnosticCohort=materials",
+    "schema": "ut4-weapon-usage-diagnostic-v1",
+    "prefix": "COMPAT_WEAPON_USAGE_DIAGNOSTIC ",
+    "native_observed_exit_code": 2,
+    "global_usage_complete": false,
+    "global_scope_status": "global_not_revalidated",
+    "prerequisite_packages": [
+      "/Game/HTML5Compat/Weapons/V1/MF_BaseShader_Textures",
+      "/Game/HTML5Compat/Weapons/V1/MF_Dirt",
+      "/Game/HTML5Compat/Weapons/V1/MF_Oilness",
+      "/Game/HTML5Compat/Weapons/V1/MF_RGB_Roughness_Mod",
+      "/Game/HTML5Compat/Weapons/V1/M_WeaponsBase",
+      "/Game/RestrictedAssets/Weapons/Enforcer/Materials/M_Enforcer_Gun",
+      "/Game/RestrictedAssets/Weapons/Enforcer/Materials/Material_Custom/M_Enforcer_Gun_Pattern_test_Inst",
+      "/Game/RestrictedAssets/Weapons/Enforcer/Materials/Materials_thirdPerson/M_Enforcer_Gun_3rdPerson_Inst",
+      "/Game/RestrictedAssets/Weapons/Flak/Materials/M_Flak_Gun_Inst",
+      "/Game/RestrictedAssets/Weapons/Flak/Materials/Materials_thirdPerson/M_Flak_Gun_3P_Inst",
+      "/Game/RestrictedAssets/Weapons/Global/Material/MF/MF_BaseShader_Textures",
+      "/Game/RestrictedAssets/Weapons/Global/Material/MF/MF_Dirt",
+      "/Game/RestrictedAssets/Weapons/Global/Material/MF/MF_Oilness",
+      "/Game/RestrictedAssets/Weapons/Global/Material/MF/MF_RGB_Roughness_Mod",
+      "/Game/RestrictedAssets/Weapons/Global/Material/M_WeaponsBase",
+      "/Game/RestrictedAssets/Weapons/GrenadeLauncher/Materials/MIC_Grenade_Launcher",
+      "/Game/RestrictedAssets/Weapons/GrenadeLauncher/Materials/Material_ThirdPerson/MIC_Grenade_Launcher_3P",
+      "/Game/RestrictedAssets/Weapons/LightningRifle/Material/MIC_Lighting_Gun_Partone",
+      "/Game/RestrictedAssets/Weapons/LightningRifle/Material/MIC_Lighting_Gun_Parttwo_Inst",
+      "/Game/RestrictedAssets/Weapons/LightningRifle/Material/Material_ThirdPerson/MIC_Lighting_Gun_Partone_3P_Inst",
+      "/Game/RestrictedAssets/Weapons/LightningRifle/Material/Material_ThirdPerson/MIC_Lighting_Gun_Parttwo_3P_Inst",
+      "/Game/RestrictedAssets/Weapons/LinkGun/Materials/MIC_LinkGun_Inst",
+      "/Game/RestrictedAssets/Weapons/LinkGun/Materials/Material_ThirdPerson/MIC_LinkGun_3P_Inst",
+      "/Game/RestrictedAssets/Weapons/RocketLauncher/Materials/MIC_Rocket_Launcher_Inst",
+      "/Game/RestrictedAssets/Weapons/RocketLauncher/Materials/Material_ThirdPerson/MIC_Rocket_Launcher_3P_Inst",
+      "/Game/RestrictedAssets/Weapons/RocketLauncher/Materials/Material_ThirdPerson/MIC_Rocket_Launcher_3P_Inst2",
+      "/Game/RestrictedAssets/Weapons/Sniper/Materials/M_Sniper_Rifle_Inst",
+      "/Game/RestrictedAssets/Weapons/Sniper/Materials/Materials_thridperson/M_Sniper_Rifle_3P_Inst"
+    ],
+    "history_files": [
+      {
+        "role": "usage-history-report2-log",
+        "bytes": 15400501,
+        "sha1": "7237725d13e6cbb0e8cc4c1525a86c9dbc477405",
+        "sha256": "919b389f01f0cfe909e5d4098b084b59000ef282960fcf7bade03aba61f907af"
+      },
+      {
+        "role": "usage-history-report2-result",
+        "bytes": 5374,
+        "sha1": "f43b430102593d0f66114260a40021b987f8059d",
+        "sha256": "9102f2e9b12c3758087233d654f7965ef4b90139f9625a5225b5dab26c08c025"
+      }
+    ],
+    "historical_failure": {
+      "historical": true,
+      "revalidated": false,
+      "source_run": "b9a5eee68a43e4ea51d61e3899bbad60d9507a86",
+      "native_exit_code": 1,
+      "finished": "2026-09-22T23:26:30.5852565Z",
+      "reason": "missing_hard_dependency",
+      "from": "/Game/RestrictedAssets/Maps/WIP/FR-Blackstone",
+      "package": "/Game/EpicInternal/PK/BackToTwerk/backtotwerk",
+      "hard": true,
+      "exists_at_historical_run": false
+    },
+    "scope": "Exactly current20 MIC descendants including selected18. Prerequisite/preloaded and hard+existing-soft forward closure remain mandatory. Global reverse metadata is not a native-load root. No class/map observation; unsupported cohorts fail.",
+    "failure_policy": "Any prerequisite, Verify, dirty, load, query, fingerprint, budget or cohort coverage failure aborts. Only fully observed material diagnostics end with diagnostic_end and exit2; never ordinary complete."
+  }
+}

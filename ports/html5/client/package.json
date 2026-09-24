@@ -1,0 +1,12 @@
+{
+  "name": "tournament-local-ut4-launcher",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:unit": "node --test tests/core.test.mjs tests/bindings.test.mjs",
+    "verify:runtime": "node verify-runtime.mjs"
+  },
+  "devDependencies": { "playwright": "1.58.2" },
+  "engines": { "node": ">=20" }
+}

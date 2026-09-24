@@ -1,0 +1,11 @@
+{
+  "schema": "ut4-blob-shadow-report-v1",
+  "read_only": true,
+  "materials": [
+    "/Game/RestrictedAssets/Effects/Nick/M_Robust_BlobShadow",
+    "/Game/RestrictedAssets/Effects/Nick/M_Robust_BlobShadowInverse"
+  ],
+  "mesh": "/Game/RestrictedAssets/Effects/Nick/miniCylinder",
+  "character": "/Game/RestrictedAssets/Blueprints/BaseUTCharacter",
+  "include_loaded_world_components": false
+}

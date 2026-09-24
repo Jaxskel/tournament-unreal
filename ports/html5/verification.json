@@ -1,0 +1,280 @@
+{
+  "date": "2026-09-22",
+  "currentStatusDocument": "CURRENT-STATUS.md",
+  "engine": "UT4 beta / UE4.15 CL3228288",
+  "liveSiteChanged": false,
+  "localGameReady": false,
+  "checks": {
+    "legacyHTML5CompileAndLink": "Passed latest public wrapper: UBT334.91s / wrapper339.556556s, exit0; fresh matching JS/BC/mem/symbol outputs, selected guarded optimizer889927c5... invocation verified, parent environment restored.",
+    "legacyPacketTestsInChrome": "passed",
+    "newerLinkerProbe": "passed for packet test only; full engine rejected due C library ABI mismatch",
+    "matchingRuntimeWasmConversion": "full module validates; asynchronous Chrome runtime initialization and allocator smoke passed",
+    "wasmRuntimeBytes": 1610612736,
+    "smokeCanvas": [
+      1920,
+      1080
+    ],
+    "mapLoaded": true,
+    "fpsMeasured": true,
+    "multiplayerGameplayVerified": false,
+    "gatewayTests": 42,
+    "existingBrowserRegressionTests": 70,
+    "eventTests": 8,
+    "legacyAssetPreloader": "passed in Chrome with real matching file_packager fixture; not a cooked map",
+    "browserControlExports": "Eleven exports present, including optional standalone pause setter/status. Actual practice pause/resume and1080p\u21921440p whilepaused passed; older nine-export compatibility retained.",
+    "launcherTests": {
+      "passed": 89,
+      "skipped": 1,
+      "scope": "Full installed-Chrome fixture suite, 90 total, 46.96 seconds; headed-only check skipped. Includes eight canvas-local pointer rejection regressions. Actual keyboard probe retained iframe after capture denial; unrelated errors remain fatal."
+    },
+    "nativePointerCapture": "headed Chrome launcher fixture passed",
+    "actualWebGLContext": "Chrome WebGL1 initialized on M4 Pro: 16 fragment / 32 combined texture units; actual arena, bot and first-person weapon rendered at 1920\u00d71080. Sustained scene correctness remains under investigation.",
+    "partialPackageProbe": "UAT staged/packaged partial cook successfully; runtime stopped at missing WorldGrid shader map, expected incomplete assets",
+    "partialPackageBytes": 185151908,
+    "compatPreparationTests": 12,
+    "browserPacingBuild": "passed; HTML5 build exit0 after removing the desktop busy-wait only on browser target",
+    "converterRegressionTests": {
+      "python": 8,
+      "realWasmJavascript": 18
+    },
+    "materialReport": "Editor plugin build and read-only asset reporting passed; actual first-person base mesh included in fresh Verify",
+    "privateMaterialPreparation": "Windows sparse copy preparation passed; 281 files copied, original source audit passed",
+    "materialApply": "passed with native commandlet rendering enabled; 3 repaired Robot materials and 18 textured weapon surfaces saved only to private copies",
+    "materialVerify": "fresh process without redirects passed selected material structures and actual first-person base mesh; original-source/sibling hash audit passed",
+    "loggingPatchTests": {
+      "python": 14,
+      "actualLegacyFormatterCases": 12
+    },
+    "browserGlueTests": {
+      "python": 10,
+      "javascriptBoundsCases": 37
+    },
+    "actualLauncherStartup": "Tile-light runtime completed a 30-second fixed-1080p native-tick observation without the prior uniform-buffer assertion. Initial screenshot shows Deck and a bot; final screenshot shows sky and weapon, so this is not a gameplay or performance pass.",
+    "patcherPreflightTests": 30,
+    "partyCallbackTests": 11,
+    "runtimeHarness": "GlobalstartupdeadlineandownedBrowserServercleanup tested;16lifecyclechecks includingrealserverclosewithdelayedprofilecleanup passed.",
+    "matchReadiness": "Full HTML5 build passed in 540.22 seconds without unresolved symbols; converted runtime initializes in Chrome with nine exports returning not-ready before main.",
+    "browserPlatformConfiguration": "Exact v1-to-v2 migration applied in isolated tree; ArrowMaterialName points to cooked debug fallback. Ten config tests pass; verified v2package contains configuration.",
+    "partyAndLoggingBuild": "Full HTML5 link passed in 582.80 seconds; subsequent match-readiness build also passed.",
+    "crossBrowserRuntimeSmoke": {
+      "firefox": "Firefox 146.0.1 passed actual WASM initialization, allocator and matching file-packager fixture; not gameplay.",
+      "playwrightWebKit": "Playwright WebKit 26.0 passed actual WASM initialization, allocator and matching file-packager fixture; not actual Safari gameplay."
+    },
+    "browserAudio": "Resume runs synchronously before pointer lock for suspended or interrupted audio and retries the active context on each capture. Generated-adapter and launcher fixtures pass; actual sound and interruption recovery in gameplay remain unverified.",
+    "legacyWidePrintProbe": "Original asm.js and converted WASM passed eight direct LocalPrint/wprintf cases, including >1 KiB lines; write sink and TTY bytes matched. Aggregated CDO warning repetition remains unexplained.",
+    "fixedSceneResolution": "Actual native window, canvas and drawing buffer measured 1920\u00d71080; source ES2/ES3.1 view finalization uses 100% scene percentage. Stable 1440p gameplay verification pending.",
+    "fullDeckCook": {
+      "exitCode": 0,
+      "seconds": 4107.55,
+      "warnings": 2710,
+      "maps": [
+        "DM-DeckTest",
+        "UT-Entry"
+      ],
+      "scope": "Initial full Deck cook completed; sixty distinct material fallbacks. Later rotation cook adds Outpost23; see rotationCook."
+    },
+    "fullDeckPackage": {
+      "uatExitCode": 0,
+      "pakBytes": 1419313050,
+      "dataBytes": 1424709491,
+      "pakFilesTested": 8328,
+      "pakSha256": "14efb40ad102e51102798a85aaec4f04bc75df5e3ff19cc2502fd7718b0b9e7d",
+      "archiveSha256": "82e2147496712165e3aac5a99b3c4136ab4808c601bf9bf559e833b83cba5962",
+      "integrity": "UnrealPak -Test healthy; complete package slices match staging files; transferred archive hash matches; map, entry, registry, shader cache and HTML5 config listed.",
+      "scope": "v2 configuration package; not a ready release."
+    },
+    "firstLocalWorld": {
+      "ready": 1,
+      "epoch": 1,
+      "frame": 909,
+      "canvas": [
+        828,
+        466
+      ],
+      "scope": "Diagnostic run in Chrome; native pre-game screen, not target-resolution combat."
+    },
+    "cubemapMipRendering": {
+      "minimalChromeCases": 84,
+      "actualEngine": "Private activation on the actual GL context eliminated the incomplete-framebuffer samples; converter whitelist fix added.",
+      "firefoxCapability": true,
+      "playwrightWebKitCapability": true,
+      "scope": "Cross-browser extension availability only; full game remains unverified there."
+    },
+    "browserWindowFix": "18 tests and both actual transformed platform blocks pass; full HTML5 C++ build passed. Native window and canvas measured1920x1080 on first world tick. Full gameplay/resolution-switch verification pending.",
+    "practiceStartup": "Actual InitGame body passes standalone/network/error gating checks; HTML5 build passed. Native standalone next-tick match startup now reaches combat audio initialization; full combat verification pending.",
+    "nativeMultiplayerPlugin": "Win64 Development editor plugin linked successfully in3.94seconds with matching audited original import library and -NoHotReload. Network gameplay not yet verified.",
+    "legacyAudioVelocity": "Both removed PannerNode.setVelocity calls guarded; 18 actual generated-body JavaScript and 8 converter tests pass. New engine passed that former crash point; audible gameplay remains unverified.",
+    "blackSceneDiagnostic": {
+      "actualSceneColorNonzero": true,
+      "framebufferComplete": true,
+      "sampledGLErrors": [],
+      "firstBlackPass": "Identified as the Outline post-process material: its ES2 branch outputs constant black.",
+      "scope": "Historical diagnostic; targeted browser camera fix subsequently restored actual visible arena. Separate later rendering crash remains.",
+      "cause": "M_OutlinePP Emissive FeatureLevelSwitch defaults to Constant_0 for ES2/ES3.1; only SM4/SM5 select scene-color/outline graph.",
+      "showFlagProbe": "ShowFlag.PostProcessMaterial=0 set successfully but image stillblack; no runtimefixclaim.",
+      "targetedSourcePatch": "Isolated camera source omits exactly two OutlineMat AddBlendable calls only for PLATFORM_HTML5_BROWSER. SHA256 43dab79c2203cee2813b3babc6e0a4ddb0a57685f4f27250fb1bae63bd686442; compile and first visible-world verification passed.",
+      "runtimeResult": "Fixed by targetedOutlineguard. Actual1080p-world screenshotshowsarena,first-personweaponandhands; no globalshowflagoverride."
+    },
+    "rotationCook": {
+      "exitCode": 0,
+      "seconds": 885.79,
+      "warnings": 1904,
+      "maps": [
+        "DM-DeckTest",
+        "UT-Entry",
+        "DM-Outpost23"
+      ],
+      "nonemptyCookedFiles": 7793,
+      "nonemptyCookedBytes": 4496716095,
+      "scope": "Iterative second-arena cook complete and packaged. 29 distinct material failures in this log; union with initial cook is 65. Visual gate remains open."
+    },
+    "multiplayerHandshake": {
+      "independentBrowserClients": 2,
+      "uniqueNativeIdentities": 2,
+      "simultaneousGatewayConnections": 2,
+      "scope": "Both reached TournamentReady with distinct native identities and simultaneous bidirectional packet traffic. This earlier run preceded the Outline fix; full visible combat remains unverified. Reconnect failed because Chromium exhausted Blob storage; direct package transport is under test."
+    },
+    "startupIOClassification": {
+      "queuedCleanupHints": 4464,
+      "queuedReads": 0,
+      "cachedHandles": 0,
+      "busyReads": 0,
+      "firstTickMs": 77.3,
+      "observerOverheadMs": 0.5,
+      "afterCleanup": 0,
+      "nextEmptyTicks": 11,
+      "scope": "Private instrumented matching build proved a redundant cleanup burst, with no queued reads. Narrow browser-only single-thread guard now compiled and first runtime checked.",
+      "patchedRuntimeResult": "Previous4464-hintoverflowdiagnosticabsent in firstnewruntime run."
+    },
+    "outlineAndAsyncIOBuild": "passed349.83seconds; 9exportsverified/no unresolved symbols; convertedmatchingWASM validates",
+    "outlinePatchTests": {
+      "total": 22,
+      "privateActualSource": "passed preprocessing fordefineabsent/0/1; browseromitsonlyOutline/nativepreservesbothinsertions"
+    },
+    "asyncIOPatchTests": {
+      "total": 6,
+      "privateActualSource": "passedcompiledproducerbodyfornative/browserandthreaded/singlethreaded; independenthashcollisiontestpassed"
+    },
+    "remainingRenderCrash": "Prior OpenGLShaders.cpp:2858 null uniform-buffer assertion absent during the latest 30-second run after the Canvas tile-light fix. Broader draw/combat coverage remains unverified.",
+    "rotationPackage": {
+      "uatExitCode": 0,
+      "seconds": 168.044,
+      "pakBytes": 1820658276,
+      "dataBytes": 1826054717,
+      "pakFilesTested": 9178,
+      "pakSha256": "0c6dd04568180954c017045b7509f0b700ebe9a50dbc3ac55b45933730ee3b9c",
+      "archiveSha256": "4036c83a38330f3a71b9f10bb874a81e5d3b7de6aa8dffb62b276bb1aca57b00",
+      "integrity": "All pak files healthy; complete data slices match stage; required Deck, Entry, Outpost, registry, global cache and configuration listed.",
+      "scope": "Private v3 data and matching loader now served; Mac full archive hash verified. Browser map travel remains unverified."
+    },
+    "reconnect": {
+      "singleClient": "Actual direct-package reconnect reached native readiness again without forced GC.",
+      "twoClients": "Passed bounded late-join/reconnect probe on lineup build: A and B Ready with bidirectional packets, 40-second simultaneous observation, then A reconnected to Ready without forced GC. Old iframe weak reference cleared. Gameplay inputs, full combat and map travel not tested.",
+      "transport": "Explicit packageFiles bypasses eager Blob duplication; declared same-origin ArrayBuffer requests retain progress/error checks and synchronous teardown. Enabled on private operator manifest."
+    },
+    "remainingMultiplayerCrash": "Prior Array.h:633 intro-delay bounds assertion did not recur in the new stable-artifact two-client test: both reached Ready, remained connected for a 40-second late-join observation, then client A reconnected while B remained connected. No native assertion or page error; broader combat coverage pending.",
+    "canvasTileLighting": {
+      "cause": "Actual crash trace enters FRendererModule::DrawTileMesh from a Canvas HUD tile. The temporary mobile view lacks the default directional-light buffer at slot zero; the bound pixel shader reads its light color and direction.",
+      "patch": "Browser-only, feature level below SM4, initialize the typed default buffer at slot zero only if absent. Existing valid buffer and native behavior preserved.",
+      "tests": "Six passed including pinned actual Renderer.cpp body roundtrip, compiled browser/native feature-level and existing-buffer cases, and physical preflight/backup/idempotence. Independently reviewed.",
+      "build": "Passed: HTML5 compile/link 340.15 seconds; nine exports, matching converted module validated and all five transferred runtime file hashes verified.",
+      "runtime": "Actual fixed-1080p 30-second probe completed without the prior uniform-buffer assertion. Subsequent controlled probes identify sky-only view as pawn falling through BSP floor; sustained gameplay remains blocked."
+    },
+    "diagnosticTickObservation": {
+      "resolution": [
+        1920,
+        1080
+      ],
+      "seconds": 30,
+      "nativeFrameDelta": 1800,
+      "nativeTicksPerSecond": 60,
+      "p95CallbackMs": 18.400000095,
+      "headless": true,
+      "scope": "Diagnostic tick observation only. Sky-only final scene invalidates a representative gameplay benchmark; not presented FPS or evidence that target performance is achieved."
+    },
+    "browserFloorCollision": {
+      "status": "targeted-fix-verified; historical diagnostic evidence below",
+      "browser": "No-keyboard diagnostic at exact native PlayerStart_3 (4600,4670,633.230103) falls through floor into sky; actor collision flag reported true. Other spawn observations retain working floor/water interactions.",
+      "native": "Read-only native report enumerates 13 actual PlayerStarts. At PlayerStart_3, simple and complex Pawn lines/capsules hit BSP ModelComponent_65 at Z525. BodySetup_15 has one native triangle mesh, BlockAll/Pawn blocking; no simple collision shapes. All 13 native start anchors hit floors.",
+      "scope": "Earlier miss diagnostics below are historical. Corrected optimizer full-game rays and walking/jump/landing are verified in optimizerSourceFix; no map or physics-library repair used.",
+      "package": "Exact cooked floor triangle and original face remap identified; packaged Deck SHA256 6e53b71d1f866b9c44a21a2b11a4511b01296703a482ce598ce78e996386eeda matches cooked snapshot. Full served backing data archive hash verified. The subsequent runtime diagnostic confirms the exact body and collision shape are loaded.",
+      "runtime": "Four bounded native reports: exact BodySetup_15 loaded with 495 vertices / 710 triangles; one triangle shape in expected scene with query and simulation flags enabled, identity pose/unit scale. Pawn capsule has collision enabled and blocks WorldStatic. Simple and complex downward lines/capsules still miss the BSP floor.",
+      "originalControl": "Matching original full asm.js reproduces the same miss, with all four reports accepted and no custom WASM module, memory or adapter. Original asm body matches after CRLF-to-LF normalization, with compatibility changes outside it; private V8 4096 KiB stack enabled startup. Custom Binaryen conversion/adapter is not necessary to reproduce the defect. V8 may internally compile asm.js.",
+      "diagnosticLimits": "Not a collision fix or performance result. Earlier converted diagnostic retained a cleanup timeout; process absence verified later. Original asm control and extended geometry run completed without page/cleanup error. Four-snapshot admission budget preserved.",
+      "geometryDiagnostic": "Opt-in extension built successfully (338.73s). Four complete 35-row reports, no truncation, page error or cleanup error; owned browser exit0. Loaded triangle182 indices315/328/329, remap625 and all three vertices match the cooked native-hit floor. Direct PxGeometryQuery ray misses. Target-only static scene prefilter admits the exact floor once (7 calls total), but ray still misses. Scene admission and UE filtering are not required to reproduce the miss; internal mesh acceleration/intersection remains under investigation.",
+      "emittedCodeEvidence": "The legacy simplifyExpressions assignment rule drops a nonzero outer OR operand when its left side is a sequence ending in an integer operation. Its intended |0-only rule lacks a right-operand zero check in both native and JavaScript optimizers. Both generated RTree ray variants consequently lose negative Z sign. Source, prebuilt and linked IR, and pre-optimizer JS preserve it. Actual tiny native/JS probes reproduce dropped masks and side effects; extracted traversal tests restore expected floor leaves when the sign is retained.",
+      "privateCounterfactual": "Private full-game comparison restored only the two reviewed Z-sign operations, preserving all other raw JavaScript bytes and reusing the same memory/assets/glue. All four direct and scene rays hit triangle182 at Z525; UE simple/complex lines and capsules block ModelComponent65 face625. First two samples show Walking on that floor at Z635.291382 with zero velocity. Four reports completed; browser exit0, no page/cleanup error. Later samples have no possessed pawn; exact death cause was not captured. Historical private experiment; subsequent actual source/tool fix is verified separately in optimizerSourceFix.",
+      "optimizerControl": "Standalone original-asm probe links the same 15 unmodified physics libraries and exact cooked mesh. Baseline reproduces DIRECT_MISS with valid mesh/box control. Fresh warm-cache build with only EMCC_JSOPT_BLACKLIST=simplifyExpressions produces DIRECT_HIT triangle182 Z525 distance364.230103. External memory initializer is identical. Subsequent precise guarded optimizer build and actual full-game movement verification pass; see optimizerSourceFix."
+    },
+    "materialReadOnlyPreflight": {
+      "tests": 27,
+      "nativeBuildAndReport": "Passed; exact 11 targets reported twice, package hashes and native facts agree. Post-report original/sibling COW audits pass.",
+      "gate": "Strict preflight rejects dirty-on-load parent packages; no accepted repair snapshot and no asset saves. First dirty event traced to expression construction before deserialization, not proof of serialized missing GUIDs."
+    },
+    "lineupBounds": {
+      "tests": 17,
+      "buildSeconds": 353.56,
+      "wasmSha256": "3d98c4da38a3d72929ba06247f927195447024e0c0ec3f686b15f2a39a175e81",
+      "runtime": "Both clients remained Ready for eight five-second samples after B joined, with no native assertion or page error. A reconnected successfully; final gateway players zero after owned browser cleanup. Engine and asset fingerprints unchanged throughout.",
+      "limits": "Menu remained open; this is a lifecycle/crash regression test, not interactive combat or a representative FPS benchmark. Obsolete Epic analytics requests failed separately."
+    },
+    "transitionalEntryDiagnostics": "Source review indicates initial host-only connection returns Browse Pending with empty error, which GameInstance logs as Failed to enter UT-Entry because it tests != Success. Timeline then loads Entry and server Deck successfully. Pending classification is source-backed inference, not an instrumented enum. Separate missing encoded reflection-capture data in UT-Entry is a real cook/visual issue.",
+    "optimizerSourceFix": {
+      "patcherTests": 15,
+      "nativeToolTests": "8 OR and16 actual traversal cases pass; precise RHS numeric-zero guard in native+JS fallback retains simplifyExpressions",
+      "nativeExecutableSha256": "e7df7ec763d6cb9dc144d261c409cb925cf44ede74aad6a782fbed7781a6c2b2",
+      "wasmSha256": "b2da125f32b4abb59ce63b27d5bcad2d522baf38342ca85962d108036a876252",
+      "freshGeneratedTraversal": "Both variants extracted from fresh game pass8 cooked-tree controls",
+      "actualBrowserFloor": "Four direct/targetScene rays and simple/complex lines/capsules block the correct BSP floor; initial3samplesWalking. No page/cleanup error, ownedexit0. Later sample has unpossessed pawn; cause unconfirmed in that probe.",
+      "actualBrowserMovement": "Private BotFill=1 fixture uses real W500ms+Space after fixed initial diagnostic anchor: walking changesX4600\u21924218.97, jump mode3 positiveZ405.18, landWalkingZ735.29 zeroV onModel65. Four reports; errors[],ownedexit0. Default6bots unchanged.",
+      "publicBuildWrapper": "Checkpoint6 unattended Windows57tests, prepare, exactowned VCTIP retirement/jobzero/semanticprobes and subsequent full publicwrappergamebuild all pass. LocalPOSIX early-failure fixture intermittent EPERM retains unsafelease; not claimedfixed."
+    },
+    "fpsMeasurementScope": "Short fixed1080p/1440p Chrome headless six-bot runs around60 median engine callbacks/s; user reports around100 in interactive play with dips. Neither sustained120 nor presented-frame targets accepted. Firefox short1080p around18 median engineFPS.",
+    "multiplayerInputReconnect": "Latest canonicalpause build:2independentChromecontexts joined/resumed, moved/fired throughlatejoin; Areconnected whileBstayedconnected, no pageerrors/assetsunchanged/finalgateway0. KnownEntry/reflectionerrors andseparateanalyticsfailure remain. PrecisePvP aim/kill/fullround pending.",
+    "automaticRotation": "Shortened one-frag rounds repeatedly loaded Deck\u2192Outpost\u2192Deck with visible Outpost winner screen. Outpost overexposed; default-round acceptance pending.",
+    "startupOverlap": "Implemented ordered support/data scripts concurrently with WASM compile, engine gated onboth.6unit+1browser ordering test, broader65pass1skip. Actual6bot Ready14.5115s packagecomplete1.577s; no meaningful speedup vsprior14.5345s claimed.",
+    "practiceMenuPause": {
+      "sourceAndFixtureChecks": 36,
+      "actualBrowser": "Native status1,1,0,1,1,0; same epoch1, Ready1. Initial paused nativeframes5\u2192186 across3006.6ms. Settings changed canvas1080p\u21921440p whilepaused; resumed twice. No pageerrors, ownedexit0.",
+      "limits": "No separate worldtime/bot-position freeze or actualpointerlock proof. Private matchingengine routes followed by canonical exacthash install.",
+      "wasmSha256": "b83867784434fb734d66e7a3edda7841d8ca9128bb38880b2c11112bf1ed33d1"
+    },
+    "guardedOptimizerPreparation": "Checkpoint6 unattended Windows57tests, prepare, exactowned VCTIP retirement/jobzero/semanticprobes and subsequent full publicwrappergamebuild all pass. LocalPOSIX early-failure fixture intermittent EPERM retains unsafelease; not claimedfixed.",
+    "nativeFidelityReport": {
+      "nativeBuildExit": 0,
+      "reportExit": 0,
+      "original21PackageHashesUnchanged": true,
+      "materials": 19,
+      "skeletalMeshes": 4,
+      "shadowTemplates": 2,
+      "findings": "Malcolm1p palette51/8influences;3p max66/8 across4LODs, extra vertexstreams agree. Enforcer max6/1 noextra. Both miniCylinder templates use failing blobshadow materials. Original weapon parameter bags/hierarchy captured for scoped restoration.",
+      "repairStatus": "Reviewed weapon repair and one-material shadow diagnostic implemented; native compilation, private asset Apply/Verify and shader/render checks pending. GPU8 source applied only in isolated experimental tree; full native editor build in progress. Current playable browser runtime remains unchanged."
+    },
+    "gpuSkinExperiment": {
+      "enabledByDefault": false,
+      "actualWindowsAdmissionTests": 21,
+      "negativeAdmission": "Blocked only the isolated 7797 server; original streaming server and two clients were independently classified as foreign physical projects. Main stopped only the isolated server with no gateway clients before a clear admission snapshot.",
+      "candidateTests": "14 actual pinned body/host and JavaScript capability checks passed; not GPU shader execution.",
+      "state": "Isolated source applied; full native editor build in progress. No experimental runtime or package promoted.",
+      "limits": "Requires fresh matching shader cook, actual GPU path/animation validation and measured frame pacing; no FPS improvement claimed."
+    },
+    "weaponFidelityRepair": {
+      "privateInputTests": 16,
+      "scope": "18 pristine material instances, five graph clones, four direct-parent changes; nine native saves, 14 restored MICs remain byte-identical.",
+      "state": "Independent source/API review passed; native helper compilation and asset Apply/Verify pending.",
+      "limits": "Host compile-demand tests do not prove UE module, shader compilation or native appearance."
+    },
+    "blobShadowExperiment": {
+      "privateBaselineTests": 13,
+      "scope": "One physical COW primary material; four appended nodes with native default branch retained.",
+      "state": "Independent source/API review passed; no asset Apply, shader or browser verification yet.",
+      "limits": "Geometric normal reconstruction from quantized depth is an explicit approximation, not native GBuffer parity."
+    }
+  },
+  "limitations": [
+    "Private Deck/Outpost package integrity and the targeted floor collision, walking/jump/landing checks pass. 65 distinct material fallbacks need scoped review. Sustained combat, travel, cross-browser gameplay and target performance remain unverified.",
+    "WASM Binaryen optimization -O2 produced invalid i64 code in probe; converter does not run those passes",
+    "Targets of 120FPS at1080p and60FPS at1440p are not measured results",
+    "Tournament production identity, rewards, delayed spectators and anti-cheat require private staging contracts"
+  ]
+}

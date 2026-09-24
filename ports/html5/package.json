@@ -1,0 +1,15 @@
+{
+  "name": "tournament-local-browser-port",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test gateway.test.mjs",
+    "start": "node gateway.mjs"
+  },
+  "dependencies": {
+    "ws": "8.21.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

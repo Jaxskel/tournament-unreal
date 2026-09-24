@@ -1,0 +1,47 @@
+{
+  "schema": "ut4-blob-shadow-experiment-v1",
+  "experimental": true,
+  "candidate": "alpha-copy-derivative-normal-v1",
+  "package": "/Game/RestrictedAssets/Effects/Nick/M_Robust_BlobShadow",
+  "inverse": "/Game/RestrictedAssets/Effects/Nick/M_Robust_BlobShadowInverse",
+  "baseline_sha1": "3b5702d33380ea7ae18746067594d51634da8500",
+  "report_sha256": "43baa49f686063b84761ab06a12d93c441b2f671270bfdf50bce365a09694db9",
+  "original_sha1": {
+    "/Game/RestrictedAssets/Effects/Nick/M_Robust_BlobShadow": "EF06FEED570AAB971FCCD20C32EDAF230A6C95BD",
+    "/Engine/Functions/Engine_MaterialFunctions02/UVs/WorldPositionBehindTranslucency": "2FE73C6455F10D42B6C5FAC5AF9C5E54A75E5C30",
+    "/Engine/Functions/Engine_MaterialFunctions02/Texturing/WorldPositionWithScale": "734EF4EFF34DCA0EBA605C2D8A6B07609EA258F6",
+    "/Engine/Functions/Engine_MaterialFunctions02/Utility/CameraDirectionVector": "567A3765E99B7F3B12A59B7DD3DBBED8D8AB2A05",
+    "/Engine/Functions/Engine_MaterialFunctions02/WorldPositionOffset/ObjectPivotPoint": "854CA9B3529623CA22ADEE5B518C2F7A2B62740D",
+    "/Engine/Functions/Engine_MaterialFunctions02/WorldPositionOffset/ObjectScale": "A162BA3266E942E6E9509BBDAB203C00C38A54E3",
+    "/Engine/Functions/Engine_MaterialFunctions02/Utility/VectorLength": "90D79B09210528E9AF22F8350BE1EBBA585D2006",
+    "/Engine/Functions/Engine_MaterialFunctions02/WorldPositionOffset/ComponentPivotLocation": "EF18FCC0AACFDE5D8168A016B00CCB5912839B95",
+    "/Engine/Functions/Engine_MaterialFunctions02/Math/Transform3x3Matrix": "AFF245A94B73276EF0CD474EED7C42F1F31183D6",
+    "/Engine/Functions/Engine_MaterialFunctions02/Utility/BreakOutFloat3Components": "4E3B6B84BF1B303849BC61594F56C504B5D66115",
+    "/Game/RestrictedAssets/Effects/Nick/M_Robust_BlobShadowInverse": "646873317575A382ED987F01CBBD5B87B22C8792",
+    "/Game/RestrictedAssets/Effects/Nick/miniCylinder": "B8155A3883453DFF4317ABD5CE9D14F9098D453B",
+    "/Game/RestrictedAssets/Blueprints/BaseUTCharacter": "16C38D2409F40BA7F2A8E69C257F8E403C3CB3C1"
+  },
+  "save_packages": [
+    "/Game/RestrictedAssets/Effects/Nick/M_Robust_BlobShadow"
+  ],
+  "preserved": [
+    "default native WorldNormal input and mask",
+    "all original roots including WPO",
+    "all texture/scalar/vector/static parameter values",
+    "inverse package and parent",
+    "all mesh/component/Blueprint packages"
+  ],
+  "intentional_exceptions": [
+    "four appended expressions",
+    "ComponentMask_4 Input expression only",
+    "new material StateId",
+    "new material LightingGuid from pinned PostEditChange",
+    "bUseFullPrecision=true"
+  ],
+  "limitations": [
+    "approximate geometric receiver normal, not GBuffer normal-map parity",
+    "half-float alpha-depth quantization and depth discontinuities",
+    "actual ES2 compilation, shader link, private visual comparison and matched fresh cook required"
+  ],
+  "promotion_allowed": false
+}

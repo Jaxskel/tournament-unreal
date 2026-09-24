@@ -1,6 +1,64 @@
 name: Integration source checks
 on: [push, pull_request, workflow_dispatch]
 jobs:
+  html5-packet-framing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: g++ -std=c++11 -O2 -DNDEBUG -Wall -Wextra -Werror -fsanitize=address,undefined ports/html5/packet-buffer.test.cpp -o /tmp/packet-test
+      - run: /tmp/packet-test
+      - run: python -m compileall -q ports/html5
+      - run: python -m unittest discover -s ports/html5/compat -p "test_*.py" -v
+  html5-launcher:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ports/html5/client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - name: Install Chrome and dependencies for required real WebGL checks
+        run: npx playwright install --with-deps chrome
+      - name: Require real WebGL1 and WebGL2 observer checks in Chrome
+        env:
+          CHROME_CHANNEL: chrome
+          REQUIRE_WEBGL: '1'
+        run: node --test --test-name-pattern='real browser WebGL1/2' tests/verify-webgl.test.mjs
+      - run: node verify-runtime.mjs --self-test-args
+      - run: node verify-runtime.mjs --self-test-diagnostics
+  html5-packet-gateway:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --prefix ports/html5
+      - run: npm test --prefix ports/html5
+      - run: python3 -B ports/html5/test_convert_asm_to_wasm.py
+      - run: python3 -B ports/html5/test_patch_browser_glue.py
+      - run: python3 -B ports/html5/test_patch_browser_logging.py
+      - run: python3 -B ports/html5/test_patch_browser_party.py
+      - run: python3 -B ports/html5/test_patch_browser_window.py
+      - run: python3 -B ports/html5/test_patch_browser_outline.py
+      - run: python3 -B ports/html5/test_patch_browser_asyncio.py
+      - run: python3 -B ports/html5/test_patch_browser_tile_light.py
+      - run: python3 -B ports/html5/test_patch_browser_lineup.py
+      - run: python3 -B ports/html5/test_patch_browser_analytics.py
+      - run: python3 -B ports/html5/test_patch_browser_cloud_stats.py
+      - run: python3 -B ports/html5/test_patch_browser_optimizer.py
+      - run: python3 -B ports/html5/test_patch_browser_gpu_skin.py
+      - run: python3 -B ports/html5/test_configure_browser_gpu_skin.py
+      - run: python3 -B ports/html5/test_configure_browser_config.py
+      - run: python3 -B ports/html5/test_patcher_preflight.py
+      - run: python3 -B ports/html5/test_verify_package.py
+      - run: python3 -B ports/html5/test_prepare_startup_compression.py -v
+      - run: python3 -B ports/html5/test_selective_startup_pak.py -v
   event-contract:
     runs-on: ubuntu-latest
     steps:
@@ -13,6 +71,21 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify GPU experiment admission with native Windows argv
+        run: python -B ports/html5/test_configure_browser_gpu_skin.py -v
+      - name: Verify owned Windows build process lifecycle
+        run: python -B ports/html5/test_prepare_browser_optimizer.py -v
+      - name: Verify browser analytics patch publication on Windows
+        run: python -B ports/html5/test_patch_browser_analytics.py -v
+      - name: Verify NoMCP cloud stats patch publication on Windows
+        run: python -B ports/html5/test_patch_browser_cloud_stats.py -v
+      - name: Verify optional startup compression response preparation
+        run: python -B ports/html5/test_prepare_startup_compression.py -v
+      - name: Verify selective startup archive equivalence
+        run: python -B ports/html5/test_selective_startup_pak.py -v
       - shell: powershell
         run: ./tests/launchers.ps1
   browser-gateway:

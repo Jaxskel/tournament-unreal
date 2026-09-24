@@ -1,0 +1,282 @@
+// Focused native policy/format checks. These do not simulate PhysX or replace a native build.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile, mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+
+const moduleRoot = new URL('../../../../Plugins/TournamentBridge/Source/TournamentBridge/', import.meta.url);
+const helper = await readFile(new URL('Private/TournamentHTML5PhysicsReport.h', moduleRoot), 'utf8');
+const controls = await readFile(new URL('Private/TournamentHTML5Controls.cpp', moduleRoot), 'utf8');
+const build = await readFile(new URL('TournamentBridge.Build.cs', moduleRoot), 'utf8');
+const portable = helper.slice(helper.indexOf('struct Admission'), helper.indexOf('// End portable policy/output code.'));
+async function compileRun(source) {
+  const dir = await mkdtemp(join(tmpdir(), 'ut4-physics-report-'));
+  try {
+    const file = join(dir, 'check.cpp'), binary = join(dir, 'check');
+    await writeFile(file, source);
+    const compiled = spawnSync('clang++', ['-std=c++11', '-Wall', '-Wextra', '-Werror', file, '-o', binary], { encoding: 'utf8' });
+    assert.equal(compiled.status, 0, compiled.stderr || String(compiled.error));
+    const ran = spawnSync(binary, [], { encoding: 'utf8' });
+    assert.equal(ran.status, 0, ran.stderr || String(ran.error));
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}
+const prefix = `
+#include <cassert>
+#include <cmath>
+#include <limits>
+#include <cstring>
+#include <cstdio>
+#include <cstdarg>
+#include <string>
+struct FMath { static bool IsFinite(double x) { return std::isfinite(x); } };
+`;
+
+test('actual native admission rejects each gate, invalid epochs and exhausted budgets', async () => {
+  await compileRun(prefix + portable + `
+int main() {
+ Admission ok={true,true,true,true,true,true,true,7,7};
+ assert(Check(ok)==1);
+ auto bad=ok; bad.GameThread=false; assert(Check(bad)==-1);
+ bad=ok; bad.OptIn=false; assert(Check(bad)==-2);
+ bad=ok; bad.Ready=false; assert(Check(bad)==0);
+ bad=ok; bad.Standalone=false; assert(Check(bad)==-4);
+ bad=ok; bad.NoNetwork=false; assert(Check(bad)==-4);
+ bad=ok; bad.Deck=false; assert(Check(bad)==-5);
+ bad=ok; bad.Scene=false; assert(Check(bad)==-5);
+ const double invalid[]={0,-1,6,7.5,4294967296.0,std::numeric_limits<double>::quiet_NaN(),std::numeric_limits<double>::infinity()};
+ for(double x:invalid) { bad=ok; bad.ExpectedEpoch=x; assert(Check(bad)==-3); }
+ bad=ok; bad.ActualEpoch=8; assert(Check(bad)==-3);
+ Budget calls;
+ for(int i=0;i<4;++i) assert(calls.Take(7));
+ assert(!calls.Take(7)); assert(!calls.Take(7)); assert(calls.Count==4);
+ // Only admitted requests reach Take; refused requests cannot reset its epoch.
+ bad=ok; bad.ExpectedEpoch=8; assert(Check(bad)==-3); assert(calls.Epoch==7);
+ assert(calls.Take(8)); assert(calls.Count==1);
+ Output use(7,1,1); use.Add("test"); use.Finish(); assert(use.Count==2);
+}
+`);
+});
+
+test('actual native output is bounded ASCII with explicit truncation and an end record', async () => {
+  await compileRun(prefix + portable + `
+int main() {
+ Admission a={true,true,true,true,true,true,true,1,1}; assert(Check(a)==1);
+ Budget b; assert(b.Take(1));
+ Output o(4294967295.0,4294967295.0,4);
+ std::string longText(3000,'x'); longText[0]='\\n'; longText[1]='\\r'; longText[2]=char(255);
+ o.Add("value=%s",longText.c_str());
+ for(int i=0;i<100;++i) o.Add("row=%d",i);
+ o.Finish();
+ assert(o.Count==64 && o.Truncated);
+ for(unsigned i=0;i<o.Count;++i) {
+   assert(strlen(o.Lines[i])+1<=512); // includes puts newline
+   assert(strncmp(o.Lines[i],"UT4PHYS v1 ",11)==0);
+   for(const unsigned char* p=(const unsigned char*)o.Lines[i];*p;++p) assert(*p>=32 && *p<=126);
+ }
+ assert(strstr(o.Lines[63],"end rows=64 truncated=1"));
+ Output clean(1,2,1); clean.Add("present=0"); clean.Finish();
+ assert(clean.Count==2 && !clean.Truncated);
+ assert(strstr(clean.Lines[1],"end rows=2 truncated=0"));
+}
+`);
+});
+
+test('production preprocessing omits helper and export; opt-in build fails closed on unsupported targets', () => {
+  const gate = controls.slice(controls.indexOf('#ifndef TOURNAMENT_HTML5_PHYSICS_DIAGNOSTICS'), controls.lastIndexOf('#endif'));
+  for (const defines of [[], ['-DWITH_PHYSX=1'], ['-DTOURNAMENT_HTML5_PHYSICS_DIAGNOSTICS=1', '-DWITH_PHYSX=0']]) {
+    const p = spawnSync('clang++', ['-E', '-P', '-x', 'c++', ...defines, '-'], { input: gate, encoding: 'utf8' });
+    assert.equal(p.status, 0, p.stderr);
+    assert.equal(p.stdout.trim(), '');
+  }
+  assert.match(build, /GetEnvironmentVariable\("TOURNAMENT_UT4_PHYSICS_REPORT"\) == "1"/);
+  assert.match(build, /Target.Platform != UnrealTargetPlatform.HTML5/);
+  assert.match(build, /Target.Configuration == UnrealTargetConfiguration.Shipping/);
+  assert.match(build, /!UEBuildConfiguration.bCompilePhysX/);
+  assert.match(build, /throw new BuildException/);
+  assert.match(build, /if \(PhysicsReport\) PrivateDependencyModuleNames.Add\("PhysX"\)/);
+  assert.match(build, /PhysicsReport \? "1" : "0"/);
+});
+
+test('actual scene-access guard never queries a disabled UE4.15 async scene', async () => {
+  // Compile the exact function prefix through its guarded scene lookup. A disabled
+  // async lookup deliberately asserts, matching the pinned engine contract.
+  const start=helper.indexOf('static void ActorShapes');
+  const guardedLookup=helper.slice(start,helper.indexOf('// Each actor is read',start));
+  await compileRun(prefix + portable + `
+namespace physx { struct PxScene {}; }
+const int PST_Sync=0, PST_Async=2;
+struct FBodyInstance {}; struct UBodySetup {};
+struct FPhysScene {
+ bool Async=false; int Lookups=0, Passed=0; physx::PxScene Scene;
+ bool HasAsyncScene() const { return Async; }
+ physx::PxScene* GetPhysXScene(int type) {
+   assert(type!=PST_Async || Async); ++Lookups; return &Scene;
+ }
+};
+` + guardedLookup + `
+ (void)B; ++Physics->Passed;
+}
+int main() {
+ Admission a={true,true,true,true,true,true,true,1,1}; assert(Check(a)==1);
+ Output o(1,2,1); FPhysScene scene; FBodyInstance body;
+ ActorShapes(o,&body,nullptr,&scene,PST_Async);
+ assert(scene.Lookups==0 && scene.Passed==0);
+ assert(o.Count==1 && strstr(o.Lines[0],"asyncEnabled=0 inspected=0"));
+ ActorShapes(o,&body,nullptr,&scene,PST_Sync);
+ assert(scene.Lookups==1 && scene.Passed==1);
+ scene.Async=true;
+ ActorShapes(o,&body,nullptr,&scene,PST_Async);
+ assert(scene.Lookups==2 && scene.Passed==2);
+ ActorShapes(o,nullptr,nullptr,&scene,PST_Async);
+ assert(scene.Lookups==3 && scene.Passed==2);
+ o.Finish();
+}
+`);
+});
+
+test('export enforces early thread/launch/readiness gates before inspecting the world and consuming budget', () => {
+  const body=helper.slice(helper.indexOf('extern "C" EMSCRIPTEN_KEEPALIVE'));
+  const order=['if (!IsInGameThread())','FParse::Param','if (!TournamentBrowserReady())','UWorld* World=BrowserWorld()',
+    'GetWorldContextFromWorld','TournamentBrowserSessionEpoch()','const int Status=Check(A)','if (Status!=1) return Status',
+    'Calls.Take(ActualEpoch)','Snapshot(O,World,BrowserPlayer())','O.Finish()','puts(O.Lines[I])'];
+  let previous=-1;
+  for(const text of order) { const offset=body.indexOf(text); assert.ok(offset>previous,text); previous=offset; }
+  for(const condition of ['World->GetNetMode()==NM_Standalone','!Context->PendingNetGame','Context->ActiveNetDrivers.Num()==0',
+    '!World->GetNetDriver()','World->PersistentLevel','/Game/RestrictedAssets/Maps/WIP/DM-DeckTest','World->GetPhysicsScene()!=nullptr']) assert.ok(body.includes(condition),condition);
+});
+
+test('report uses existing bodies, explicit per-scene read locks and bounded shape reads', () => {
+  assert.doesNotMatch(helper, /(?:->|\.)\s*(?:GetBodySetup|CreatePhysicsMeshes|GetCookedData|UpdateBodySetup|CreateShapeBodySetupIfNeeded|RecreatePhysicsState|EnsureCollisionTreeIsBuilt|Set\w*|Invalidate\w*)\s*\(/);
+  assert.doesNotMatch(helper, /\b(?:LoadObject|LoadPackage|NewObject|ExecuteOnPhysicsReadWrite|SCOPED_SCENE_WRITE_LOCK)\s*\(/);
+  assert.match(helper, /Model \? Model->ModelBodySetup : nullptr/);
+  const actors=helper.slice(helper.indexOf('static void ActorShapes'),helper.indexOf('static void Hit'));
+  assert.ok(actors.indexOf('SCOPED_SCENE_READ_LOCK(Scene)')<actors.indexOf('GetPxRigidActor_AssumesLocked(SceneType)'));
+  assert.match(actors, /getShapes\(Shapes, 8\)/);
+  assert.match(helper, /ActorShapes\(O,BI,B,World->GetPhysicsScene\(\),PST_Sync\)/);
+  assert.match(helper, /ActorShapes\(O,BI,B,World->GetPhysicsScene\(\),PST_Async\)/);
+  assert.match(helper, /B->bCreatedPhysicsMeshes[\s\S]*B->TriMeshes.Num\(\)/);
+});
+
+test('exactly four native-matched floor queries ignore only the local pawn and player starts', () => {
+  assert.match(helper, /const FVector Anchor\(4600.f,4670.f,633.2301025390625f\)/);
+  assert.match(helper, /Top = Anchor\+FVector\(0,0,256\), Bottom = Anchor-FVector\(0,0,2048\)/);
+  assert.match(helper, /for \(int Complex=0; Complex<2; \+\+Complex\)/);
+  assert.equal((helper.match(/World->LineTraceMultiByChannel\(/g)||[]).length,1);
+  assert.equal((helper.match(/World->SweepSingleByChannel\(/g)||[]).length,1);
+  assert.match(helper, /LineTraceMultiByChannel\(Hits,Top,Bottom,ECC_Pawn,Q\)/);
+  assert.match(helper, /SweepSingleByChannel\(Down,Anchor,Bottom,FQuat::Identity,ECC_Pawn,FCollisionShape::MakeCapsule\(40.f,108.f\),Q\)/);
+  assert.match(helper, /Q.bReturnFaceIndex=true/);
+  assert.match(helper, /if \(Pawn\) Q.AddIgnoredActor\(Pawn\)/);
+  assert.match(helper, /for \(APlayerStart\* Start : Starts\) Q.AddIgnoredActor\(Start\)/);
+  assert.equal((helper.match(/Q.AddIgnoredActor\(/g)||[]).length,2);
+  assert.match(helper, /ignorePawn=%d ignoreStarts=%d/);
+});
+
+test('actual loaded-triangle reader checks counts, index width, every index and optional remap', async () => {
+  const reader=helper.slice(helper.indexOf('struct Triangle182'),helper.indexOf('class TargetOnlyFilter'));
+  await compileRun(prefix + `
+namespace physx {
+ using PxU16=unsigned short; using PxU32=unsigned;
+ struct PxVec3 { float x=0,y=0,z=0; bool isFinite() const {return std::isfinite(x)&&std::isfinite(y)&&std::isfinite(z);} };
+ struct PxTriangleMeshFlag { enum Enum { e16_BIT_INDICES=2 }; };
+ struct Flags { bool Small; bool isSet(PxTriangleMeshFlag::Enum) const {return Small;} };
+ struct PxTriangleMesh {
+  unsigned Count=183,NV=3; bool Small=true;
+  const void* Indices=nullptr; const PxVec3* Vertices=nullptr; const PxU32* Remap=nullptr;
+  unsigned getNbTriangles() const {return Count;} unsigned getNbVertices() const {return NV;}
+  const void* getTriangles() const {return Indices;} const PxVec3* getVertices() const {return Vertices;}
+  Flags getTriangleMeshFlags() const {return Flags{Small};} const PxU32* getTrianglesRemap() const {return Remap;}
+ };
+}
+` + reader + `
+int main() {
+ physx::PxU16 small[183*3]={}; physx::PxU32 large[183*3]={},remap[183]={};
+ small[546]=0;small[547]=1;small[548]=2;large[546]=2;large[547]=1;large[548]=0;remap[182]=625;
+ physx::PxVec3 verts[3]; verts[0].x=4375;verts[1].y=4500;verts[2].z=525;
+ physx::PxTriangleMesh mesh;mesh.Indices=small;mesh.Vertices=verts;mesh.Remap=remap;
+ Triangle182 t;assert(!ReadTriangle182(nullptr,t));
+ assert(ReadTriangle182(&mesh,t));assert(t.Indices16&&t.HasRemap&&t.OriginalFace==625);
+ assert(t.Indices[2]==2&&t.Vertices[2].z==525);
+ mesh.Small=false;mesh.Indices=large;assert(ReadTriangle182(&mesh,t));assert(!t.Indices16&&t.Indices[0]==2);
+ mesh.Remap=nullptr;assert(ReadTriangle182(&mesh,t));assert(!t.HasRemap&&t.OriginalFace==0);
+ mesh.Count=182;assert(!ReadTriangle182(&mesh,t));mesh.Count=183;
+ mesh.NV=0;assert(!ReadTriangle182(&mesh,t));mesh.NV=3;
+ mesh.Indices=nullptr;assert(!ReadTriangle182(&mesh,t));mesh.Indices=large;
+ mesh.Vertices=nullptr;assert(!ReadTriangle182(&mesh,t));
+ // No vertex may be touched when even the last index is out of range.
+ mesh.Vertices=reinterpret_cast<const physx::PxVec3*>(1);large[548]=3;
+ assert(!ReadTriangle182(&mesh,t));large[548]=0;mesh.Vertices=verts;
+ verts[0].x=std::numeric_limits<float>::quiet_NaN();assert(!ReadTriangle182(&mesh,t));
+}
+`);
+});
+
+test('actual target-only callback rejects other actors/shapes and preserves hit flags', async () => {
+  const filter=helper.slice(helper.indexOf('class TargetOnlyFilter'),helper.indexOf('static void RayHit'));
+  await compileRun(prefix + `
+namespace physx {
+ struct PxShape {};struct PxRigidActor {};struct PxFilterData {};struct PxQueryHit {};
+ struct PxHitFlags {unsigned Bits=19;};
+ struct PxQueryHitType {enum Enum{eNONE,eTOUCH,eBLOCK};};
+ struct PxQueryFilterCallback {
+ virtual PxQueryHitType::Enum preFilter(const PxFilterData&,const PxShape*,const PxRigidActor*,PxHitFlags&)=0;
+ virtual PxQueryHitType::Enum postFilter(const PxFilterData&,const PxQueryHit&)=0;
+ virtual ~PxQueryFilterCallback() {}
+ };
+}
+` + filter + `
+int main() {
+ physx::PxShape target,other;physx::PxRigidActor actor,otherActor;physx::PxFilterData data;physx::PxHitFlags flags;
+ TargetOnlyFilter f(&actor,&target);
+ assert(f.preFilter(data,&other,&actor,flags)==physx::PxQueryHitType::eNONE);
+ assert(f.preFilter(data,&target,&otherActor,flags)==physx::PxQueryHitType::eNONE);
+ assert(f.preFilter(data,nullptr,nullptr,flags)==physx::PxQueryHitType::eNONE);
+ assert(f.preFilter(data,&target,&actor,flags)==physx::PxQueryHitType::eBLOCK);
+ assert(f.Calls==4&&f.TargetCalls==1&&flags.Bits==19);
+ physx::PxQueryHit hit;assert(f.postFilter(data,hit)==physx::PxQueryHitType::eNONE);
+ assert(f.Calls==4&&f.TargetCalls==1);
+}
+`);
+});
+
+test('actual ray formatter does not read miss fields and keeps hits bounded', async () => {
+  const ray=helper.slice(helper.indexOf('static void RayHit'),helper.indexOf('static void MeshProbe'));
+  await compileRun(prefix + portable + `
+namespace physx {
+ struct V {double x=0,y=0,z=0;};
+ struct PxRaycastHit {double distance=std::numeric_limits<double>::quiet_NaN();unsigned faceIndex=625;V position,normal;};
+}
+` + ray + `
+int main() {
+ Admission a={true,true,true,true,true,true,true,1,1};assert(Check(a)==1);
+ physx::PxRaycastHit h;Output o(1,2,1);
+ RayHit(o,"geometry",false,h);assert(strstr(o.Lines[0],"hit=0"));assert(!strstr(o.Lines[0],"distance="));
+ h.distance=364.230103;h.position.z=525;h.normal.z=1;RayHit(o,"geometry",true,h);o.Finish();
+ assert(strstr(o.Lines[1],"face=625"));assert(strstr(o.Lines[1],"525.000000"));
+ assert(o.Count==3&&!o.Truncated);
+}
+`);
+});
+
+test('mesh probe uses exact target once, original shape geometry, zero query words and a read lock', () => {
+  const probe=helper.slice(helper.indexOf('static void MeshProbe'),helper.indexOf('static void Component'));
+  assert.match(probe,/Actor->getGlobalPose\(\) \* Shape->getLocalPose\(\)/);
+  assert.match(probe,/if \(!G.isValid\(\) \|\| !GlobalPose.isValid\(\)\)/);
+  assert.match(probe,/Origin\(4600.f,4670.f,633.2301025390625f\+256.f\), Direction\(0.f,0.f,-1.f\)/);
+  assert.match(probe,/PxGeometryQuery::raycast\(Origin,Direction,G,GlobalPose,2304.f,HitFlags,1,&Direct\)/);
+  assert.match(probe,/PxFilterData\(0,0,0,0\),physx::PxQueryFlag::eSTATIC \| physx::PxQueryFlag::ePREFILTER/);
+  assert.match(probe,/Scene->raycast\(Origin,Direction,2304.f,SceneHit,HitFlags,Query,&Filter,nullptr\)/);
+  assert.match(probe,/SceneHit.hasBlock && SceneHit.block.actor==Actor && SceneHit.block.shape==Shape/);
+  assert.match(probe,/G.triangleMesh->getLocalBounds\(\)/);
+  assert.match(probe,/Actor->getWorldBounds\(1.0f\)/);
+  const actors=helper.slice(helper.indexOf('static void ActorShapes'),helper.indexOf('static void Hit'));
+  assert.match(actors,/getGeometryType\(\) == physx::PxGeometryType::eTRIANGLEMESH && Shape->getTriangleMeshGeometry\(G\)/);
+  assert.match(actors,/!Probed && SceneType==PST_Sync && Match==0 && B && B->GetFName\(\)==FName\(TEXT\("BodySetup_15"\)\)/);
+  assert.ok(actors.indexOf('SCOPED_SCENE_READ_LOCK(Scene)')<actors.indexOf('MeshProbe(O,Scene,Actor,Shape,G)'));
+  assert.match(actors,/Probed=true;\s*MeshProbe/);
+  assert.equal((helper.match(/PxGeometryQuery::raycast\(/g)||[]).length,1);
+  assert.equal((helper.match(/Scene->raycast\(/g)||[]).length,1);
+  assert.doesNotMatch(helper,/->(?:refitBVH|getVerticesForModification|flushQueryUpdates|flushSimulation|set\w*)\s*\(/);
+});

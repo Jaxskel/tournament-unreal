@@ -1,8 +1,18 @@
 # Tournament — Unreal
 
+The active work is the **UT4 beta / UE4.15 local browser port**: game rendering and simulation run on the player's computer through WebAssembly/WebGL, with a native authoritative server for multiplayer. It preserves fixed 1080p/1440p and the Tournament launcher. This branch is still experimental.
+
+[Local browser build and release gates](ports/html5/README.md) · [Verification evidence](ports/html5/verification.json) · [Tournament integration boundary](docs/integration.md)
+
+The corrected compiler build has passed bounded floor-collision, walking, jumping, landing, six-bot practice, and automatic Deck/Outpost rotation checks. Two browser contexts resumed into the same native match, sent movement/fire inputs and passed reconnect while the other stayed connected. Native events recorded damage/deaths for both browser players. These checks do not establish full release readiness: Outpost lighting is overexposed, real aiming and longer multiplayer play need verification, and performance varies by browser. Short Chrome checks measured roughly60 median engine callbacks per second at both selected resolutions, with dips;120FPS and stutter-free presented frames are not proven.
+
+The licensed game/content/build artifacts are private and are not downloaded from this repository. The local browser build is **not yet deployed at the public Vercel address**. That address continues to serve the older streaming prototype described below.
+
+## Older public streaming prototype
+
 Real Unreal Tournament 4, streamed into a desktop browser with a Tournament game menu. Two independent native players join one authoritative deathmatch server, with bots and automatic arena rotation. The browser controls its own game instance; it cannot control the Windows desktop.
 
-**[Open the live development demo](https://tournament-unreal.vercel.app/)** · [Host/build instructions](docs/browser-hosting.md) · [Vercel deployment](deploy/vercel/README.md)
+**[Open the older streaming demo](https://tournament-unreal.vercel.app/)** · [Host/build instructions](docs/browser-hosting.md) · [Vercel deployment](deploy/vercel/README.md)
 
 This is a free demo, with **no audio stream or platform rewards**. The Windows GPU host must remain awake and online. The Vercel website address is stable; its game connection still uses a temporary tunnel that needs a configuration update if restarted. Two browser seats are available; another browser sees an arena-full message. No Unreal game download is required in the browser.
 
@@ -14,7 +24,7 @@ Open the demo link in two separate browsers/computers and choose **Play Now**. C
 
 Settings adjusts sensitivity. Disconnect releases a browser seat; Play Again requests a free seat. The host keeps the native players connected between browser sessions, so these are shared demo seats rather than authenticated Tournament accounts. The server fills seven total player slots with bots: six bots with one native human client, five with two.
 
-## What has actually been checked
+## Streaming-prototype verification
 
 - Both native clients joined the same Deck server and supplied separate live browser streams.
 - Browser mouse capture, movement, Tournament Escape menu, sensitivity adjustment, deaths, and respawning were exercised.

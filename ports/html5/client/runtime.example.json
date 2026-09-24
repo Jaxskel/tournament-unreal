@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "format": "asmjs",
+  "engine": "TournamentBrowser.js",
+  "supportScripts": ["Utility.js"],
+  "dataScripts": ["UnrealTournament.data.js"],
+  "packageFiles": ["UnrealTournament.data"],
+  "files": {
+    "Utility.js": "./engine/Utility.js",
+    "UnrealTournament.data.js": "./engine/UnrealTournament.data.js",
+    "UnrealTournament.data": "./engine/UnrealTournament.data",
+    "TournamentBrowser.js.mem": "./engine/TournamentBrowser.js.mem",
+    "TournamentBrowser.js": "./engine/TournamentBrowser.js"
+  },
+  "memoryInitializer": "TournamentBrowser.js.mem",
+  "totalMemory": 1610612736,
+  "arguments": ["/Game/RestrictedAssets/Maps/WIP/DM-DeckTest?Game=/Script/TournamentBridge.TournamentDeathmatch?Mutator=TournamentBridge.TournamentBridgeMutator?BotFill=7?MaxPlayers=7?LAN=1?RequireReady=0?MaxPlayerWait=3?Difficulty=3"],
+  "bindings": [],
+  "multiplayerArguments": [],
+  "websocketUrl": "ws://127.0.0.1:9080/game",
+  "initializationTimeoutMs": 180000
+}

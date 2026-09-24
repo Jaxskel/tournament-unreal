@@ -1,0 +1,16 @@
+{
+  "schema": "ut4-weapon-supplement-v1",
+  "read_only": true,
+  "original_project_view_required": true,
+  "targets": [
+    "/Game/RestrictedAssets/Weapons/BioRifle/New/BIO_HazyGlass_1p",
+    "/Game/RestrictedAssets/Weapons/BioRifle/New/BIO_Weapon3p",
+    "/Game/RestrictedAssets/Weapons/BioRifle/New/BIO_Weapon_1p_Inst",
+    "/Game/RestrictedAssets/Weapons/BioRifle/New/Bio_HazyGlass",
+    "/Game/RestrictedAssets/Weapons/GrenadeLauncher/Materials/Grenade/MIC_Grenade",
+    "/Game/RestrictedAssets/Weapons/GrenadeLauncher/Materials/Material_ThirdPerson/MIC_Grenade_3P"
+  ],
+  "graph_materials": [
+    "/Game/RestrictedAssets/Weapons/BioRifle/New/Bio_HazyGlass"
+  ]
+}

@@ -19,8 +19,8 @@ ATournamentBridgeMutator::ATournamentBridgeMutator(const FObjectInitializer& Obj
     : Super(ObjectInitializer), DefaultKillPoints(0), FragRaceTarget(0)
 {
     bReplicates = false;
-    PrimaryActorTick.bCanEverTick = true;
-    PrimaryActorTick.bStartWithTickEnabled = true;
+    PrimaryActorTick.bCanEverTick = !PLATFORM_HTML5;
+    PrimaryActorTick.bStartWithTickEnabled = !PLATFORM_HTML5;
     PrimaryActorTick.bAllowTickOnDedicatedServer = true;
     GroupNames.Add(FName(TEXT("TournamentBridge")));
     DisplayName = FText::FromString(TEXT("Tournament Bridge (practice/demo)"));
@@ -28,8 +28,15 @@ ATournamentBridgeMutator::ATournamentBridgeMutator(const FObjectInitializer& Obj
 
 bool ATournamentBridgeMutator::CanObserve() const
 {
+#if PLATFORM_HTML5
+    // Local browser practice is not an authoritative event source. Suppress
+    // observation before allocating match state or creating/appending MEMFS logs.
+    // Super callbacks still run, preserving the rest of the mutator chain.
+    return false;
+#else
     return GetWorld() && HasAuthority() && GetNetMode() != NM_Client
         && GetWorld()->GetAuthGameMode() != nullptr;
+#endif
 }
 
 void ATournamentBridgeMutator::BeginPlay()
