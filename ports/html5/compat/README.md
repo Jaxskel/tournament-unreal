@@ -378,8 +378,11 @@ UT-Entry loaded, but `CreateSwapChain` failed with `887A0022` while the main edi
 window was being shown in an SSH session. No logged-in Windows user was present.
 No capture before/after rows were emitted. All fifteen copied map files and
 originals, plus five child-junction identities/targets, were unchanged; the owned
-job drained. A usable desktop and a successful native readback run remain needed
-before designing or authorizing a separate one-map save. Do not substitute a
+job drained. A successful native readback run remains needed before designing
+or authorizing a separate one-map save. The opt-in
+[MainFrame experiment](../ENTRY-REFLECTION-EDITOR.md) tests whether that readback
+can run without creating the failing editor window; it does not waive any capture
+or package validation. Do not substitute a
 commandlet, NullRHI, synthesized cubemap or changed cache GUID as proof.
 
 Focused checks (private source captures are optional):
