@@ -1,6 +1,13 @@
 // Original compatibility tooling; contains no copied engine implementation.
 #include "UT4Html5CompatCommandlet.h"
 #include "Modules/ModuleManager.h"
+// ENTRY_REFLECTION_DIAGNOSTIC_INCLUDES
+#include "Containers/Ticker.h"
+#include "Containers/StringConv.h"
+#include "Math/Float16Color.h"
+#include "Settings/EditorLoadingSavingSettings.h"
+#include "Components/ReflectionCaptureComponent.h"
+// END_ENTRY_REFLECTION_DIAGNOSTIC_INCLUDES
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -86,7 +93,20 @@
 #include "Windows/HideWindowsPlatformTypes.h"
 #endif
 
-IMPLEMENT_MODULE(FDefaultModuleImpl, UT4Html5Compat)
+// Entry diagnostic is opt-in and runs in an ordinary unattended editor.
+namespace UT4Compat { static int32 EntryReflectionDiagnostic(const FString&); static void ShutdownEntryReflectionDiagnostic(); }
+class FUt4Html5CompatModule : public FDefaultModuleImpl
+{
+public:
+    virtual void StartupModule() override
+    {
+        if (FParse::Param(FCommandLine::Get(), TEXT("EntryReflectionDiagnostic")) &&
+            UT4Compat::EntryReflectionDiagnostic(FCommandLine::Get()) != 0)
+            FPlatformMisc::RequestExit(false);
+    }
+    virtual void ShutdownModule() override { UT4Compat::ShutdownEntryReflectionDiagnostic(); }
+};
+IMPLEMENT_MODULE(FUt4Html5CompatModule, UT4Html5Compat)
 DEFINE_LOG_CATEGORY_STATIC(LogUT4Html5Compat, Log, All);
 
 namespace UT4Compat
@@ -387,6 +407,7 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
 #include "WeaponFidelityRepair.h"
 #include "WeaponTessellationUpgrade.h"
 #include "WeaponUsageReport.h"
+#include "EntryReflectionDiagnostic.h"
 #include "WeaponGrenadeAssignmentReport.h"
 #include "EnforcerConsumerReport.h"
 #include "WeaponShaderProbe.h"

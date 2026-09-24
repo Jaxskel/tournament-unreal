@@ -347,3 +347,50 @@ A successful six-resource result is shader-cache evidence only. It does not prov
 browser shader linking, scene-color texture binding, glass appearance, fresh cook
 coverage or frame pacing. Keep failed runs and original asset hashes alongside
 any successful result.
+
+
+## UT-Entry reflection readback diagnostic
+
+The opt-in `-EntryReflectionDiagnostic` module hook runs in an **ordinary,
+unattended editor**, not the compatibility commandlet. Supply the positional map
+`/Game/RestrictedAssets/Maps/UT-Entry`,
+`-EntryReflectionOriginalContent=<physical original Content>` and
+`-EntryReflectionOutput=<fresh external JSONL file>`.
+The selected map must be a distinct physical copy with the fixed original bytes.
+Use owned-process-tree supervision, idle competing writers, and before/after
+source and selected-map audits. This diagnostic grants no package-save authority.
+
+The hook disables process-local autosave and automatic import settings before
+editor initialization and keeps them disabled until module shutdown. It waits
+for the exact editor world and idle shaders, admits only the single expected
+sphere capture, snapshots authored properties/transforms, and requests an
+in-memory recapture plus virtual `PreSave` readback. It checks all mip/face sizes,
+finite HDR channels, capture-state advancement, unchanged authored properties,
+package dirty state and physical map hashes. Zero HDR channels are descriptive;
+they are not evidence of invalid data. The evidence file is exclusively created
+and flushed. Require terminal `diagnostic_completed` evidence and complete owned
+process drain; process exit 0 alone is insufficient. The ticker deadline is 180
+seconds; the operator also needs a bounded process timeout for initialization.
+
+Validation: twelve focused private-source/host checks passed, and the actual
+Win64 editor plugin built successfully. The first normal-editor run **failed**:
+UT-Entry loaded, but `CreateSwapChain` failed with `887A0022` while the main editor
+window was being shown in an SSH session. No logged-in Windows user was present.
+No capture before/after rows were emitted. All fifteen copied map files and
+originals, plus five child-junction identities/targets, were unchanged; the owned
+job drained. A usable desktop and a successful native readback run remain needed
+before designing or authorizing a separate one-map save. Do not substitute a
+commandlet, NullRHI, synthesized cubemap or changed cache GUID as proof.
+
+Focused checks (private source captures are optional):
+
+```sh
+python3 -B ports/html5/compat/test_entry_reflection_diagnostic.py \
+  --editor-api-dir <private editor source captures> \
+  --reflection-source-dir <private reflection source captures>
+```
+
+Native build result SHA-256:
+`746a74728dde80d5fd7c541d0e93d2b39a96b2693c199fc913c977d66196beb3`.
+Built plugin SHA-256:
+`2d7745cbc4f5f9a34d9e498209dc12cd19ba5983afb47bc41047a5f5bcea1d15`.

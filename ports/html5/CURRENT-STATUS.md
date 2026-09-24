@@ -43,6 +43,17 @@ Deck → Outpost → Deck run then passed in 69.382 seconds, with Ready epochs
 owned-browser exit. This does not establish default-duration or multiplayer
 rotation, combat outcomes or performance.
 
+A separate [pending-startup diagnostic build](PENDING-STARTUP-EXPERIMENT.md)
+now completed its browser compile/link/conversion and passed a headless practice
+settings check on port 8083: native/canvas 1080p → 1440p → 1080p, centering and
+menu pause/resume, unchanged served inputs and clean browser exit. It retains
+the scene-color package. This does not establish a clean multiplayer join.
+The Entry reflection diagnostic compiled, but its first normal-editor run failed
+while creating the main window (`CreateSwapChain`, `887A0022`) after the map
+loaded. No Windows user was logged in. Original/copied maps remained unchanged
+and the owned job drained. A successful native readback, separately controlled
+map repair, matching cook/package and strict multiplayer rerun remain pending.
+
 The latest private playable preview is **http://127.0.0.1:8081/index.html**.
 Its cook finished in 2,307.428 seconds with zero selected-family failures and zero
 engine errors; **291 unrelated material-failure lines remain**. Packaging passed
