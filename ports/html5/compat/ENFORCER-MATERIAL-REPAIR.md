@@ -2,7 +2,7 @@
 
 This operation addresses the Enforcer gun-body material without changing the original material instances, which are also inherited by other weapons. It creates a dedicated copy of the already repaired weapon master and two Enforcer instances, disables static-lighting usage only on the new master, and changes material slot 0 on the two existing Enforcer skeletal meshes. It introduces no texture aliases, constant colors, mesh transforms, or animation changes.
 
-The source proposal is supported by a native, transient-copy experiment: both Enforcer instances compiled valid ES2 WebGL shader maps at all three material qualities, with 15/16/16 samplers. That experiment did not save assets. The persistent repair helper compiled successfully as a UE4.15 editor module; a successful compile is not evidence of successful Apply, fresh Verify, cook, or browser appearance.
+The source proposal is supported by a native, transient-copy experiment: both Enforcer instances compiled valid ES2 WebGL shader maps at all three material qualities, with 15/16/16 samplers. That experiment did not save assets. The persistent repair subsequently passed native Apply and fresh-process Verify: exactly five assets were saved, then reloaded and verified with zero additional saves. Apply took 123.052 seconds; Verify took 114.564 seconds. Both runs passed all six ordinary shader-resource checks, and the other 28 tracked packages retained their hashes and identities. The mesh geometry and complete slot metadata matched the original baselines after normalizing only the two intended slot-0 material paths. A cook and actual browser appearance check are still required.
 
 ## Fixed operation
 
