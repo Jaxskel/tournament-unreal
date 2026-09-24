@@ -37,7 +37,11 @@ succeeded with extension-order warnings retained. All fifteen served pins
 remained unchanged and the owned browser exited 0. This establishes the recorded
 copy/decode draw path, **not Bio mesh identity, pixel correctness, native visual
 parity, normal pickups/combat or FPS**. The private diagnostic is on port 8082;
-it has not replaced the practice preview below.
+it has not replaced the practice preview below. A separate accelerated six-bot
+Deck → Outpost → Deck run then passed in 69.382 seconds, with Ready epochs
+1 → 2 → 3, matching 1080p dimensions, unchanged fifteen served pins and clean
+owned-browser exit. This does not establish default-duration or multiplayer
+rotation, combat outcomes or performance.
 
 The latest private playable preview is **http://127.0.0.1:8081/index.html**.
 Its cook finished in 2,307.428 seconds with zero selected-family failures and zero
@@ -143,3 +147,4 @@ Scene-color diagnostic generation evidence (private):
 - Browser generation: `scene-color-browser-review/generation-receipt-1.json`, `55974abae80a6d898a47ca990f2be803e797057e8607d92948b499feae71074b`.
 - Raw draw capture: `scene-color-browser-review/runs/run-1790239141816/report.json`, `5eea39c8f03d13ff84524a9e26926e939ed0785e367c8ee0e1761d2cb51b4205`.
 - Separate source/state qualification: `scene-color-browser-review/runs/run-1790239141816/offline-qualification-main.json`, `2bc12e0fae8978cc7b3770800eb0b1ffa950b66c2a32f40db1792c6bf58df8e5`.
+- Scene-color accelerated rotation: `scene-color-rotation-review/run-1790239989001/report.json`, `d177f02544188e4f0df7ffe3ed51ecfd60076c52c972bdb3c6810a4b572502b7`.
