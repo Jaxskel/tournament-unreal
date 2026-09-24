@@ -15,7 +15,7 @@ gameplay or native visual parity.
 | Menu and resolution | The current Supplement generation passed 1080p → 1440p → 1080p with matching native/canvas sizes, centered 16:9 layout, confirmed pause/resume and owned-browser exit 0. Its CSS presentation is scaled, not a full-screen performance measurement. Earlier cleanup-failed runs remain failed. Audio and direct world-clock freeze remain unmeasured. |
 | Rotation | An earlier accelerated `GoalScore=1 / TimeLimit=1` practice fixture logged five completed alternating Deck/Outpost loads, continuing Ready samples and clean owned-browser exit. Its old boolean checker missed the logs. This does not establish default-duration or multiplayer rotation, or recertify newer generations. |
 | Current rotation | The current Supplement package passed accelerated headless Deck → Outpost → Deck in 68.133 seconds: Ready epochs 1 → 2 → 3, matching 1080p dimensions, no HTTP/page errors, fifteen unchanged served pins and owned-browser exit 0. The browser NoMCP writer guard remains included. Default-duration rotation remains open; a separate Entry-candidate multiplayer result follows. |
-| Multiplayer | The separate Entry/direct-package candidate passed a strict two-client join and reconnect run: both postRun/Ready, 31.092 seconds of traffic and advancing native frames, then a new iframe/socket for A while B stayed Ready at the same epoch. All fifteen served hashes were unchanged, no page/network/socket or fatal engine error was detected, owned-browser exit was 0 and gateway sessions drained. This supersedes the earlier startup-error and reconnect-download failures only for this exact generation. Input is dispatch evidence; current-generation player combat and respawn remain open. A separate accelerated multiplayer travel run is recorded below. |
+| Multiplayer | The separate Entry/direct-package candidate passed a strict two-client join and reconnect run: both postRun/Ready, 31.092 seconds of traffic and advancing native frames, then a new iframe/socket for A while B stayed Ready at the same epoch. All fifteen served hashes were unchanged, no page/network/socket or fatal engine error was detected, owned-browser exit was 0 and gateway sessions drained. This supersedes the earlier startup-error and reconnect-download failures only for this exact generation. Input is dispatch evidence; normal player combat remains open; controlled current-generation respawn is recorded below. A separate accelerated multiplayer travel run is recorded below. |
 | Multiplayer rotation | The Entry/direct-package candidate completed an isolated accelerated Deck → Outpost → Deck run with two browser clients in 157.217 seconds. Both reached Ready epochs 1 → 2 → 3, advanced native frames and exchanged fresh bidirectional traffic after each load and after the final hash scan. All fifteen served hashes matched, no page/network/socket errors were recorded, the owned browser exited 0 and gateway sessions drained. This is log-correlated map identity at fixed 1080p with GoalScore=1 / TimeLimit=1; it does not establish default-duration play, combat, FPS or visual parity. |
 | Character skinning | Captured browser programs and bound draw streams demonstrate an eight-influence GPU skinning path. This is not per-mesh identity, morph activation, pixel correctness or a measured FPS improvement. |
 | Weapons and other assets | The dedicated Enforcer repair passed native Apply/fresh Verify, a new cook and package, and a browser roundtrip. The starting first-person gun now visibly has blue/metallic material detail in the captured scene instead of the earlier gray fallback. This is a bounded visual improvement, not a native-reference match. All six ordinary shader resources passed (15/16/16 samplers for each view); geometry and other slots were preserved. The preceding Grenade repair remains included, but its browser appearance is not yet verified. Other weapons, foot shadows, lighting, effects, animation and placement fidelity remain open. |
@@ -196,6 +196,27 @@ launches, median startup fell from **14.6627 to 14.2094 seconds (3.09%)**, with
 60,223,598 additional bytes. Inputs were unchanged and all owned browsers exited
 0. It remains unpromoted: the larger download could outweigh this smaller local
 gain. This newer measurement does not establish FPS or native visual parity.
+
+## Current controlled respawn
+
+The Entry/direct-package generation completed a separate 122.440-second
+headless diagnostic with unchanged fifteen served pins, no recorded page/request
+errors and owned-browser exit 0. Controller `TournamentPlayerController_0` mapped
+to `UTPlayerState_0`. After an earlier bot death and console-triggered respawn,
+the observed pawn was `DefaultCharacter_C_14` with one death. An explicit Suicide
+command and matching native console message were followed by no pawn and two
+deaths. A later console `StartFire` request preceded possession of
+`DefaultCharacter_C_20` at 100 health, with deaths still two. Independent review
+confirmed that sequence from the console and screenshots.
+
+This supports **controlled current-generation death/respawn**, not normal mouse
+combat. The first firing request occurred while already dead; weapon queries
+span different pawn lifetimes, so player-owned ammo consumption remains unproven.
+Exact shadow-component name queries returned Blueprint templates, not live
+character components; they do not certify the foot-shadow repair.
+
+Private report SHA-256:
+`f06a28b68a3bc531179fa0f4a893c9b769161da4d7e627b544cf7467654bc0c3`.
 
 ## Remaining acceptance
 
