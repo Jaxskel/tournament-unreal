@@ -19,6 +19,8 @@ gameplay or native visual parity.
 | Character skinning | Captured browser programs and bound draw streams demonstrate an eight-influence GPU skinning path. This is not per-mesh identity, morph activation, pixel correctness or a measured FPS improvement. |
 | Weapons and other assets | The dedicated Enforcer repair passed native Apply/fresh Verify, a new cook and package, and a browser roundtrip. The starting first-person gun now visibly has blue/metallic material detail in the captured scene instead of the earlier gray fallback. This is a bounded visual improvement, not a native-reference match. All six ordinary shader resources passed (15/16/16 samplers for each view); geometry and other slots were preserved. The preceding Grenade repair remains included, but its browser appearance is not yet verified. Other weapons, foot shadows, lighting, effects, animation and placement fidelity remain open. |
 
+A separate [Bio Rifle body and grenade-ammunition diagnostic](compat/SUPPLEMENT-MATERIAL-CANDIDATE.md) passed all twelve native shader resources with original parameter and source-hash checks intact, using 15–16 samplers. It saved no assets; those four material repairs are not yet in the playable package. Bio glass is excluded.
+
 The latest private playable preview is **http://127.0.0.1:8080/index.html**.
 Its Enforcer cook finished in 2,471.298 seconds with zero selected-family
 failures and zero engine errors; **399 unrelated material-failure lines remain**.

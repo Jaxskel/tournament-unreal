@@ -8,7 +8,17 @@ from test_weapon_tessellation import compile_run
 CPP = Path(__file__).parent / 'UT4Html5Compat/Source/UT4Html5Compat/Private/UT4Html5Compat.cpp'
 PATTERN = r'    // EXPLICIT_MODE_ADMISSION_BEGIN\n(.*?)    // EXPLICIT_MODE_ADMISSION_END\n'
 
+def without_supplement_dispatch(source):
+    for block in ('#include "SupplementMaterialCandidate.h"\n',
+                  '    if (Mode.Equals(TEXT("SupplementMaterialCandidate"), ESearchCase::IgnoreCase))\n        return SupplementMaterialCandidate(Params);\n'):
+        if source.count(block) != 1:
+            raise AssertionError('Expected one supplement integration block: ' + block)
+        source = source.replace(block, '')
+    return source
+
+
 def without_enforcer_repair_dispatch(source):
+    source = without_supplement_dispatch(source)
     blocks = ['#include "EnforcerMaterialRepair.h"\n']
     for mode, args in (('Preflight', 'false, true'), ('Apply', 'false'), ('Verify', 'true')):
         blocks.append('    if (Mode.Equals(TEXT("EnforcerMaterialRepair%s"), ESearchCase::IgnoreCase))\n        return EnforcerMaterialRepair(Params, %s);\n' % (mode, args))
@@ -104,6 +114,12 @@ def without_readonly_dispatches(source):
     return source
 
 class Admission(unittest.TestCase):
+    def test_supplement_inverse_and_admission_order(self):
+        source = CPP.read_text()
+        self.assertEqual(hashlib.sha256(without_supplement_dispatch(source).encode()).hexdigest(),
+                         '6a386c10e1752607e2515b64f4a6b27719f20e28d0bb4dd8a776e8d832594917')
+        self.assertLess(source.index('// EXPLICIT_MODE_ADMISSION_END'), source.index('return SupplementMaterialCandidate(Params);'))
+
     def test_enforcer_repair_inverse_preserves_current_commandlet(self):
         source = CPP.read_text()
         self.assertEqual(hashlib.sha256(without_enforcer_repair_dispatch(source).encode()).hexdigest(),
@@ -169,7 +185,7 @@ BLOCK
  ++reached;return 0;
 }
 int main(){
- const char* modes[]={"","WeaponRepairApply","WeaponRepairVerify","Apply","Verify","WeaponReport","BlobShadowExperiment","WeaponUsageReport","WeaponShaderBatchProbe","WeaponBlueprintReport","WeaponSamplerAliasProbe","EnforcerConsumerReport","EnforcerMaterialCandidate","EnforcerMeshReport","EnforcerMaterialRepairPreflight","EnforcerMaterialRepairApply","EnforcerMaterialRepairVerify"};
+ const char* modes[]={"","WeaponRepairApply","WeaponRepairVerify","Apply","Verify","WeaponReport","BlobShadowExperiment","WeaponUsageReport","WeaponShaderBatchProbe","WeaponBlueprintReport","WeaponSamplerAliasProbe","EnforcerConsumerReport","EnforcerMaterialCandidate","SupplementMaterialCandidate","EnforcerMeshReport","EnforcerMaterialRepairPreflight","EnforcerMaterialRepairApply","EnforcerMaterialRepairVerify"};
  const char* flags[]={"WeaponTessUpgrade","WeaponTessVerify","WeaponShaderProbe","WeaponShaderEnforcer1PHigh","WeaponShaderNoStaticLighting"};
  for(const char* mode:modes)for(int bits=0;bits<32;bits++){
   FString args;for(int i=0;i<5;i++)if(bits&(1<<i)){args+=" -";args+=flags[i];}

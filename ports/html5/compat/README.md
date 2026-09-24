@@ -4,6 +4,8 @@ The [weapon shader and usage diagnostics](WEAPON-SHADER-DIAGNOSTICS.md) document
 
 The [Enforcer consumer report](ENFORCER-CONSUMER-REPORT.md) records a fixed-seven-package, read-only native query and its evidence limits; it authorizes no asset repair.
 
+The [Bio Rifle body and grenade-ammunition candidate](SUPPLEMENT-MATERIAL-CANDIDATE.md) compiles twelve ordinary shader resources from transient copies while checking the original material parameters and parent chains. It saves no assets and excludes Bio glass.
+
 Original editor-only plugin and bounded copy-on-write preparation. No engine source
 is bundled. The editor plugin now compiles against the isolated UT4 source, and Report has run on the recovered Malcolm and weapon assets. Twelve Python preparation tests pass. Apply/Verify and full browser appearance are tracked separately in the parent verification record.
 
