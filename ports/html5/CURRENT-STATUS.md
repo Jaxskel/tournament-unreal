@@ -62,7 +62,14 @@ normal-editor run then completed real 128-pixel HDR capture/readback with all 78
 authored-object records and 42 file audit rows unchanged, exit 0 and complete
 owned-process drain. The renderer-produced entry-map payload was entirely zero;
 this proves structural capture/readback, not visual lighting fidelity. No map was
-saved. A separate one-map save/fresh-load check, matching cook/package and strict
+saved. The first separate save attempt stopped before any write because its
+cross-process snapshot differed. Two further read-only editor loads isolated the
+change to `PersistentLevel.LevelBuildDataId`; the other 78-object snapshot fields
+and all 46 audited file/link records matched. The original legacy map has no
+serialized value for that field, and the matching engine generates it during
+object initialization. The preservation contract is being corrected to distinguish
+that per-load initialization from changes during capture/save. No map save or
+fresh-load persistence result is claimed; matching cook/package and strict
 multiplayer rerun remain pending.
 
 The latest private playable preview is **http://127.0.0.1:8081/index.html**.

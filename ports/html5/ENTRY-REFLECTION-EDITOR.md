@@ -148,3 +148,35 @@ and a matching cook/package plus strict multiplayer rerun.
 
 Diagnostic result SHA-256:
 `def14970c3b4ba71f4826ce856dcf6c833834f22175dbae531ed057e0969f687`.
+
+## Separate-load preservation diagnosis
+
+The first one-map save attempt failed its authored-baseline check before calling
+capture or `SavePackage`. Native exit 0 was not accepted as success. All 46 audited
+file/link records remained unchanged, including the selected and original maps.
+
+Two subsequent read-only normal-editor inspections each completed with 78 object
+records and a drained owned process tree. All eighteen downloaded evidence files
+matched remote size/SHA-256 pins. Comparing the full rows found exactly one changed
+field: the persistent level's `LevelBuildDataId`. All other row bytes matched;
+both runs also preserved all 46 file/link audit records.
+
+Private inspection of the original, hash-pinned version-493 map found no serialized
+`LevelBuildDataId` or `MapBuildData` name/tag and no custom-version entries. The
+matching `ULevel::PostInitProperties` generates a new build-data GUID; legacy map
+loading associates migrated light-volume data with it. The ID therefore has a real
+registry relationship and must not be overwritten or ignored during a save.
+
+The next preservation check must distinguish separate legacy loads from mutation
+within one load: canonicalize only this exact field when comparing independently
+loaded baselines, retain its actual value in full before/after capture and save
+comparisons, and require that saved value on fresh reload. The earlier diagnostic
+retained only its digest, so field-level equality with that run is not asserted.
+A synchronous read-only load inspection is required before retrying the save;
+normal-editor and commandlet object populations have not yet been shown equal.
+Reflected rows alone do not cover custom-serialized build-data registry contents.
+
+Read-only diagnosis artifact SHA-256:
+`3d86d24e64db186a51d74d9ac477e6588c4de38141a4197ddfdf76cd71746599`.
+No package save, persistence verification, cook, or multiplayer acceptance follows
+from this diagnosis alone.
