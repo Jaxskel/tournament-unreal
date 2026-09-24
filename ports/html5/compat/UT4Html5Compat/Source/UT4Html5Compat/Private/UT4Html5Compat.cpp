@@ -6,6 +6,7 @@
 #include "Containers/StringConv.h"
 #include "Math/Float16Color.h"
 #include "Settings/EditorLoadingSavingSettings.h"
+#include "Editor/EditorPerProjectUserSettings.h"
 #include "Components/ReflectionCaptureComponent.h"
 // END_ENTRY_REFLECTION_DIAGNOSTIC_INCLUDES
 #include "Dom/JsonObject.h"

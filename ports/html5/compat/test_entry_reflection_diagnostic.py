@@ -203,6 +203,46 @@ assert(!ERDMapPinAccepted(true,true,true,true,false));''')
         self.assertNotIn('ReadbackFromGPU(', self.text)
 
 
+class PerformanceMonitorTests(unittest.TestCase):
+    def test_actual_process_setting_scope_restore(self):
+        text=HEADER.read_text()
+        body=text.split('// ENTRY_PERFORMANCE_MONITOR_BEGIN\n',1)[1].split('// ENTRY_PERFORMANCE_MONITOR_END',1)[0]
+        code=r'''#include <cassert>
+#define check(x) assert(x)
+struct UEditorPerProjectUserSettings {bool bMonitorEditorPerformance;};
+template<class T> struct TWeakObjectPtr {T* p=nullptr;T* Get()const{return p;}TWeakObjectPtr& operator=(T* x){p=x;return *this;}};
+BODY
+int main(){for(int old=0;old<2;++old){UEditorPerProjectUserSettings s{bool(old)};FERDPerformanceMonitor m;assert(!m.IsDisabled());m.Disable(&s);assert(m.IsDisabled()&&!s.bMonitorEditorPerformance);m.Restore();assert(s.bMonitorEditorPerformance==bool(old));assert(!m.Saved);m.Restore();assert(s.bMonitorEditorPerformance==bool(old));}
+UEditorPerProjectUserSettings s{true};FERDPerformanceMonitor m;m.Disable(&s);s.bMonitorEditorPerformance=true;assert(!m.IsDisabled());m.Owner.p=nullptr;m.Restore();assert(!m.Saved);
+}
+'''.replace('BODY',body)
+        compile_run(code)
+        start=text.split('static int32 EntryReflectionDiagnostic(',1)[1]
+        self.assertLess(start.index('CreateFileW('),start.index('PerformanceMonitor.Disable('))
+        self.assertLess(start.index('PerformanceMonitor.Disable('),start.index('AddTicker('))
+        self.assertIn('&& PerformanceMonitor.IsDisabled()',text)
+        self.assertNotIn('PerformanceMonitor.Restore()',text.split('void Finish(',1)[1].split('bool Tick(',1)[0])
+
+    def test_pinned_performance_setting_api_and_gate(self):
+        if EDITOR_API is None:self.skipTest('private editor API not supplied')
+        for name,h in {'PerformanceMonitor.cpp':'54c8af452d669eea5ae115e8fcf198c6130bc009e1ab58cf85107d0fec42f224','EditorPerProjectUserSettings.h':'132401e6e595609acba469dc6c0526a79503d3b5efa9802898129acd4a72483c'}.items():
+            self.assertEqual(hashlib.sha256((EDITOR_API/name).read_bytes()).hexdigest(),h)
+        h=(EDITOR_API/'EditorPerProjectUserSettings.h').read_text();self.assertIn('UCLASS(minimalapi',h);self.assertIn('uint32 bMonitorEditorPerformance:1;',h)
+        c=(EDITOR_API/'PerformanceMonitor.cpp').read_text().split('void FPerformanceMonitor::Tick(float DeltaTime)',1)[1]
+        self.assertLess(c.index('!bMonitorEditorPerformance || !bIsNotificationAllowed'),c.index('ShowPerformanceWarning('))
+
+    def test_only_performance_delta_inverse(self):
+        text=HEADER.read_text()
+        a=text.index('// ENTRY_PERFORMANCE_MONITOR_BEGIN');b=text.index('// ENTRY_PERFORMANCE_MONITOR_END',a)+len('// ENTRY_PERFORMANCE_MONITOR_END\n\n')
+        text=text[:a]+text[b:]
+        text=''.join(line for line in text.splitlines(keepends=True) if not any(tag in line for tag in ('ENTRY_PERFORMANCE_MEMBER','ENTRY_PERFORMANCE_RESTORE','ENTRY_PERFORMANCE_GET','ENTRY_PERFORMANCE_DISABLE')))
+        text=text.replace('!Settings->bAutoCreateAssets && !Settings->bAutoDeleteAssets && PerformanceMonitor.IsDisabled(); // ENTRY_PERFORMANCE_GATE','!Settings->bAutoCreateAssets && !Settings->bAutoDeleteAssets;')
+        text=text.replace('if (!Settings || !PerformanceSettings)', 'if (!Settings)')
+        self.assertEqual(hashlib.sha256(text.encode()).hexdigest(),'07540eb4ae0bf65116bd992ace9006ac3cc39ff8354691b15a5a99d84db301c6')
+        cpp=(HEADER.parent/'UT4Html5Compat.cpp').read_bytes().replace(b'#include "Editor/EditorPerProjectUserSettings.h"\n',b'')
+        self.assertEqual(hashlib.sha256(cpp).hexdigest(),'030fd1ac3f62955cbe5088735671666d99d098311499712a89fc83b71c4a0410')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--editor-api-dir', type=Path)

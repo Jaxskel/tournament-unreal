@@ -17,6 +17,33 @@ static bool ERDMapPinAccepted(bool SelectedPhysical, bool OriginalPhysical, bool
     return SelectedPhysical && OriginalPhysical && SameBytes && DistinctFiles && ExactPackage;
 }
 
+// ENTRY_PERFORMANCE_MONITOR_BEGIN
+struct FERDPerformanceMonitor
+{
+    TWeakObjectPtr<UEditorPerProjectUserSettings> Owner;
+    bool Saved = false, Previous = false;
+    void Disable(UEditorPerProjectUserSettings* Settings)
+    {
+        check(Settings && !Saved);
+        Owner = Settings;
+        Previous = Settings->bMonitorEditorPerformance;
+        Settings->bMonitorEditorPerformance = false;
+        Saved = true;
+    }
+    bool IsDisabled() const
+    {
+        const UEditorPerProjectUserSettings* Settings = Owner.Get();
+        return Saved && Settings && !Settings->bMonitorEditorPerformance;
+    }
+    void Restore()
+    {
+        UEditorPerProjectUserSettings* Settings = Owner.Get();
+        if (Saved && Settings) Settings->bMonitorEditorPerformance = Previous;
+        Saved = false;
+    }
+};
+// ENTRY_PERFORMANCE_MONITOR_END
+
 struct FERDState : TSharedFromThis<FERDState>
 {
     FString Output, OriginalContent, SelectedMap, OriginalMap;
@@ -32,6 +59,7 @@ struct FERDState : TSharedFromThis<FERDState>
     FDelegateHandle Ticker;
     UEditorLoadingSavingSettings* Settings = nullptr;
     TWeakObjectPtr<UEditorLoadingSavingSettings> SettingsOwner;
+    FERDPerformanceMonitor PerformanceMonitor; // ENTRY_PERFORMANCE_MEMBER
     TWeakObjectPtr<UWorld> WorldOwner;
     TWeakObjectPtr<UReflectionCaptureComponent> TargetOwner;
     UWorld* World = nullptr;
@@ -168,6 +196,7 @@ struct FERDState : TSharedFromThis<FERDState>
 
     void RestoreSettings()
     {
+        PerformanceMonitor.Restore(); // ENTRY_PERFORMANCE_RESTORE
         Settings = SettingsOwner.Get();
         if (!SettingsSaved || !Settings) return;
         Settings->bMonitorContentDirectories = OldMonitor;
@@ -218,7 +247,7 @@ struct FERDState : TSharedFromThis<FERDState>
             if (Matches != 1 || WorldCaptures != 1 || !Target) { Finish(TEXT("failed"), TEXT("expected one exact capture component")); return false; }
             Settings = SettingsOwner.Get();
             const bool SettingsDisabled = Settings && !Settings->bAutoSaveEnable && !Settings->bMonitorContentDirectories &&
-                !Settings->bAutoCreateAssets && !Settings->bAutoDeleteAssets;
+                !Settings->bAutoCreateAssets && !Settings->bAutoDeleteAssets && PerformanceMonitor.IsDisabled(); // ENTRY_PERFORMANCE_GATE
             if (!ERDAllowed(GIsEditor, IsRunningCommandlet(), IsInGameThread(), FApp::CanEverRender(),
                 World->WorldType == EWorldType::Editor && World->GetOutermost()->GetName() == ERDPackage,
                 Target->IsRegistered() && Target->IsVisible(), Matches == 1,
@@ -299,7 +328,8 @@ static int32 EntryReflectionDiagnostic(const FString& Params)
             A.Identity != B.Identity, A.Target.EndsWith(TEXT("UT-Entry.umap")) && B.Target.EndsWith(TEXT("UT-Entry.umap"))))
         return WFRStop(TEXT("entry-reflection-diagnostic-map-pins"));
     UEditorLoadingSavingSettings* Settings = GetMutableDefault<UEditorLoadingSavingSettings>();
-    if (!Settings) return WFRStop(TEXT("entry-reflection-diagnostic-editor-unavailable"));
+    UEditorPerProjectUserSettings* PerformanceSettings = GetMutableDefault<UEditorPerProjectUserSettings>(); // ENTRY_PERFORMANCE_GET
+    if (!Settings || !PerformanceSettings) return WFRStop(TEXT("entry-reflection-diagnostic-editor-unavailable"));
     TSharedPtr<FERDState> S = MakeShareable(new FERDState);
     S->Output = Output; S->OriginalContent = OriginalContent; S->SelectedMap = Selected; S->OriginalMap = Original;
     S->SelectedIdentity = A.Identity; S->OriginalIdentity = B.Identity; S->SelectedSize = A.Size; S->OriginalSize = B.Size;
@@ -311,6 +341,7 @@ static int32 EntryReflectionDiagnostic(const FString& Params)
     Settings->bMonitorContentDirectories = false; Settings->bAutoSaveEnable = false;
     Settings->bAutoCreateAssets = false; Settings->bAutoDeleteAssets = false;
     S->SettingsSaved = true;
+    S->PerformanceMonitor.Disable(PerformanceSettings); // ENTRY_PERFORMANCE_DISABLE
     if (!S->Emit(TEXT("begin"), TEXT("process-local autosave/autoimport suppression; no package save")))
     { S->RestoreSettings(); CloseHandle(S->EvidenceHandle); S->EvidenceHandle = INVALID_HANDLE_VALUE; return WFRStop(TEXT("entry-reflection-diagnostic-output")); }
     GEntryReflectionDiagnostic = S;

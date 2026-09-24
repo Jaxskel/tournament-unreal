@@ -51,7 +51,14 @@ the scene-color package. This does not establish a clean multiplayer join.
 The Entry reflection diagnostic compiled, but its first normal-editor run failed
 while creating the main window (`CreateSwapChain`, `887A0022`) after the map
 loaded. No Windows user was logged in. Original/copied maps remained unchanged
-and the owned job drained. A successful native readback, separately controlled
+and the owned job drained. A separately reviewed
+[opt-in editor window experiment](ENTRY-REFLECTION-EDITOR.md) then bypassed that
+MainFrame creation, but a global notification popup hit the same swapchain
+failure. A narrow notification patch built successfully, but a third run reached
+frame 99 and failed when the performance monitor opened a warning popup. All 42
+map/source/DLL audit rows remained unchanged. The diagnostic now temporarily
+disables that existing warning setting; its plugin-only rebuild passed with a
+drained owned process tree. A successful native readback, separately controlled
 map repair, matching cook/package and strict multiplayer rerun remain pending.
 
 The latest private playable preview is **http://127.0.0.1:8081/index.html**.
