@@ -530,6 +530,11 @@ static TSharedPtr<FERMState> GEntryMapRepair;
 // Call only in module startup before GEngine/GEditor creation; never from commandlet routing.
 static int32 StartEntryReflectionMapSave(const FString& Params)
 {
+    // REFERENCE_SAVE_GUARD_BEGIN
+    FString ReferenceOnly;
+    if (FParse::Param(*Params,TEXT("EntryMapInspectReferences")) || FParse::Value(*Params,TEXT("EntryMapReferenceImage="),ReferenceOnly))
+        return WFRStop(TEXT("entry-map-reference-commandlet-only"));
+    // REFERENCE_SAVE_GUARD_END
     // FAILED_SAVE2_SAVE_GUARD_BEGIN
     FString FailedOnly;
     if (FParse::Param(*Params,TEXT("EntryMapInspectFailedSave2")) ||
@@ -575,6 +580,178 @@ static void ShutdownEntryReflectionMapSave()
     S->Capture.RestoreSettings(); S->Evidence.Close(); GEntryMapRepair.Reset();
 }
 
+// REFERENCE_INSPECTION_BEGIN
+static const TCHAR* ERMReferenceRoot=TEXT("/TournamentEntryOriginalDiagnostic/");
+static const TCHAR* ERMReferenceAlias=TEXT("/TournamentEntryOriginalDiagnostic/UT-Entry");
+struct FERMReferenceMount
+{
+    FString Directory;
+    bool Active=false;
+    bool Open(const FString& Original)
+    {
+        TArray<FString> Roots; FPackageName::QueryRootContentPaths(Roots);
+        for (const FString& Root : Roots)
+            if (Root.Equals(ERMReferenceRoot,ESearchCase::IgnoreCase)) return false;
+        if (FindPackage(nullptr,ERMReferenceAlias)) return false;
+        Directory=FPaths::GetPath(Original)+TEXT("/");
+        Active=true; FPackageName::RegisterMountPoint(ERMReferenceRoot,Directory);
+        FString Resolved;
+        return FPackageName::DoesPackageExist(ERMReferenceAlias,nullptr,&Resolved) && Full(Resolved)==Original;
+    }
+    void Close()
+    {
+        if (Active) { FPackageName::UnRegisterMountPoint(ERMReferenceRoot,Directory); Active=false; }
+    }
+    ~FERMReferenceMount() { Close(); }
+};
+// FObjectIterator with no additional exclusions includes PendingKill, but excludes
+// Unreachable/AsyncLoading. Do not claim to enumerate destroyed/unreachable objects.
+static bool ERMReferenceFind(const FString& Path,UObject*& Found)
+{
+    Found=nullptr; int32 Scanned=0;
+    for (FObjectIterator It(UObject::StaticClass(),false,RF_NoFlags,EInternalObjectFlags::None); It; ++It)
+    {
+        if (++Scanned>1500000) return false;
+        UObject* O=*It;
+        if (!O || !O->IsValidLowLevelFast()) return false;
+        if (O->GetPathName()==Path) { if (Found) return false; Found=O; }
+    }
+    return true;
+}
+static TSharedPtr<FJsonObject> ERMReferenceObject(UObject* Object)
+{
+    TSharedPtr<FJsonObject> J=MakeShareable(new FJsonObject);
+    J->SetBoolField(TEXT("present"),Object!=nullptr);
+    bool Enumerated=false; int32 Scanned=0;
+    if (Object)
+        for (FObjectIterator It(UObject::StaticClass(),false,RF_NoFlags,EInternalObjectFlags::None); It; ++It)
+        {
+            if (++Scanned>1500000) break;
+            if (*It==Object) { Enumerated=true; break; }
+        }
+    J->SetBoolField(TEXT("enumerated"),Enumerated);
+    const bool Safe=Enumerated && Object->IsValidLowLevelFast();
+    J->SetBoolField(TEXT("low_level_valid"),Safe);
+    if (!Safe) return J; // no other dereference of a non-enumerated/invalid pointer
+    J->SetStringField(TEXT("path"),Object->GetPathName());
+    J->SetStringField(TEXT("class"),Object->GetClass()->GetPathName());
+    J->SetNumberField(TEXT("object_flags"),double(uint32(Object->GetFlags())));
+    J->SetNumberField(TEXT("internal_flags"),double(uint32(Object->GetInternalFlags())));
+    J->SetNumberField(TEXT("class_flags"),double(uint32(Object->GetClass()->ClassFlags)));
+    J->SetBoolField(TEXT("pending_kill"),Object->HasAnyInternalFlags(EInternalObjectFlags::PendingKill));
+    J->SetBoolField(TEXT("is_valid"),IsValid(Object));
+    J->SetBoolField(TEXT("transient"),Object->HasAnyFlags(RF_Transient));
+    J->SetBoolField(TEXT("default_subobject"),Object->HasAnyFlags(RF_DefaultSubObject));
+    J->SetBoolField(TEXT("class_default_object"),Object->HasAnyFlags(RF_ClassDefaultObject));
+    J->SetStringField(TEXT("outer_class"),Object->GetOuter() ? Object->GetOuter()->GetClass()->GetPathName() : FString());
+    J->SetNumberField(TEXT("outer_flags"),Object->GetOuter() ? double(uint32(Object->GetOuter()->GetFlags())) : 0);
+    J->SetStringField(TEXT("outer"),Object->GetOuter() ? Object->GetOuter()->GetPathName() : FString());
+    if (UActorComponent* C=Cast<UActorComponent>(Object))
+        J->SetNumberField(TEXT("creation_method"),double(uint8(C->CreationMethod)));
+    // No GetArchetype/GetDefaultObject: this observation must not resolve templates.
+    return J;
+}
+static int32 ERMInspectReferences(const FString& Params,FERMReceipt& R,const FWURFile& ProofPin,const FString& ProofSHA,const FString& Output)
+{
+    FString Image;
+    if (!FParse::Value(*Params,TEXT("EntryMapReferenceImage="),Image) || (Image!=TEXT("original") && Image!=TEXT("saved")))
+        return WFRStop(TEXT("entry-map-reference-image"));
+    const bool Original=Image==TEXT("original");
+    const FString Filename=Original ? R.Original : R.Selected;
+    FERMEvidence Evidence;
+    TSharedPtr<FJsonObject> Begin=ERMRecord(TEXT("inspect_references"),TEXT("begin"),R);
+    Begin->SetStringField(TEXT("reference_image"),Image); Begin->SetStringField(TEXT("loaded_file"),Filename);
+    Begin->SetBoolField(TEXT("g_is_client"),GIsClient); Begin->SetBoolField(TEXT("g_is_server"),GIsServer); Begin->SetBoolField(TEXT("g_is_editor"),GIsEditor);
+    Begin->SetStringField(TEXT("failed_save_proof_sha1"),ProofSHA);
+    if (!Evidence.Open(Full(Output),R) || !Evidence.Emit(Begin)) return WFRStop(TEXT("entry-map-reference-evidence"));
+    if (FindPackage(nullptr,ERDPackage) || !R.Before() || !ERMUnchanged(ProofPin)) return WFRStop(TEXT("entry-map-reference-preload"));
+    UPackage* Package=nullptr; FString Resolved,LoadedFilename; bool ResolutionOK=false;
+    {
+        FERMReferenceMount Mount;
+        if (Original && !Mount.Open(R.Original)) return WFRStop(TEXT("entry-map-reference-mount"));
+        // Neither image may redirect /Game. Explicit outer alone would not force a filename.
+        FString GameFile;
+        if (!FPackageName::DoesPackageExist(ERDPackage,nullptr,&GameFile) || Full(GameFile)!=R.Selected ||
+            !FPackageName::DoesPackageExist(Original ? ERMReferenceAlias : ERDPackage,nullptr,&Resolved) || Full(Resolved)!=Filename ||
+            FindPackage(nullptr,ERDPackage) || !R.Before() || !ERMUnchanged(ProofPin)) return WFRStop(TEXT("entry-map-reference-resolution"));
+        UPackage* Outer=Original ? CreatePackage(nullptr,ERDPackage) : nullptr;
+        if (Original && !Outer) return WFRStop(TEXT("entry-map-reference-outer"));
+        Package=LoadPackage(Outer,Original ? ERMReferenceAlias : ERDPackage,LOAD_None);
+        FLinkerLoad* LoadedLinker=Package ? FLinkerLoad::FindExistingLinkerForPackage(Package) : nullptr;
+        if (LoadedLinker) LoadedFilename=Full(LoadedLinker->Filename);
+        ResolutionOK=Package && Package->GetName()==ERDPackage && LoadedFilename==Filename;
+    } // Mount removed on success and every early return above.
+    TArray<FString> Roots; FPackageName::QueryRootContentPaths(Roots);
+    bool MountRemoved=true;
+    for (const FString& Root : Roots) if (Root.Equals(ERMReferenceRoot,ESearchCase::IgnoreCase)) MountRemoved=false;
+    UWorld* World=ResolutionOK ? UWorld::FindWorldInPackage(Package) : nullptr;
+    UReflectionCaptureComponent* Target=nullptr;
+    const bool TargetOK=World && !World->Scene && ERMTarget(World,false,Target);
+    TMap<FString,FString> Rows; FString Digest,Canonical,Guid;
+    const bool SnapshotOK=TargetOK && FERDState::Snapshot(World,Target,Rows,Digest);
+    const bool CanonicalOK=SnapshotOK && ERMCanonical(Rows,Canonical,Guid);
+    const bool ImageMatches=SnapshotOK && (Original ?
+        (Rows.Num()==60 && CanonicalOK && Canonical==ERMLoadedDigest) :
+        (Rows.Num()==61 && Digest==TEXT("109bc61a8a203edcb61764c0bbc5f317c7d2d42e")));
+    bool RowsOK=SnapshotOK;
+    if (SnapshotOK)
+    {
+        TArray<FString> Keys; Rows.GetKeys(Keys); Keys.Sort();
+        for (const FString& Key : Keys)
+        {
+            auto Row=ERMRecord(TEXT("inspect_references"),TEXT("snapshot_row"),R);
+            Row->SetStringField(TEXT("reference_image"),Image);
+            Row->SetStringField(TEXT("object_path"),Key); Row->SetStringField(TEXT("snapshot_row"),Rows.FindChecked(Key));
+            if (!Evidence.Emit(Row,8*1024*1024)) { RowsOK=false; break; }
+        }
+    }
+    const FString LevelPath=FString(ERDPackage)+TEXT(".UT-Entry:PersistentLevel.");
+    const TCHAR* Owners[]={TEXT("UTWorldSettings"),TEXT("SphereReflectionCapture_1"),TEXT("SphereReflectionCapture_1.NewReflectionComponent")};
+    const TCHAR* Classes[]={TEXT("/Script/UnrealTournament.UTWorldSettings"),TEXT("/Script/Engine.SphereReflectionCapture"),TEXT("/Script/Engine.SphereReflectionCaptureComponent")};
+    const TCHAR* Properties[]={TEXT("RootComponent"),TEXT("CaptureOffsetComponent"),TEXT("CaptureOffsetComponent")};
+    const TCHAR* Targets[]={TEXT("UTWorldSettings.StaticMeshComponent0"),TEXT("SphereReflectionCapture_1.CaptureOffset"),TEXT("SphereReflectionCapture_1.CaptureOffset")};
+    bool ReferencesOK=TargetOK;
+    for (int32 I=0;I<3 && TargetOK;++I)
+    {
+        UObject* Owner=nullptr; UObject* Named=nullptr;
+        const bool Found=ERMReferenceFind(LevelPath+Owners[I],Owner) && ERMReferenceFind(LevelPath+Targets[I],Named);
+        const bool OwnerOK=Found && IsValid(Owner) && Owner->GetClass()->GetPathName()==Classes[I];
+        UProperty* Field=OwnerOK ? FindField<UProperty>(Owner->GetClass(),Properties[I]) : nullptr;
+        UObjectPropertyBase* Property=Cast<UObjectPropertyBase>(Field);
+        const bool PropertyOK=Property && Property->ArrayDim==1;
+        UObject* Value=PropertyOK ? Property->GetObjectPropertyValue_InContainer(Owner) : nullptr;
+        auto Row=ERMRecord(TEXT("inspect_references"),TEXT("reference"),R);
+        Row->SetStringField(TEXT("reference_image"),Image);
+        Row->SetStringField(TEXT("owner_path"),LevelPath+Owners[I]); Row->SetStringField(TEXT("property"),Properties[I]);
+        Row->SetBoolField(TEXT("owner_ok"),OwnerOK); Row->SetBoolField(TEXT("property_ok"),PropertyOK);
+        Row->SetStringField(TEXT("property_class"),Field ? Field->GetClass()->GetPathName() : FString());
+        Row->SetObjectField(TEXT("pointer"),ERMReferenceObject(Value));
+        Row->SetStringField(TEXT("named_target_path"),LevelPath+Targets[I]);
+        Row->SetBoolField(TEXT("named_target_scan_ok"),Found);
+        Row->SetObjectField(TEXT("named_target"),ERMReferenceObject(Named));
+        Row->SetBoolField(TEXT("pointer_equals_named_target"),Value && Value==Named);
+        ReferencesOK=ReferencesOK && Found && PropertyOK;
+        if (!Evidence.Emit(Row)) { ReferencesOK=false; break; }
+    }
+    FString GameAfter;
+    const bool GameUnchanged=FPackageName::DoesPackageExist(ERDPackage,nullptr,&GameAfter) && Full(GameAfter)==R.Selected;
+    const bool OK=ResolutionOK && MountRemoved && GameUnchanged && RowsOK && ReferencesOK && ImageMatches && R.Before() && ERMUnchanged(ProofPin);
+    auto J=ERMRecord(TEXT("inspect_references"),TEXT("complete"),R);
+    J->SetStringField(TEXT("reference_image"),Image); J->SetStringField(TEXT("loaded_file"),LoadedFilename);
+    J->SetBoolField(TEXT("g_is_client"),GIsClient); J->SetBoolField(TEXT("g_is_server"),GIsServer); J->SetBoolField(TEXT("g_is_editor"),GIsEditor);
+    J->SetStringField(TEXT("loaded_map_sha1"),Original ? R.OriginalPin.SHA1 : R.SelectedPin.SHA1);
+    J->SetStringField(TEXT("failed_save_proof_sha1"),ProofSHA);
+    J->SetStringField(TEXT("status"),OK ? TEXT("inspected") : TEXT("failed"));
+    J->SetBoolField(TEXT("preservation_accepted"),false); J->SetBoolField(TEXT("save_attempted"),false); J->SetBoolField(TEXT("package_saved"),false);
+    J->SetBoolField(TEXT("resolution_ok"),ResolutionOK); J->SetBoolField(TEXT("mount_removed"),MountRemoved); J->SetBoolField(TEXT("game_mapping_unchanged"),GameUnchanged);
+    J->SetBoolField(TEXT("snapshot_ok"),SnapshotOK); J->SetBoolField(TEXT("snapshot_rows_complete"),RowsOK); J->SetBoolField(TEXT("references_ok"),ReferencesOK);
+    J->SetNumberField(TEXT("objects"),Rows.Num()); J->SetStringField(TEXT("authored_digest"),Digest); J->SetStringField(TEXT("canonical_digest"),Canonical);
+    J->SetStringField(TEXT("level_build_data_id"),Guid); J->SetBoolField(TEXT("image_matches"),ImageMatches);
+    if (!Evidence.Emit(J) || !OK) return WFRStop(TEXT("entry-map-reference-observation"));
+    return 0;
+}
+// REFERENCE_INSPECTION_END
+
 // FAILED_SAVE2_INSPECTION_BEGIN
 // Fixed failed afterimage only. This is observation, never successful-save adoption.
 static bool ERMFailedSave2Row(const TSharedPtr<FJsonObject>& Row,int32 Index,const FERMReceipt& R)
@@ -615,6 +792,11 @@ static int32 ERMInspectFailedSave2(const FString& Params)
         if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Lines[I]),Row) || !ERMFailedSave2Row(Row,I,R))
             return WFRStop(TEXT("entry-map-failed-save2-proof"));
     }
+    // REFERENCE_BRANCH_BEGIN
+    if (FParse::Param(*Params,TEXT("EntryMapInspectReferences"))) return ERMInspectReferences(Params,R,ProofPin,ProofSHA,Output);
+    FString ReferenceOnly;
+    if (FParse::Value(*Params,TEXT("EntryMapReferenceImage="),ReferenceOnly)) return WFRStop(TEXT("entry-map-reference-flag-required"));
+    // REFERENCE_BRANCH_END
     FERMEvidence Evidence;
     if (!Evidence.Open(Full(Output),R) || !Evidence.Emit(ERMRecord(TEXT("inspect_failed_save2"),TEXT("begin"),R)))
         return WFRStop(TEXT("entry-map-failed-save2-evidence"));
@@ -737,6 +919,11 @@ static int32 VerifyEntryReflectionMap(const FString& Params)
         FParse::Param(*Params,TEXT("EntryReflectionMapSave")) || FParse::Param(*Params,TEXT("EntryReflectionDiagnostic")) ||
         !FParse::Param(*Params,TEXT("EntryReflectionMapVerify")) || FindPackage(nullptr,ERDPackage))
         return WFRStop(TEXT("entry-map-verify-mode/package-present"));
+    // REFERENCE_ROUTE_GUARD_BEGIN
+    FString ReferenceOnly;
+    if ((FParse::Param(*Params,TEXT("EntryMapInspectReferences")) || FParse::Value(*Params,TEXT("EntryMapReferenceImage="),ReferenceOnly)) &&
+        !FParse::Param(*Params,TEXT("EntryMapInspectFailedSave2"))) return WFRStop(TEXT("entry-map-reference-failed-route-required"));
+    // REFERENCE_ROUTE_GUARD_END
     // FAILED_SAVE2_ROUTE_BEGIN
     if (FParse::Param(*Params,TEXT("EntryMapInspectFailedSave2"))) return ERMInspectFailedSave2(Params);
     FString FailedOnly;

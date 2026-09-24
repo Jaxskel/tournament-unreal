@@ -87,12 +87,20 @@ change before any acceptance decision. A subsequent, separately pinned read-only
 load of that failed afterimage completed with all 46 file/link audit rows unchanged
 and its owned process tree drained. The HDR payload, capture state and brightness,
 and all 1,076 registry fingerprint bytes match the pre-save evidence exactly.
-The 61-object load still fails whole-map preservation: the renamed level-script
+The 61-object load still fails the original whole-map comparison: the renamed level-script
 actor has an otherwise identical row, while the Cube construction bookkeeping,
 two CaptureOffset references and WorldSettings root reference differ. These are
 not blanket-excluded or accepted. The read-only inspector passed 22 focused tests
 and a native plugin build; its completion explicitly reports preservation false.
-Matching cook/package and strict multiplayer rerun remain pending.
+Two subsequent read-only reference inspections now identify the old WorldSettings
+root as an invalid, pending-kill native default subobject. It is absent after save.
+Both CaptureOffset references remain serialized in the saved map; the pinned
+loader excludes their editor-only export in the observed client-only commandlet
+context. These observations explain those differences without restoring a stale
+component. Both runs retained all 46 audit rows, exact expected snapshots and
+drained owned processes. The diagnostic passed 25 tests and its native build;
+the failed save remains failed. A separate preservation decision, matching
+cook/package and strict multiplayer rerun remain pending.
 
 The latest private playable preview is **http://127.0.0.1:8081/index.html**.
 Its cook finished in 2,307.428 seconds with zero selected-family failures and zero

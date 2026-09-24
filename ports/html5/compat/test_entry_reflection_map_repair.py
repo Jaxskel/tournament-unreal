@@ -41,8 +41,135 @@ class RepairTests(unittest.TestCase):
     def setUp(self):
         self.text = HEADER.read_text()
 
+    @staticmethod
+    def reference_inverse(text):
+        for label in ('INSPECTION','BRANCH','ROUTE_GUARD','SAVE_GUARD'):
+            text=re.sub(r'(?m)^ *// REFERENCE_'+label+r'_BEGIN\n.*?^ *// REFERENCE_'+label+r'_END\n', '', text, flags=re.S)
+        return text.replace('\n\n\n// FAILED_SAVE2_INSPECTION_BEGIN','\n\n// FAILED_SAVE2_INSPECTION_BEGIN')
+
+    def test_reference_inverse_source_and_fixed_snapshots(self):
+        self.assertEqual(hashlib.sha256(self.reference_inverse(self.text).encode()).hexdigest(),'6b27b647fd268532b1647fd1345cd6b9438d72858590b6459a3d3e2d01be160c')
+        body=section(self.text,'// REFERENCE_INSPECTION_BEGIN','// REFERENCE_INSPECTION_END')
+        for forbidden in ('SetCaptureIsDirty','UpdateReflectionCaptureContents','PreSave(', 'SavePackage(', 'AddTicker(', 'RegisterComponent(', 'GetArchetype(', 'GetDefaultObject('):self.assertNotIn(forbidden,body)
+        self.assertEqual(body.count('CreatePackage('),1)
+        self.assertIn('FLinkerLoad::FindExistingLinkerForPackage(Package)',body)
+        self.assertIn('Full(LoadedLinker->Filename)',body)
+        self.assertIn('double(uint32(Object->GetInternalFlags()))',body)
+        self.assertIn('EInternalObjectFlags::PendingKill',body)
+        root=next(x for x in HERE.parents if (x/'work/ut4-html5').is_dir())/'work/ut4-html5/entry-reflection-save'
+        for name in ('inspect-loaded-1','inspect-loaded-2','failed-save2-inspect'):
+            records=[json.loads(x) for x in (root/name/'inspect.jsonl').read_text().splitlines()]
+            rows=[r for r in records if r['kind']=='snapshot_row'];h=hashlib.sha1();canonical=hashlib.sha1()
+            for r in rows:
+                for v in (r['object_path'],r['snapshot_row']):h.update(v.encode('utf-16le'));h.update(b'\xff')
+                row=r['snapshot_row']
+                if r['object_path'].endswith('.UT-Entry:PersistentLevel'):row=re.sub(r'(?m)^(LevelBuildDataId\[0\]=)[0-9A-F]{32}$',lambda m:m[1]+'0'*32,row)
+                for v in (r['object_path'],row):canonical.update(v.encode('utf-16le'));canonical.update(b'\xff')
+            if name.startswith('inspect-loaded'):
+                self.assertEqual(len(rows),60);self.assertEqual(canonical.hexdigest(),'ac7d121f2682ce525598ec3f9e990ca4ea1c6337')
+            else:self.assertEqual(len(rows),61);self.assertEqual(h.hexdigest(),'109bc61a8a203edcb61764c0bbc5f317c7d2d42e')
+        source=root/'save-side-effects-source'
+        for pinfile in ('mount-iterator-pins.json','linker-property-pins.json'):
+            for r in json.loads((source/pinfile).read_bytes()):self.assertEqual(hashlib.sha256((source/r['local']).read_bytes()).hexdigest(),r['sha256'])
+        self.assertIn('InternalExclusionFlags |= EInternalObjectFlags::Unreachable',(source/'UObjectIterator.h').read_text())
+        self.assertIn('CreateLinker( InOuter, *NewFilename, LoadFlags )',(source/'Linker.cpp').read_text())
+
+    @staticmethod
+    def reference_host_shim():
+        return r'''
+#include <cassert>
+#include <string>
+#include <vector>
+#include <map>
+#include <memory>
+#include <algorithm>
+#define TEXT(x) x
+using int32=int;using uint32=unsigned;using uint8=unsigned char;using TCHAR=char;
+struct FString:std::string{using std::string::string;FString(){}FString(const std::string& s):std::string(s){}const char* operator*()const{return c_str();}bool Equals(const FString& s,int)const{auto a=*this,b=s;std::transform(a.begin(),a.end(),a.begin(),::tolower);std::transform(b.begin(),b.end(),b.begin(),::tolower);return a==b;}};
+namespace ESearchCase{const int IgnoreCase=0;}
+template<class T>struct TArray:std::vector<T>{int Num()const{return this->size();}void Sort(){std::sort(this->begin(),this->end());}};
+template<class K,class V>struct TMap:std::map<K,V>{int Num()const{return this->size();}void GetKeys(TArray<K>& k)const{for(auto& p:*this)k.push_back(p.first);}const V& FindChecked(const K& k)const{return this->at(k);}};
+template<class T>struct TSharedPtr:std::shared_ptr<T>{using std::shared_ptr<T>::shared_ptr;bool IsValid()const{return bool(*this);}};
+template<class T>TSharedPtr<T> MakeShareable(T* p){return TSharedPtr<T>(p);}
+struct FJsonObject{std::map<FString,FString> strings;std::map<FString,bool> flags;std::map<FString,double> numbers;std::map<FString,TSharedPtr<FJsonObject>> objects;
+void SetStringField(const char* k,const FString& v){strings[k]=v;}void SetBoolField(const char* k,bool v){flags[k]=v;}void SetNumberField(const char* k,double v){numbers[k]=v;}void SetObjectField(const char* k,TSharedPtr<FJsonObject> v){objects[k]=v;}};
+const int RF_NoFlags=0,RF_DefaultSubObject=0x40000,RF_Transient=0x40,RF_ClassDefaultObject=0x10;
+enum class EInternalObjectFlags:unsigned{None=0,PendingKill=1u<<29};
+struct UClass{FString path;unsigned ClassFlags=0;FString GetPathName(){return path;}};
+struct UObject{virtual ~UObject(){}FString path;UClass cls;UObject* outer=nullptr;unsigned flags=0,internal=0;bool safe=true;
+static UClass* StaticClass(){static UClass c;return &c;}bool IsValidLowLevelFast(){return safe;}FString GetPathName(){return path;}UClass* GetClass(){return &cls;}unsigned GetFlags(){return flags;}unsigned GetInternalFlags(){return internal;}bool HasAnyFlags(int f){return flags&f;}bool HasAnyInternalFlags(EInternalObjectFlags f){return internal&unsigned(f);}UObject* GetOuter(){return outer;}};
+struct UActorComponent:UObject{uint8 CreationMethod=0;};struct UReflectionCaptureComponent:UActorComponent{};
+template<class T,class U>T* Cast(U* o){return dynamic_cast<T*>(o);}bool IsValid(UObject* o){return o&&o->safe&&!(o->internal&unsigned(EInternalObjectFlags::PendingKill));}
+std::vector<UObject*> live;
+struct FObjectIterator{size_t i=0;FObjectIterator(UClass*,bool,int,EInternalObjectFlags){}explicit operator bool()const{return i<live.size();}UObject* operator*(){return live[i];}void operator++(){++i;}};
+FString Full(const FString& s){return s;}
+const char* ERDPackage="/Game/RestrictedAssets/Maps/UT-Entry";const char* ERMLoadedDigest="ac7d121f2682ce525598ec3f9e990ca4ea1c6337";
+FString original="/original/UT-Entry.umap",selected="/selected/UT-Entry.umap",image="original";bool collision=false,aliasPackage=false,badResolve=false,mounted=false;int mounts=0,unmounts=0,loads=0,creates=0;
+struct FPaths{static FString GetPath(const FString& p){return p.substr(0,p.find_last_of('/'));}};
+struct FPackageName{static void QueryRootContentPaths(TArray<FString>& r){if(mounted||collision)r.push_back("/TournamentEntryOriginalDiagnostic/");}static void RegisterMountPoint(const FString& root,const FString& dir){assert(root=="/TournamentEntryOriginalDiagnostic/"&&dir=="/original/");mounted=true;++mounts;}static void UnRegisterMountPoint(const FString&,const FString&){mounted=false;++unmounts;}static bool DoesPackageExist(const FString& p,void*,FString* out){if(p==ERDPackage){*out=selected;return true;}*out=badResolve?selected:original;return mounted;}};
+bool GIsClient=true,GIsServer=false,GIsEditor=true;
+struct UPackage;struct FLinkerLoad{FString Filename;static FLinkerLoad* FindExistingLinkerForPackage(UPackage*);};struct UPackage{FLinkerLoad linker;FString GetName(){return ERDPackage;}} package;FLinkerLoad* FLinkerLoad::FindExistingLinkerForPackage(UPackage* p){return &p->linker;}
+UPackage* FindPackage(void*,const char* name){return aliasPackage&&std::string(name)!="/Game/RestrictedAssets/Maps/UT-Entry"?&package:nullptr;}
+UPackage* CreatePackage(void*,const char*){++creates;return &package;}const int LOAD_None=0;
+UPackage* LoadPackage(UPackage* outer,const char* name,int){++loads;assert((image=="original")==bool(outer));assert(std::string(name)==(image=="original"?"/TournamentEntryOriginalDiagnostic/UT-Entry":ERDPackage));package.linker.Filename=image=="original"?original:selected;return &package;}
+struct FParse{static bool Value(const char*,const char*,FString& v){v=image;return !image.empty();}};
+struct FWURFile{FString SHA1;};bool pins=true;bool ERMUnchanged(const FWURFile&){return pins;}
+struct FERMReceipt{FString Original=original,Selected=selected;FWURFile OriginalPin,SelectedPin;bool Before(){return pins;}};
+int WFRStop(const char*){return 3;}
+std::vector<TSharedPtr<FJsonObject>> emitted;
+TSharedPtr<FJsonObject> ERMRecord(const char* mode,const char* kind,FERMReceipt&){auto j=MakeShareable(new FJsonObject);j->SetStringField("mode",mode);j->SetStringField("kind",kind);return j;}
+struct FERMEvidence{bool Open(const FString&,FERMReceipt&){return true;}bool Emit(TSharedPtr<FJsonObject> j,int=16384){emitted.push_back(j);return true;}};
+struct UWorld{void* Scene=nullptr;static UWorld* FindWorldInPackage(UPackage*);};UWorld world;UWorld* UWorld::FindWorldInPackage(UPackage*){return &world;}
+UReflectionCaptureComponent target;bool ERMTarget(UWorld*,bool reg,UReflectionCaptureComponent*& out){assert(!reg);out=&target;return true;}
+bool snapshotMatch=true;
+struct FERDState{static bool Snapshot(UWorld*,UReflectionCaptureComponent*,TMap<FString,FString>& r,FString& d){for(int i=0;i<(image=="original"?60:61);++i)r[std::to_string(i)]="row";d=snapshotMatch?"109bc61a8a203edcb61764c0bbc5f317c7d2d42e":"wrong";return true;}};
+bool ERMCanonical(const TMap<FString,FString>&,FString& c,FString& g){c=snapshotMatch?ERMLoadedDigest:"wrong";g="guid";return true;}
+struct UProperty:UObject{int ArrayDim=1;};struct UObjectPropertyBase:UProperty{UObject* value=nullptr;UObject* GetObjectPropertyValue_InContainer(UObject*){return value;}} property;
+template<class T>T* FindField(UClass*,const char*){return &property;}
+'''
+
+    def test_reference_route_guards_compiled(self):
+        route=section(self.text,'    // REFERENCE_ROUTE_GUARD_BEGIN','    // REFERENCE_ROUTE_GUARD_END')
+        save=section(self.text,'    // REFERENCE_SAVE_GUARD_BEGIN','    // REFERENCE_SAVE_GUARD_END')
+        compile_run(r'''
+#include <cassert>
+#include <string>
+#define TEXT(x) x
+using FString=std::string;const char* operator*(const FString& s){return s.c_str();}
+bool failed,refs,value;
+struct FParse{static bool Param(const char*,const char* k){return std::string(k)=="EntryMapInspectFailedSave2"?failed:refs;}static bool Value(const char*,const char*,FString& s){s="saved";return value;}};
+int WFRStop(const char*){return 3;}
+int route(){FString Params;
+''' + route + r'''
+return 0;}
+int save(){FString Params;
+''' + save + r'''
+return 0;}
+int main(){for(int m=0;m<8;++m){failed=m&1;refs=m&2;value=m&4;assert(route()==(((refs||value)&&!failed)?3:0));assert(save()==((refs||value)?3:0));}}
+''')
+
+    def test_reference_complete_function_and_mount_cleanup_compiled(self):
+        body=section(self.text,'static const TCHAR* ERMReferenceRoot','// REFERENCE_INSPECTION_END')
+        code=self.reference_host_shim()+body+r'''
+int main(){
+ UObject owners[3];const char* names[]={"UTWorldSettings","SphereReflectionCapture_1","SphereReflectionCapture_1.NewReflectionComponent"};const char* classes[]={"/Script/UnrealTournament.UTWorldSettings","/Script/Engine.SphereReflectionCapture","/Script/Engine.SphereReflectionCaptureComponent"};
+ for(int i=0;i<3;++i){owners[i].path=std::string(ERDPackage)+".UT-Entry:PersistentLevel."+names[i];owners[i].cls.path=classes[i];live.push_back(&owners[i]);}
+ property.cls.path="/Script/CoreUObject.ObjectProperty";
+ FERMReceipt receipt;FWURFile proof;
+ for(auto im:{"original","saved"}){image=im;emitted.clear();int oldLoads=loads;assert(ERMInspectReferences("",receipt,proof,"proof","out")==0);assert(loads==oldLoads+1);assert(!mounted);assert(emitted.back()->flags["image_matches"]);assert(!emitted.back()->flags["preservation_accepted"]);assert(!emitted.back()->flags["save_attempted"]);int refs=0;for(auto j:emitted)if(j->strings["kind"]=="reference"){++refs;assert(!j->objects["pointer"]->flags["present"]);}assert(refs==3);}
+ image="original";for(int i=0;i<3;++i){collision=i==0;aliasPackage=i==1;badResolve=i==2;int oldLoads=loads;assert(ERMInspectReferences("",receipt,proof,"proof","out")==3);assert(loads==oldLoads);assert(!mounted);}collision=aliasPackage=badResolve=false;
+ snapshotMatch=false;emitted.clear();assert(ERMInspectReferences("",receipt,proof,"proof","out")==3);assert(!mounted);assert(emitted.size()==65);assert(emitted.back()->strings["status"]=="failed");assert(!emitted.back()->flags["image_matches"]);snapshotMatch=true;
+ image="bad";assert(ERMInspectReferences("",receipt,proof,"proof","out")==3);assert(mounts==unmounts);
+ // Pending-kill named objects are still enumerated; invalid/unregistered pointers aren't dereferenced.
+ UActorComponent named;named.path="named";named.flags=RF_DefaultSubObject;named.internal=unsigned(EInternalObjectFlags::PendingKill);live.push_back(&named);UObject* found=nullptr;assert(ERMReferenceFind("named",found)&&found==&named);
+ auto j=ERMReferenceObject(&named);assert(j->flags["present"]&&j->flags["enumerated"]&&j->flags["pending_kill"]&&!j->flags["is_valid"]&&j->flags["default_subobject"]);
+ named.safe=false;j=ERMReferenceObject(&named);assert(!j->flags["low_level_valid"]&&j->strings.empty());live.pop_back();j=ERMReferenceObject(&named);assert(!j->flags["enumerated"]&&j->strings.empty());
+}
+'''
+        compile_run(code)
+
     def test_failed_save2_inverse_and_readonly_boundary(self):
-        clean=self.text
+        clean=self.reference_inverse(self.text)
         for label in ('INSPECTION','ROUTE','SAVE_GUARD'):
             clean=re.sub(r'(?m)^ *// FAILED_SAVE2_'+label+r'_BEGIN\n.*?^ *// FAILED_SAVE2_'+label+r'_END\n', '', clean, flags=re.S)
         clean=clean.replace('\n\n\n// Routed only through', '\n\n// Routed only through')

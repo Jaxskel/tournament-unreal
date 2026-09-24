@@ -311,3 +311,47 @@ expected registry addition and these remaining changes:
 No comparison exclusions, reset, map promotion or successful-save reclassification
 follow from this inspection. The failed raw result and original backup remain
 preserved. Cooked/browser behavior and strict multiplayer startup are still open.
+
+## Original and saved reference-state comparison
+
+The additional `-EntryMapInspectReferences` flag requires the fixed failed-afterimage
+route above, plus `-EntryMapReferenceImage=original` or `saved`. Each invocation
+loads only one image in a fresh process. The original image uses a temporary,
+unique mount for the original map directory and an explicit original package name;
+both resolved and actual linker filenames must match the pinned source. `/Game`
+must continue resolving to the isolated project. The mount is removed on every
+ordinary return. No package contents or original files are written.
+
+The diagnostic retains the exact original 60-object canonical snapshot or saved
+61-object raw snapshot. It separately reports three reference values and their
+named targets, including object/internal/class flags, validity, pending-kill state,
+outer and creation method. Pending-kill objects are observed without invoking
+archetype resolution or changing their lifetime. Unreachable/async-loading objects
+remain outside enumeration. Completion still reports preservation false.
+
+Twenty-five focused tests and the native plugin build passed. The resulting DLL
+SHA-256 is `c49fafcff86606dd2050689407a1610b0fb4ee90cd4a68f9e1452eff38f205a4`.
+Both actual read-only invocations completed with exit 0, complete owned-process
+drain, unchanged 46-row audits, correct linker filenames, restored mount state
+and matching snapshots. All eighteen downloaded evidence files matched remote
+size/hash pins.
+
+The original WorldSettings `StaticMeshComponent0` is already pending kill and
+invalid, with native creation method and the default-subobject flag. The saved
+image has neither that reference nor the named object. The matching component
+initialization code marks stale native default subobjects for deletion; saving
+excludes pending-kill objects. This is evidence of stale-component cleanup,
+rather than disappearance of a previously valid root.
+
+For CaptureOffset, both original references point to a valid billboard helper.
+The saved package still contains the helper export and both non-null serialized
+references. That export is marked not-for-client, not-for-server and
+not-for-editor-game. The actual diagnostic context is client=true, server=false,
+editor=true; the pinned loader filters the export in that context. Executing the
+actual filter body in a host fixture confirms this path. On saved load, the two
+references are null, while a constructor-created named helper still exists.
+Neither null field alone demonstrates loss of the serialized editor helper.
+
+These results do not change the raw failed save, permit broad property exclusions,
+or establish browser rendering or multiplayer success. A separate, exact-generation
+preservation review is required before using this afterimage for a fresh cook.
