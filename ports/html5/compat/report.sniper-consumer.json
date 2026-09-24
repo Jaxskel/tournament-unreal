@@ -1,0 +1,15 @@
+{
+  "schema": "ut4-sniper-consumer-spec-v1",
+  "read_only": true,
+  "repair_authority": false,
+  "roots": [
+    "/Game/RestrictedAssets/Weapons/Sniper/BP_Sniper",
+    "/Game/RestrictedAssets/Weapons/Sniper/BP_Sniper_Attach",
+    "/Game/RestrictedAssets/Weapons/Sniper/Meshes/Sniper_Rifle_1p",
+    "/Game/RestrictedAssets/Weapons/Sniper/Meshes/Sniper_Rifle_3p",
+    "/Game/RestrictedAssets/Proto/UT3_Weapons/WP_SniperRifle/Meshes/SK_WP_SniperRifle_1P",
+    "/Game/RestrictedAssets/Weapons/Sniper/Materials/M_Sniper_Rifle_Inst",
+    "/Game/RestrictedAssets/Weapons/Sniper/Materials/Materials_thridperson/M_Sniper_Rifle_3P_Inst"
+  ],
+  "scope": "Existing CDO/SCS/effective mesh slots and overrides, MIC facts and parent chains, bounded direct registry metadata; no save, normalization authority, live assignment or visual acceptance."
+}

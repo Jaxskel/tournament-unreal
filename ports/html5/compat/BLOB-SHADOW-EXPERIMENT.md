@@ -35,8 +35,9 @@ existing report and repair modes are unchanged.
 
 ## Preparation and commands (main operator only, after review)
 
-Compile the compat plugin against the pinned editor first. This local delivery has
-not been compiled against UE, cooked, applied to assets, or tested in a browser.
+Compile the compat plugin against the pinned editor first. The recorded native
+Apply and fresh-process Verify below establish the bounded asset operation; they
+do not establish acceptable browser appearance.
 Prepare exactly one physical COW target with all ancestors free of reparse points
 and the target singly linked. Preserve the pristine source hash. Do not write
 through the current Content/subdirectory junction. The existing generic
@@ -105,3 +106,18 @@ python3 -B ports/html5/compat/test_blob_shadow_experiment.py --private-baseline 
 These include the actual original Custom body compiled on the host with explicit
 helper/derivative stubs, the actual mask predicate, native baseline and wiring/
 safety contracts. They are not a UE plugin build, HLSLcc compile or browser test.
+
+## Recorded native operation
+
+The private `blob-experiment-apply-3` and `blob-experiment-verify-1` runs on
+2026-09-22 both returned native exit 0. Apply saved only the isolated primary
+material; Verify saved nothing and reported the same target SHA1
+`1a7457dadd880d552260cd1fe3394616852f0c49`. The original source SHA1 remained
+`ef06feed570aab971fccd20c32edaf230a6c95bd`. Their result-file SHA256 values are
+`0b9aa018729fa8545fc78a6739c13b6ae29ae693a86c33555c6d640a363811e0`
+and `4c49ac6a82d781d3cf3c5bc9974303a2c7793b400c57276481378d92734cf0ab`.
+
+These are historical native operation receipts, not a current shader/draw or
+visual-parity certificate. The appearance checks above remain required; the
+receiver-normal approximation is still experimental. Private logs and assets are
+not distributed with this repository.

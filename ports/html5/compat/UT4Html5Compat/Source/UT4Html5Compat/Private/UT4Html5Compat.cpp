@@ -424,6 +424,7 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
 #include "EntryReflectionMapRepair.h"
 // ENTRY_MAP_REPAIR_INCLUDE_END
 #include "WeaponGrenadeAssignmentReport.h"
+#include "SniperConsumerReport.h"
 #include "EnforcerConsumerReport.h"
 #include "WeaponShaderProbe.h"
 #include "SceneColorShaderProbe.h"
@@ -623,6 +624,8 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
         return SupplementMaterialRepair(Params, true);
     if (Mode.Equals(TEXT("SupplementMaterialCandidate"), ESearchCase::IgnoreCase))
         return SupplementMaterialCandidate(Params);
+    if (Mode.Equals(TEXT("SniperConsumerReport"), ESearchCase::IgnoreCase))
+        return SniperConsumerReport(Params);
     if (Mode.Equals(TEXT("SupplementConsumerReport"), ESearchCase::IgnoreCase))
         return SupplementConsumerReport(Params);
     if (Mode.Equals(TEXT("EnforcerConsumerReport"), ESearchCase::IgnoreCase))

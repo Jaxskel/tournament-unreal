@@ -20,6 +20,13 @@ gameplay or native visual parity.
 | Character skinning | Captured browser programs and bound draw streams demonstrate an eight-influence GPU skinning path. This is not per-mesh identity, morph activation, pixel correctness or a measured FPS improvement. |
 | Weapons and other assets | The dedicated Enforcer repair passed native Apply/fresh Verify, a new cook and package, and a browser roundtrip. The starting first-person gun now visibly has blue/metallic material detail in the captured scene instead of the earlier gray fallback. This is a bounded visual improvement, not a native-reference match. All six ordinary shader resources passed (15/16/16 samplers for each view); geometry and other slots were preserved. The preceding Grenade repair remains included, but its browser appearance is not yet verified. Other weapons, foot shadows, lighting, effects, animation and placement fidelity remain open. |
 
+A new [read-only Sniper consumer report](compat/SNIPER-CONSUMER-REPORT.md) now
+passed native execution with 290 records and all fourteen selected/original root
+file hashes unchanged. It identifies the first-/third-person body assignments
+and their inherited material chain; separate emissive/decal slots and additional
+prototype consumers remain explicit. No Sniper repair or shader/visual acceptance
+is claimed. The playable server was restored after the diagnostic plugin build.
+
 The [Bio Rifle body and grenade-ammunition repair](compat/SUPPLEMENT-MATERIAL-REPAIR.md) now passed native Apply/fresh Verify, fresh cook, packaging and browser observation. Twelve shader resources passed at 15–16 samplers. Nine scoped assets were saved; protected source packages, mesh geometry and vertex colors were preserved. The first-person Bio body now visibly has dark metallic surface detail instead of the prior white-gray fallback. The grenade view also shows detailed exposed rounds. Different spawn positions and lighting prevent a pixel-equivalent comparison; native parity, third-person fidelity and normal pickup/combat remain unverified. Bio glass was excluded from that asset repair; the separate engine-path milestone below does not yet establish native visual parity.
 
 A newer, separate **scene-color diagnostic generation** completed its native/browser
