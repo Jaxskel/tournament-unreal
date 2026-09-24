@@ -8,7 +8,19 @@ from test_weapon_tessellation import compile_run
 CPP = Path(__file__).parent / 'UT4Html5Compat/Source/UT4Html5Compat/Private/UT4Html5Compat.cpp'
 PATTERN = r'    // EXPLICIT_MODE_ADMISSION_BEGIN\n(.*?)    // EXPLICIT_MODE_ADMISSION_END\n'
 
+def without_supplement_repair_dispatch(source):
+    blocks = ['#include "SupplementMaterialRepair.h"\n']
+    for mode, args in (('Preflight', 'false, true'), ('Apply', 'false'), ('Verify', 'true')):
+        blocks.append('    if (Mode.Equals(TEXT("SupplementMaterialRepair%s"), ESearchCase::IgnoreCase))\n        return SupplementMaterialRepair(Params, %s);\n' % (mode, args))
+    for block in blocks:
+        if source.count(block) != 1:
+            raise AssertionError('Expected one fixed supplement repair dispatch: ' + block)
+        source = source.replace(block, '')
+    return source
+
+
 def without_supplement_consumer_dispatch(source):
+    source = without_supplement_repair_dispatch(source)
     for block in ('#include "SupplementConsumerReport.h"\n',
                   '    if (Mode.Equals(TEXT("SupplementConsumerReport"), ESearchCase::IgnoreCase))\n        return SupplementConsumerReport(Params);\n'):
         if source.count(block) != 1:
@@ -124,6 +136,12 @@ def without_readonly_dispatches(source):
     return source
 
 class Admission(unittest.TestCase):
+    def test_supplement_repair_dispatch_inverse_and_admission(self):
+        source = CPP.read_text()
+        self.assertEqual(hashlib.sha256(without_supplement_repair_dispatch(source).encode()).hexdigest(), '1e164763c40fbe2b1e9b8365087cbecf371aba9cc172a9bd3b258ea24410709a')
+        for args in ('false, true', 'false', 'true'):
+            self.assertLess(source.index('// EXPLICIT_MODE_ADMISSION_END'), source.index('return SupplementMaterialRepair(Params, ' + args + ');'))
+
     def test_supplement_consumer_inverse_and_admission_order(self):
         source = CPP.read_text()
         self.assertEqual(hashlib.sha256(without_supplement_consumer_dispatch(source).encode()).hexdigest(),
