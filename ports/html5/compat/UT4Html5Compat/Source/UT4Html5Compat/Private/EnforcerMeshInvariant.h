@@ -48,9 +48,29 @@ struct FEnforcerMeshInvariant
         }
         return true;
     }
+    static bool ColorShape(const FSkeletalMeshVertexColorBuffer& B,uint32 Expected)
+    {
+        const uint32 N=B.GetNumVertices();
+        return N==0||(N==Expected&&N<=MaxVertices&&B.GetStride()==sizeof(FGPUSkinVertexColor));
+    }
+    static bool Colors(FDigest& D,const FSkeletalMeshVertexColorBuffer& B,uint32 Expected)
+    {
+        if(!ColorShape(B,Expected))return false;
+        const uint32 N=B.GetNumVertices();D.U32(N);
+        // Empty streams retain the old digest exactly. Native loading allocates
+        // color data with CPU access; editor/commandlet resource arrays do not discard it.
+        if(N)D.U32(B.GetStride());
+        for(uint32 I=0;I<N;++I)
+        {
+            const FColor& C=B.VertexColor(I);
+            D.U32(C.R);D.U32(C.G);D.U32(C.B);D.U32(C.A);
+        }
+        return true;
+    }
     static bool Snapshot(USkeletalMesh* Mesh,TSharedPtr<FJsonObject>& Out,FString& Error)
     {
-        Out.Reset(); FSkeletalMeshResource* R=Mesh?Mesh->GetImportedResource():nullptr;
+        Out.Reset(); if(!GIsEditor||!IsInGameThread()){Error=TEXT("editor game thread required");return false;}
+        FSkeletalMeshResource* R=Mesh?Mesh->GetImportedResource():nullptr;bool HasColors=false;
         if(!Mesh||!R||R->LODModels.Num()<1||R->LODModels.Num()>MAX_SKELETAL_MESH_LODS||Mesh->MorphTargets.Num()||Mesh->ClothingAssets.Num()||Mesh->Materials.Num()<1||Mesh->Materials.Num()>256)
         {Error=TEXT("mesh unavailable or morph/cloth unsupported");return false;}
         const FReferenceSkeleton& Ref=Mesh->RefSkeleton;
@@ -67,8 +87,12 @@ struct FEnforcerMeshInvariant
             if(!Lod.NumVertices||Lod.NumVertices>MaxVertices||Lod.Sections.Num()<1||Lod.Sections.Num()>4096||Lod.NumTexCoords>MAX_TEXCOORDS||
                Lod.VertexBufferGPUSkin.GetNumVertices()!=Lod.NumVertices||Lod.VertexBufferGPUSkin.GetNumTexCoords()!=Lod.NumTexCoords||!Lod.VertexBufferGPUSkin.IsVertexDataValid()||
                Lod.MorphTargetVertexInfoBuffers.GetNumInfluencedVerticesByMorphs()!=0||Lod.APEXClothVertexBuffer.GetNumVertices()!=0||
-               Lod.ColorVertexBuffer.GetNumVertices()!=0)
-            {Error=TEXT("LOD GPU/section metadata invalid");return false;}
+               !ColorShape(Lod.ColorVertexBuffer,Lod.NumVertices)||(Lod.ColorVertexBuffer.GetNumVertices()!=0&&!Mesh->bHasVertexColors))
+            {Error=FString::Printf(TEXT("LOD GPU/section metadata invalid: lod=%d vertices=%u sections=%d uv=%u gpuVertices=%u gpuUV=%u gpuValid=%d morph=%u cloth=%u colors=%u"),
+                L,Lod.NumVertices,Lod.Sections.Num(),uint32(Lod.NumTexCoords),Lod.VertexBufferGPUSkin.GetNumVertices(),
+                Lod.VertexBufferGPUSkin.GetNumTexCoords(),Lod.VertexBufferGPUSkin.IsVertexDataValid()?1:0,
+                Lod.MorphTargetVertexInfoBuffers.GetNumInfluencedVerticesByMorphs(),Lod.APEXClothVertexBuffer.GetNumVertices(),Lod.ColorVertexBuffer.GetNumVertices());return false;}
+            HasColors|=Lod.ColorVertexBuffer.GetNumVertices()!=0;
             uint64 SoftTotal=0;
             for(const FSkelMeshSection& S:Lod.Sections)
             {
@@ -118,7 +142,7 @@ struct FEnforcerMeshInvariant
             if(!Bulk(D,Lod.RawPointIndices)||!Bulk(D,Lod.LegacyRawPointIndices)){Error=TEXT("bulk read failed");return false;}
             const auto& G=Lod.VertexBufferGPUSkin;D.U32(G.GetNumVertices());D.U32(G.GetStride());D.U32(G.GetNumTexCoords());D.Bool(G.GetUseFullPrecisionUVs());D.Bool(G.HasExtraBoneInfluences());
             if(G.HasExtraBoneInfluences()?!GPU<true>(D,G):!GPU<false>(D,G)){Error=TEXT("GPU vertex payload unavailable");return false;}
-            D.U32(Lod.ColorVertexBuffer.GetNumVertices());
+            if(!Colors(D,Lod.ColorVertexBuffer,Lod.NumVertices)){Error=TEXT("color buffer shape changed");return false;}
         }
         Out=MRProperties(Mesh,true);if(!Out.IsValid()){Error=TEXT("reflected properties unavailable");return false;}
         // Materials is CPF_Transient in this engine: MRProperties deliberately omits it.
@@ -135,7 +159,7 @@ struct FEnforcerMeshInvariant
         }
         Out->SetArrayField(TEXT("material_slots"),Slots);
         Out->SetStringField(TEXT("invariant_sha1"),D.Finish());
-        Out->SetStringField(TEXT("coverage"),TEXT("raw/final skeleton and virtual-bone arrays; section flags; fieldwise CPU/import/index/adjacency/GPU skin data; padding excluded; nonempty morph/cloth/color GPU buffers rejected"));
+        Out->SetStringField(TEXT("coverage"),HasColors?TEXT("raw/final skeleton and virtual-bone arrays; section flags; fieldwise CPU/import/index/adjacency/GPU skin and RGBA color data; padding excluded; nonempty morph/cloth buffers rejected"):TEXT("raw/final skeleton and virtual-bone arrays; section flags; fieldwise CPU/import/index/adjacency/GPU skin data; padding excluded; nonempty morph/cloth/color GPU buffers rejected"));
         return true;
     }
 };

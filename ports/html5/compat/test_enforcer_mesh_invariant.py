@@ -109,6 +109,33 @@ int main(){
         self.assertIn("if(!N)return true", SRC)
         self.assertIn("Hash.Update", SRC)
 
+    def test_actual_color_shape_and_digest_preserve_empty_and_all_channels(self):
+        shape=body_after("static bool ColorShape(")
+        colors=body_after("static bool Colors(")
+        compile_run(r'''
+#include <cassert>
+#include <cstdint>
+#include <vector>
+using uint32=uint32_t;using uint8=uint8_t;
+constexpr uint32 MaxVertices=2000000;
+struct FColor{uint8 R=1,G=2,B=3,A=4;};
+struct FGPUSkinVertexColor{FColor VertexColor;};
+struct FSkeletalMeshVertexColorBuffer{
+ uint32 count=2,stride=4;mutable int reads=0;std::vector<FColor>values=std::vector<FColor>(2);
+ uint32 GetNumVertices()const{return count;}uint32 GetStride()const{return stride;}
+ const FColor&VertexColor(uint32 i)const{++reads;assert(i<values.size());return values[i];}
+};
+struct FDigest{std::vector<uint32>words;void U32(uint32 x){words.push_back(x);}};
+SHAPE
+COLORS
+int main(){
+ FSkeletalMeshVertexColorBuffer b;FDigest d;assert(Colors(d,b,2));assert(b.reads==2);assert(d.words==std::vector<uint32>({2,4,1,2,3,4,1,2,3,4}));
+ for(int v=0;v<2;++v)for(int c=0;c<4;++c){auto changed=b;auto&x=changed.values[v];switch(c){case 0:x.R=8;break;case 1:x.G=8;break;case 2:x.B=8;break;case 3:x.A=8;break;}FDigest other;assert(Colors(other,changed,2));assert(other.words!=d.words);}
+ for(int bad=0;bad<3;++bad){auto x=b;x.reads=0;if(bad==0)x.count=1;if(bad==1)x.stride=8;if(bad==2)x.count=MaxVertices+1;FDigest fail;assert(!Colors(fail,x,2));assert(x.reads==0&&fail.words.empty());}
+ b.count=0;b.stride=0;b.reads=0;FDigest empty;assert(Colors(empty,b,2));assert(empty.words==std::vector<uint32>({0}));assert(b.reads==0);
+}
+'''.replace('SHAPE',shape).replace('COLORS',colors))
+
     def test_snapshot_has_no_asset_mutators_or_serialization(self):
         for forbidden in ("->Serialize(", "->MarkPackageDirty(", "->Save(", "->Modify(", "->SetMaterial("):
             self.assertNotIn(forbidden, SRC)
