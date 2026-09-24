@@ -194,8 +194,9 @@ junctions and pinned build/preparation inputs.
 The corrected cross-load comparison normalizes only the exact persistent level's
 valid nonzero build-data GUID in a copied snapshot. Capture and save still require
 full raw equality with the initial in-process snapshot and a matching registry
-key. Fresh verification additionally requires the saved GUID, raw digest and HDR
-payload to survive synchronous loading. The original diagnostic's digest remains
+key. The initial verifier also required that editor raw digest on fresh load;
+the matched-load-state correction below replaces that inappropriate comparison.
+The original diagnostic's digest remains
 historical proof, rather than the new cross-process baseline. The canonical digest
 from both complete inspections is `4fb768cf9ba362b390affa07c74d3237ab88ab85`.
 
@@ -224,10 +225,46 @@ was saved or captured.
 
 The running-editor snapshot contains eighteen additional objects and initialized
 world transforms/editor helper fields. Thus its 78-object raw digest is not a
-valid synchronous-reload baseline. The current strict persistence verifier will
-remain held until it compares the appropriate load-state evidence while retaining
-full pre/post-save editor-state equality, the saved GUID, registry linkage and HDR
-payload checks. This is a verifier limitation discovered before any map write,
-not evidence of lost map objects. Public light-volume getters also do not expose
-all serialized samples; registry-content preservation needs an appropriate exported
-serializer or another verified readback path before it can be claimed.
+valid synchronous-reload baseline. This is a verifier limitation discovered before
+any map write, not evidence of lost map objects.
+
+The revised verifier requires those exact 60 original loaded rows, with only the
+saved nonzero GUID, its exact registry reference and one exact registry object
+added. It retains full 78-object raw equality within the editor capture/save.
+It separately fingerprints the registry through its exported serializer into an
+owned, bounded archive: uncooked, persistent saving, editor data retained, no
+transaction or object loading. Names and object references are encoded by string
+and path; external asset contents remain covered by the separate source audits.
+The fingerprint compares exact traversal bytes, not a claimed canonical ordering.
+The same hash, size and archive flags must survive capture, save and fresh reload.
+
+Nineteen focused local tests and the plugin-only Windows build passed. The new
+plugin DLL SHA-256 is
+`a6dcf199cb7cda9ff35c75e65b15f8f036afe59fe8475e4ffaefd6a89e91ed0b`.
+A normal-editor read-only registry probe then passed: 1,076 serialized bytes,
+matching original canonical 78-object snapshot, all 46 audited file/link rows
+unchanged, native exit 0 and complete owned-process drain. All nine downloaded
+evidence files matched their remote size/hash pins. It requested no explicit
+capture or package save. The output cap does not bound temporary allocations
+inside the engine serializer. This validates the fingerprint operation; it does
+not establish original legacy-to-editor migration equivalence, fresh-load
+persistence, useful rendered lighting or multiplayer acceptance.
+
+The subsequent save retry wrote the isolated map but failed its post-save
+invariant. It remains a failed operation despite native process exit 0.
+The registry hash/size/flags were identical immediately before capture and before
+save; the final registry fields are empty because an earlier check or the
+fingerprint operation failed. They do **not** establish changed registry bytes.
+The single compound post-save check does not identify the failing predicate.
+
+Only the selected Entry file changed among the 46 audited rows. The original,
+external backup, other maps and pinned inputs stayed unchanged; the owned process
+tree drained. The retained 62,417-byte map has SHA-256
+`4cbe5cc94d9d9da9cb9b3cb72f453286c8e7a0198e81885b46960d80c6cbe5ac`.
+Its tagged `LevelScriptActor` reference names `UT-Entry_C_0`, whereas the original
+and read-only editor snapshot name `UT-Entry_C_1`. Matching `UWorld::PreSaveRoot`
+source recompiles level Blueprints in a normal editor save. This is a concrete
+candidate for the raw-object mismatch, not a complete account of post-save changes.
+The captured HDR payload in this attempt also contains nonzero channels; that
+alone does not establish visual correctness. No fresh-load acceptance, cook,
+package promotion, reset or automatic retry follows from the failed save.

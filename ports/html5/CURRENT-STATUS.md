@@ -71,9 +71,20 @@ object initialization. The correction compiled successfully. Two synchronous ori
 then agreed on 60 objects, differing only in the generated GUID, with all files
 unchanged. The running editor has additional objects and initialized transform
 values, so fresh persistence verification must compare matching load states rather
-than those editor-only values. That verifier adjustment remains pending. No map
-save or fresh-load persistence result is claimed; matching cook/package and strict
-multiplayer rerun remain pending.
+than those editor-only values. The revised verifier and bounded registry serializer
+now passed 19 focused tests and a native plugin build. A further read-only editor
+probe serialized 1,076 bytes of registry data, retained the exact 78-object snapshot
+and all 46 audited file/link records, and exited with its owned process tree drained.
+This validates the fingerprint operation, not persistence or lighting fidelity.
+The next one-map save wrote the isolated Entry map but failed its post-save
+invariant. Registry fingerprints matched before capture and before save; the
+post-save fingerprint was not produced, so registry drift is not established.
+All 45 other audit rows stayed unchanged, and the owned process drained. The
+failed result, changed map and original backup are retained without rollback or
+promotion. The saved level-script actor name differs; the normal save path also
+recompiles the level Blueprint. A read-only inspection must identify the complete
+change before any acceptance decision. Fresh-load persistence, matching
+cook/package and strict multiplayer rerun remain pending.
 
 The latest private playable preview is **http://127.0.0.1:8081/index.html**.
 Its cook finished in 2,307.428 seconds with zero selected-family failures and zero

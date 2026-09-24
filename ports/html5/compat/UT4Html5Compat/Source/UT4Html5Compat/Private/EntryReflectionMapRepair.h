@@ -74,6 +74,30 @@ static bool ERMCanonical(const TMap<FString,FString>& Rows,FString& Digest,FStri
     TMap<FString,FString> Copy=Rows; Copy.FindChecked(ERMLevelPath)=Normalized;
     Digest=ERMRowsDigest(Copy); return true;
 }
+// Matched ORIGINAL synchronous-load snapshots: 60 objects, only generated GUID differs.
+static const TCHAR* ERMLoadedDigest=TEXT("ac7d121f2682ce525598ec3f9e990ca4ea1c6337");
+static const TCHAR* ERMLoaded1SHA1=TEXT("0113fb6a81bcf961d743db433c346a2fa0e046c1");
+static const TCHAR* ERMLoaded2SHA1=TEXT("306cde051c6b1d7201aa387be6b619492d193900");
+static const TCHAR* ERMPreservationContract=TEXT("ut4-entry-loaded60-registry-v1");
+// Exact reflected registry row from BOTH original editor inspections; custom data is separate.
+static const TCHAR* ERMRegistryRow=TEXT("/Script/Engine.MapBuildDataRegistry\nLevelLightingQuality[0]=(INVALID)\n");
+static bool ERMLoadedRowsAccepted(const TMap<FString,FString>& Rows,const FString& SavedGuid,FString& Digest)
+{
+    if (Rows.Num()!=61 || !ERMGuid(SavedGuid)) return false;
+    const FString* Registry=Rows.Find(ERMRegistryPath);
+    const FString* Level=Rows.Find(ERMLevelPath);
+    FString Normalized,Guid;
+    if (!Registry || *Registry!=ERMRegistryRow || !Level || !ERMCanonicalLevelRow(ERMLevelPath,*Level,Normalized,Guid) || Guid!=SavedGuid) return false;
+    const FString Expected=TEXT("\nMapBuildData[0]=MapBuildDataRegistry'/Game/RestrictedAssets/Maps/UT-Entry.MapBuildDataRegistry'\n");
+    const int32 At=Normalized.Find(Expected,ESearchCase::CaseSensitive);
+    if (At==INDEX_NONE || Normalized.Find(TEXT("\nMapBuildData["),ESearchCase::CaseSensitive)!=At ||
+        Normalized.Find(TEXT("\nMapBuildData["),ESearchCase::CaseSensitive,ESearchDir::FromStart,At+1)!=INDEX_NONE) return false;
+    // Only a COPY changes: remove the one new registry object/reference; GUID already canonical.
+    Normalized=Normalized.Left(At)+TEXT("\nMapBuildData[0]=\n")+Normalized.Mid(At+Expected.Len());
+    TMap<FString,FString> Copy=Rows; Copy.Remove(ERMRegistryPath); Copy.FindChecked(ERMLevelPath)=Normalized;
+    Digest=ERMRowsDigest(Copy); return Digest==ERMLoadedDigest;
+}
+
 static bool ERMRegistryLinked(UWorld* World,const FString& Guid)
 {
     if (!World || World->GetOutermost()->GetName()!=ERDPackage || !World->PersistentLevel || !ERMGuid(Guid)) return false;
@@ -114,6 +138,117 @@ static bool ERMObjectsEqual(const TMap<FString,FString>& A, const TMap<FString,F
     if (A.Num() != B.Num()) return false;
     for (const auto& KV : A) { const FString* V = B.Find(KV.Key); if (!V || *V != KV.Value) return false; }
     return true;
+}
+
+// Original bounded archive, no proxy or FMemoryWriter. Encoding is fingerprint-only,
+// not a package format: FNames are strings; UObject references are presence-byte + path.
+// Referenced asset CONTENT is outside this hash (launcher pins protect external inputs).
+// Exact traversal bytes are compared; no claim of canonical TMap/octree ordering.
+// The cap bounds output storage, not serializer-owned temporary allocations.
+// Equality starts at the migrated editor registry; it does not prove original legacy migration fidelity.
+// Read-only probe: add -EntryMapRegistryProbe to the normal -EntryMapInspectOnly route.
+static const TCHAR* ERMRegistrySchema=TEXT("ut4-entry-registry-bytes-v1");
+class FERMRegistryWriter : public FArchive
+{
+public:
+    TArray<uint8> Bytes;
+    int64 Position=0, Limit;
+    bool Failed=false;
+    const UObject* Subject;
+    UObject* Defaults;
+    FERMRegistryWriter(const UObject* InSubject,UObject* InDefaults,int64 InLimit=16*1024*1024)
+        : Limit(InLimit),Subject(InSubject),Defaults(InDefaults)
+    {
+        ArIsSaving=true; ArIsPersistent=true;
+        if (Limit<=0 || Limit>16*1024*1024) { Reject(); return; }
+        Bytes.Reserve(int32(Limit)); // bounded allocation; subsequent writes cannot exceed it
+    }
+    void Reject() { Failed=true; SetError(); }
+    virtual void Serialize(void* Data,int64 Num) override
+    {
+        if (Failed) return;
+        if (Num<0 || Position<0 || Position>Bytes.Num() || Position>Limit || Num>Limit-Position || (Num && !Data))
+        { Reject(); return; }
+        const int64 End=Position+Num;
+        if (End>Bytes.Num()) Bytes.SetNumUninitialized(int32(End),false);
+        if (Num) FMemory::Memcpy(Bytes.GetData()+Position,Data,SIZE_T(Num));
+        Position=End;
+    }
+    virtual void Seek(int64 Offset) override
+    {
+        if (Failed) return;
+        if (Offset<0 || Offset>Bytes.Num()) { Reject(); return; }
+        Position=Offset;
+    }
+    virtual int64 Tell() override { return Position; }
+    virtual int64 TotalSize() override { return Bytes.Num(); }
+    virtual FString GetArchiveName() const override { return TEXT("EntryRegistryFingerprintV1"); }
+    virtual void Preload(UObject*) override { Reject(); } // never load/create to satisfy serialization
+    virtual UObject* GetArchetypeFromLoader(const UObject* Object) override
+    {
+        if (Object!=Subject || !Defaults) Reject();
+        return Defaults; // prevalidated existing native CDO, avoiding GetArchetype fallback
+    }
+    using FArchive::operator<<;
+    virtual FArchive& operator<<(FName& Name) override
+    {
+        if (Failed) return *this;
+        FString Value=Name.ToString();
+        if (Value.Len()>4096) { Reject(); return *this; }
+        static_cast<FArchive&>(*this) << Value; return *this;
+    }
+    virtual FArchive& operator<<(UObject*& Object) override
+    {
+        if (Failed) return *this;
+        uint8 Present=Object ? 1 : 0; Serialize(&Present,1);
+        if (Failed) return *this;
+        FString Value=Object ? Object->GetPathName() : FString();
+        if (Value.Len()>4096) { Reject(); return *this; }
+        static_cast<FArchive&>(*this) << Value; return *this;
+    }
+    bool FlagsOK() const
+    {
+        return ArIsSaving && ArIsPersistent && !ArIsLoading && !ArIsTransacting && !ArWantBinaryPropertySerialization &&
+            !ArIsFilterEditorOnly && !ArIsSaveGame && !ArNoDelta && ArPortFlags==0 && !CookingTarget() &&
+            !ArIsCountingMemory && !ArIsObjectReferenceCollector && !ArIsModifyingWeakAndStrongReferences &&
+            !ArAllowLazyLoading && !ArShouldSkipBulkData && !ArUseCustomPropertyList && !ArCustomPropertyList &&
+            !ArForceByteSwapping && !ArForceUnicode && !ArSerializingDefaults;
+    }
+    FString FlagsText() const
+    {
+        return FString::Printf(TEXT("saving=1;persistent=1;loading=0;transaction=0;binary=0;editor_filtered=0;savegame=0;nodelta=0;port=0;cooking=0;collector=0;counting=0;modifyrefs=0;lazy=0;skipbulk=0;customlist=0;swap=0;unicode=0;defaults=0;ue4=%d;licensee=%d;custom=current-registered"),UE4Ver(),LicenseeUE4Ver());
+    }
+};
+static bool ERMRegistryFingerprint(UWorld* World,UReflectionCaptureComponent* Target,const FString& Guid,
+    FString& Hash,int64& Size,FString& Flags)
+{
+    if (!ERMRegistryLinked(World,Guid) || !IsInGameThread()) return false;
+    UMapBuildDataRegistry* Registry=World->PersistentLevel->MapBuildData;
+    UClass* Class=Registry->GetClass(); UObject* Defaults=Class->GetDefaultObject(false);
+    const EObjectFlags Pending=EObjectFlags(RF_NeedLoad | RF_NeedPostLoad | RF_NeedPostLoadSubobjects);
+    if (!Defaults || Defaults->GetClass()!=Class || !Defaults->HasAnyFlags(RF_ClassDefaultObject) ||
+        Registry->HasAnyFlags(Pending) || Class->HasAnyFlags(Pending) || Defaults->HasAnyFlags(Pending)) return false;
+    TMap<FString,FString> Before,After; FString BeforeDigest,AfterDigest;
+    if (!FERDState::Snapshot(World,Target,Before,BeforeDigest)) return false;
+    const bool Dirty=World->GetOutermost()->IsDirty();
+    FERMRegistryWriter Writer(Registry,Defaults);
+    if (!Writer.FlagsOK() || Writer.Failed) return false;
+    const FString InitialFlags=Writer.FlagsText();
+    Registry->Serialize(Writer); // ENGINE_API entry: private sample serializers remain inside Engine
+    if (Writer.Failed || Writer.IsError() || Writer.IsCriticalError() || !Writer.FlagsOK() || Writer.FlagsText()!=InitialFlags ||
+        Writer.Tell()!=Writer.TotalSize() || Writer.TotalSize()<=0 || !ERMRegistryLinked(World,Guid) ||
+        World->PersistentLevel->MapBuildData!=Registry || World->GetOutermost()->IsDirty()!=Dirty ||
+        !FERDState::Snapshot(World,Target,After,AfterDigest) || BeforeDigest!=AfterDigest || !ERMObjectsEqual(Before,After)) return false;
+    Size=Writer.Bytes.Num(); Flags=InitialFlags;
+    FSHA1 SHA; SHA.Update(Writer.Bytes.GetData(),Writer.Bytes.Num()); SHA.Final(); uint8 Out[20]; SHA.GetHash(Out);
+    Hash=BytesToHex(Out,20).ToLower(); return true;
+}
+
+static void ERMFingerprintFields(const TSharedPtr<FJsonObject>& J,const FString& Hash,int64 Size,const FString& Flags)
+{
+    J->SetStringField(TEXT("registry_schema"),ERMRegistrySchema);
+    J->SetStringField(TEXT("registry_sha1"),Hash); J->SetNumberField(TEXT("registry_bytes"),double(Size));
+    J->SetStringField(TEXT("registry_archive_flags"),Flags);
 }
 
 struct FERMReceipt
@@ -203,6 +338,9 @@ static TSharedPtr<FJsonObject> ERMRecord(const TCHAR* Mode, const TCHAR* Kind, c
     J->SetStringField(TEXT("package"),ERDPackage); J->SetStringField(TEXT("source_receipt_sha1"),R.ReceiptSHA1);
     J->SetStringField(TEXT("selected"),R.Selected);
     J->SetBoolField(TEXT("visual_success_claim"),false);
+    J->SetStringField(TEXT("preservation_contract"),ERMPreservationContract);
+    J->SetStringField(TEXT("loaded_baseline_digest"),ERMLoadedDigest);
+    J->SetStringField(TEXT("loaded1_sha1"),ERMLoaded1SHA1); J->SetStringField(TEXT("loaded2_sha1"),ERMLoaded2SHA1);
     return J;
 }
 static bool ERMTarget(UWorld* World, bool Registered, UReflectionCaptureComponent*& Target)
@@ -227,11 +365,12 @@ struct FERMState : TSharedFromThis<FERMState>
     FERMEvidence Evidence;
     FERDState Capture; // Only the public snapshot/payload/pin/settings utilities are used.
     TMap<FString,FString> Authored;
-    FString InitialState, InitialRawDigest, InitialLevelGuid;
+    FString InitialState, InitialRawDigest, InitialLevelGuid, InitialRegistryHash, InitialRegistryFlags;
+    int64 InitialRegistryBytes=0;
     FDelegateHandle Ticker;
     double Started = 0;
     bool Finished = false, SaveAttempted = false;
-    bool InspectOnly = false;
+    bool InspectOnly = false, RegistryProbe = false;
     int32 Phase = 0;
     bool SettingsDisabled() const
     {
@@ -292,6 +431,7 @@ struct FERMState : TSharedFromThis<FERMState>
                 Summary->SetStringField(TEXT("expected_canonical_digest"),ERMCanonicalDigest);
                 Summary->SetStringField(TEXT("level_build_data_id"),LevelGuid);
                 Summary->SetBoolField(TEXT("registry_link_valid"),RegistryOK);
+                Summary->SetStringField(TEXT("registry_path"),RegistryOK ? ERMRegistryPath : TEXT(""));
                 Summary->SetStringField(TEXT("inspect1_sha1"),ERMInspect1SHA1);
                 Summary->SetStringField(TEXT("inspect2_sha1"),ERMInspect2SHA1);
                 Summary->SetBoolField(TEXT("baseline_matches"),SnapshotOK && Authored.Num()==78 && CanonicalOK && CanonicalDigest==ERMCanonicalDigest && RegistryOK);
@@ -310,7 +450,12 @@ struct FERMState : TSharedFromThis<FERMState>
                     }
                 }
                 Summary->SetBoolField(TEXT("snapshot_rows_complete"),RowsOK);
-                const bool InspectionOK = InspectOnly && RowsOK && Receipt.Before() && Capture.CheckMapPins() && SettingsDisabled();
+                FString ProbeHash,ProbeFlags; int64 ProbeBytes=0;
+                const bool ProbeOK=!RegistryProbe || (InspectOnly && RegistryOK &&
+                    ERMRegistryFingerprint(Capture.World,Capture.Target,LevelGuid,ProbeHash,ProbeBytes,ProbeFlags));
+                Summary->SetBoolField(TEXT("registry_probe_requested"),RegistryProbe);
+                if (RegistryProbe) ERMFingerprintFields(Summary,ProbeHash,ProbeBytes,ProbeFlags);
+                const bool InspectionOK = ProbeOK && InspectOnly && RowsOK && Receipt.Before() && Capture.CheckMapPins() && SettingsDisabled();
                 Finish(InspectionOK,InspectOnly ? TEXT("inspect only; no capture or save") : TEXT("authored baseline"),Summary);
                 return false; // Unconditional: inspect never reaches capture, PreSave or SavePackage.
             }
@@ -320,6 +465,12 @@ struct FERMState : TSharedFromThis<FERMState>
             if (InitialState.IsEmpty()) { Finish(false,TEXT("state ID")); return false; }
             Capture.WorldOwner = Capture.World; Capture.TargetOwner = Capture.Target;
             Capture.PackageDirtyBefore = Capture.World->GetOutermost()->IsDirty();
+            if (!ERMRegistryFingerprint(Capture.World,Capture.Target,InitialLevelGuid,InitialRegistryHash,InitialRegistryBytes,InitialRegistryFlags) ||
+                !SameAuthored() || !Receipt.Before() || !SettingsDisabled())
+            { Finish(false,TEXT("registry before capture")); return false; }
+            TSharedPtr<FJsonObject> RegistryBefore=ERMRecord(TEXT("save"),TEXT("registry_before_capture"),Receipt);
+            ERMFingerprintFields(RegistryBefore,InitialRegistryHash,InitialRegistryBytes,InitialRegistryFlags);
+            if (!Evidence.Emit(RegistryBefore)) { Finish(false,TEXT("registry evidence before capture")); return false; }
             Capture.Target->SetCaptureIsDirty();
             UReflectionCaptureComponent::UpdateReflectionCaptureContents(Capture.World);
             UObject* VirtualTarget = Capture.Target; VirtualTarget->PreSave(nullptr);
@@ -336,8 +487,13 @@ struct FERMState : TSharedFromThis<FERMState>
             SameAuthored(),Payload(PayloadHash,Brightness,Zeros),Capture.StateIdText()!=InitialState) ||
             Capture.World->GetOutermost()->IsDirty()!=Capture.PackageDirtyBefore)
         { Finish(false,TEXT("save admission")); return false; }
+        FString BeforeRegistryHash,BeforeRegistryFlags; int64 BeforeRegistryBytes=0;
+        if (!ERMRegistryFingerprint(Capture.World,Capture.Target,InitialLevelGuid,BeforeRegistryHash,BeforeRegistryBytes,BeforeRegistryFlags) ||
+            BeforeRegistryHash!=InitialRegistryHash || BeforeRegistryBytes!=InitialRegistryBytes || BeforeRegistryFlags!=InitialRegistryFlags || !SameAuthored())
+        { Finish(false,TEXT("registry drift before save")); return false; }
         const FString SavedState = Capture.StateIdText();
         TSharedPtr<FJsonObject> Before = ERMRecord(TEXT("save"),TEXT("before_save"),Receipt);
+        ERMFingerprintFields(Before,BeforeRegistryHash,BeforeRegistryBytes,BeforeRegistryFlags);
         Before->SetStringField(TEXT("payload_sha1"),PayloadHash); Before->SetStringField(TEXT("state_id"),SavedState);
         if (!Evidence.Emit(Before) || !Receipt.Before() || !SettingsDisabled()) { Finish(false,TEXT("pre-save evidence/pins")); return false; }
         SaveAttempted = true;
@@ -345,12 +501,15 @@ struct FERMState : TSharedFromThis<FERMState>
         const bool Saved = GEditor->SavePackage(Capture.World->GetOutermost(),Capture.World,RF_Standalone,*Receipt.Selected,
             GError,nullptr,false,false,SAVE_None,nullptr,FDateTime::MinValue(),false);
         FWURFile After;
-        FString PostHash,PostBrightness; int64 PostZeros = 0;
+        FString PostHash,PostBrightness,PostRegistryHash,PostRegistryFlags; int64 PostZeros = 0,PostRegistryBytes=0;
         const bool OK = Saved && Receipt.Fixed() && FWURFile::Inspect(Receipt.Selected,false,After) &&
             After.SHA1 != ERDMapSHA1 && After.Identity != Receipt.OriginalPin.Identity && After.Identity != Receipt.BackupPin.Identity &&
             SameAuthored() && Capture.StateIdText()==SavedState && Payload(PostHash,PostBrightness,PostZeros) &&
-            PostHash==PayloadHash && PostBrightness==Brightness && PostZeros==Zeros && SettingsDisabled();
+            PostHash==PayloadHash && PostBrightness==Brightness && PostZeros==Zeros && SettingsDisabled() &&
+            ERMRegistryFingerprint(Capture.World,Capture.Target,InitialLevelGuid,PostRegistryHash,PostRegistryBytes,PostRegistryFlags) &&
+            PostRegistryHash==InitialRegistryHash && PostRegistryBytes==InitialRegistryBytes && PostRegistryFlags==InitialRegistryFlags && SameAuthored();
         TSharedPtr<FJsonObject> J = ERMRecord(TEXT("save"),TEXT("complete"),Receipt);
+        ERMFingerprintFields(J,PostRegistryHash,PostRegistryBytes,PostRegistryFlags);
         J->SetStringField(TEXT("saved_map_sha1"),After.SHA1); J->SetStringField(TEXT("saved_identity"),After.Identity);
         J->SetStringField(TEXT("authored_digest"),InitialRawDigest);
         J->SetStringField(TEXT("canonical_digest"),ERMCanonicalDigest);
@@ -379,6 +538,8 @@ static int32 StartEntryReflectionMapSave(const FString& Params)
         if (FParse::Param(*Params,Flag)) return WFRStop(TEXT("entry-map-conflicting-mode"));
     TSharedPtr<FERMState> S = MakeShareable(new FERMState);
     S->InspectOnly=FParse::Param(*Params,TEXT("EntryMapInspectOnly"));
+    S->RegistryProbe=FParse::Param(*Params,TEXT("EntryMapRegistryProbe"));
+    if (S->RegistryProbe && !S->InspectOnly) return WFRStop(TEXT("entry-map-registry-probe-requires-inspect"));
     FString Output;
     if (!S->Receipt.Read(Params,true) || !FParse::Value(*Params,TEXT("EntryMapOutput="),Output) ||
         !S->Evidence.Open(Full(Output),S->Receipt)) return WFRStop(TEXT("entry-map-receipt/evidence"));
@@ -464,7 +625,7 @@ static int32 VerifyEntryReflectionMap(const FString& Params)
 {
     if (!GIsEditor || !IsRunningCommandlet() || !IsInGameThread() || !FApp::IsUnattended() ||
         !FApp::CanEverRender() || GMaxRHIFeatureLevel < ERHIFeatureLevel::SM4 ||
-        FParse::Param(*Params,TEXT("EntryMapInspectOnly")) ||
+        FParse::Param(*Params,TEXT("EntryMapInspectOnly")) || FParse::Param(*Params,TEXT("EntryMapRegistryProbe")) ||
         FParse::Param(*Params,TEXT("EntryReflectionMapSave")) || FParse::Param(*Params,TEXT("EntryReflectionDiagnostic")) ||
         !FParse::Param(*Params,TEXT("EntryReflectionMapVerify")) || FindPackage(nullptr,ERDPackage))
         return WFRStop(TEXT("entry-map-verify-mode/package-present"));
@@ -479,17 +640,30 @@ static int32 VerifyEntryReflectionMap(const FString& Params)
     FString Text; TArray<FString> Lines;
     if (!FFileHelper::LoadFileToString(Text,*ProofPath)) return WFRStop(TEXT("entry-map-proof-read"));
     Text.ParseIntoArrayLines(Lines,true);
-    if (Lines.Num()!=3) return WFRStop(TEXT("entry-map-proof-sequence"));
+    if (Lines.Num()!=4) return WFRStop(TEXT("entry-map-proof-sequence"));
     TSharedPtr<FJsonObject> Proof;
-    const TCHAR* Kinds[]={TEXT("begin"),TEXT("before_save"),TEXT("complete")};
-    for (int32 I=0;I<3;++I)
+    const TCHAR* Kinds[]={TEXT("begin"),TEXT("registry_before_capture"),TEXT("before_save"),TEXT("complete")};
+    FString ExpectedRegistryHash,ExpectedRegistryFlags; double ExpectedRegistryBytes=0;
+    for (int32 I=0;I<4;++I)
     {
         TSharedPtr<FJsonObject> Row;
         if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Lines[I]),Row) || !Row.IsValid() ||
             Str(Row,TEXT("schema"))!=TEXT("ut4-entry-map-result-v1") || Str(Row,TEXT("mode"))!=TEXT("save") ||
             Str(Row,TEXT("kind"))!=Kinds[I] || Str(Row,TEXT("package"))!=ERDPackage ||
-            Str(Row,TEXT("source_receipt_sha1"))!=R.ReceiptSHA1 || Str(Row,TEXT("selected"))!=R.Selected)
+            Str(Row,TEXT("source_receipt_sha1"))!=R.ReceiptSHA1 || Str(Row,TEXT("selected"))!=R.Selected ||
+            Str(Row,TEXT("preservation_contract"))!=ERMPreservationContract || Str(Row,TEXT("loaded_baseline_digest"))!=ERMLoadedDigest ||
+            Str(Row,TEXT("loaded1_sha1"))!=ERMLoaded1SHA1 || Str(Row,TEXT("loaded2_sha1"))!=ERMLoaded2SHA1)
             return WFRStop(TEXT("entry-map-proof-content"));
+        if (I>0)
+        {
+            double Size=0;
+            if (Str(Row,TEXT("registry_schema"))!=ERMRegistrySchema || !ERMSHA1(Str(Row,TEXT("registry_sha1"))) ||
+                !Row->TryGetNumberField(TEXT("registry_bytes"),Size) || Size<=0 || Size>16*1024*1024 || Size!=double(int64(Size)) ||
+                Str(Row,TEXT("registry_archive_flags")).IsEmpty()) return WFRStop(TEXT("entry-map-registry-proof"));
+            if (I==1) { ExpectedRegistryHash=Str(Row,TEXT("registry_sha1")); ExpectedRegistryFlags=Str(Row,TEXT("registry_archive_flags")); ExpectedRegistryBytes=Size; }
+            else if (Str(Row,TEXT("registry_sha1"))!=ExpectedRegistryHash || Str(Row,TEXT("registry_archive_flags"))!=ExpectedRegistryFlags || Size!=ExpectedRegistryBytes)
+                return WFRStop(TEXT("entry-map-registry-proof-drift"));
+        }
         Proof=Row;
     }
     double Objects=0,Dimension=0,Zeros=0; bool Attempted=false;
@@ -511,14 +685,16 @@ static int32 VerifyEntryReflectionMap(const FString& Params)
     UWorld* World=Package ? UWorld::FindWorldInPackage(Package) : nullptr;
     FERDState Capture; Capture.World=World;
     bool OK=World && ERMTarget(World,false,Capture.Target);
-    FString Digest,Payload,Brightness,CanonicalDigest,LevelGuid; int32 ActualDimension=0; int64 ActualZeros=0; TMap<FString,FString> ObjectsNow;
+    FString Digest,Payload,Brightness,CanonicalDigest,LevelGuid,RegistryHash,RegistryFlags; int32 ActualDimension=0; int64 ActualZeros=0,RegistryBytes=0; TMap<FString,FString> ObjectsNow;
     if (OK)
     {
         Brightness=ERMBrightness(Capture.Target);
-        OK=FERDState::Snapshot(World,Capture.Target,ObjectsNow,Digest) && ObjectsNow.Num()==78 &&
-            ERMCanonical(ObjectsNow,CanonicalDigest,LevelGuid) && CanonicalDigest==ERMCanonicalDigest &&
-            ERMReloadIdentity(Digest,Str(Proof,TEXT("authored_digest")),LevelGuid,Str(Proof,TEXT("saved_level_guid"))) &&
+        OK=FERDState::Snapshot(World,Capture.Target,ObjectsNow,Digest) && ObjectsNow.Num()==61 &&
+            ERMCanonical(ObjectsNow,CanonicalDigest,LevelGuid) && LevelGuid==Str(Proof,TEXT("saved_level_guid")) &&
+            ERMLoadedRowsAccepted(ObjectsNow,Str(Proof,TEXT("saved_level_guid")),CanonicalDigest) &&
             ERMRegistryLinked(World,LevelGuid) &&
+            ERMRegistryFingerprint(World,Capture.Target,LevelGuid,RegistryHash,RegistryBytes,RegistryFlags) &&
+            RegistryHash==ExpectedRegistryHash && double(RegistryBytes)==ExpectedRegistryBytes && RegistryFlags==ExpectedRegistryFlags &&
             Capture.ValidatePayload(Payload,ActualDimension,ActualZeros) && ActualDimension==128 &&
             Payload==Str(Proof,TEXT("payload_sha1")) && Capture.StateIdText()==Str(Proof,TEXT("state_id")) &&
             !Brightness.IsEmpty() && Brightness==Str(Proof,TEXT("brightness_bits")) && double(ActualZeros)==Zeros;
@@ -526,6 +702,7 @@ static int32 VerifyEntryReflectionMap(const FString& Params)
     OK=OK && R.Before() && ERMUnchanged(ProofPin);
     TSharedPtr<FJsonObject> J=ERMRecord(TEXT("verify"),TEXT("complete"),R);
     J->SetStringField(TEXT("status"),OK ? TEXT("verified") : TEXT("failed"));
+    ERMFingerprintFields(J,RegistryHash,RegistryBytes,RegistryFlags);
     J->SetStringField(TEXT("save_proof_sha1"),ProofSHA); J->SetStringField(TEXT("saved_map_sha1"),R.SelectedPin.SHA1);
     J->SetStringField(TEXT("authored_digest"),Digest); J->SetStringField(TEXT("payload_sha1"),Payload);
     J->SetStringField(TEXT("brightness_bits"),Brightness); J->SetNumberField(TEXT("dimension"),ActualDimension);

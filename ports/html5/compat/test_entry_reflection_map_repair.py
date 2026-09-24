@@ -87,7 +87,7 @@ template<class T> using TSharedPtr=std::shared_ptr<T>;
 template<class T> struct TArray:std::vector<T>{void Sort(){std::sort(this->begin(),this->end());}};
 struct FJsonObject{void SetBoolField(const char*,bool){} void SetNumberField(const char*,int){} void SetStringField(const char*,const FString&){} };
 struct ReceiptStub{bool ok=true;bool Before(){return ok;}} Receipt;
-struct CaptureStub{int World=0;bool CheckMapPins(){return Receipt.ok;}} Capture;
+struct CaptureStub{int World=0;void* Target=nullptr;bool CheckMapPins(){return Receipt.ok;}} Capture;
 bool SettingsDisabled(){return Receipt.ok;}
 TSharedPtr<FJsonObject> ERMRecord(const char*,const char*,ReceiptStub&){return std::make_shared<FJsonObject>();}
 struct AuthoredStub{int count=78;int Num(){return count;}void GetKeys(TArray<FString>& k){k.push_back("object");} FString FindChecked(const FString&){return "exact row";}} Authored;
@@ -95,11 +95,15 @@ struct EvidenceStub{bool ok=true;int calls=0;bool Emit(TSharedPtr<FJsonObject>,i
 bool finished=false,success=false;
 void Finish(bool ok,const char*,TSharedPtr<FJsonObject>){finished=true;success=ok;}
 const FString ERMCanonicalDigest="baseline";
+const char* ERMRegistryPath="registry";
 const char* ERMInspect1SHA1="proof1";const char* ERMInspect2SHA1="proof2";
 FString sourceDigest;bool registry;
 bool ERMCanonical(AuthoredStub&,FString& out,FString& guid){out=sourceDigest;guid="guid";return true;}
 bool ERMRegistryLinked(int,const FString&){return registry;}
-bool branch(bool InspectOnly,bool SnapshotOK,FString Digest){sourceDigest=Digest;
+void ERMFingerprintFields(TSharedPtr<FJsonObject>,const FString&,long long,const FString&){}
+bool ERMRegistryFingerprint(int,void*,const FString&,FString&,long long&,FString&){return true;}
+using int64=long long;
+bool branch(bool InspectOnly,bool SnapshotOK,FString Digest){bool RegistryProbe=false;sourceDigest=Digest;
 ''' + block + r'''
 return true;}
 int main(){for(int mask=0;mask<128;++mask){
@@ -188,7 +192,7 @@ template<class K,class V>struct TMap:std::vector<Item>{
  int Num()const{return this->size();}const V* Find(const K& key)const{for(auto& x:*this)if(x.Key==key)return &x.Value;return nullptr;}
 };
 '''
-        source=self.canonical_fixture()+extra+section(self.text,'static bool ERMSHA1(', '// Cross-run proof:')+section(self.text,'static bool ERMReloadIdentity(', 'static bool ERMSame(')+section(self.text,'static bool ERMObjectsEqual(', 'struct FERMReceipt')
+        source=self.canonical_fixture()+extra+section(self.text,'static bool ERMSHA1(', '// Cross-run proof:')+section(self.text,'static bool ERMReloadIdentity(', 'static bool ERMSame(')+section(self.text,'static bool ERMObjectsEqual(', '// Original bounded archive,')
         compile_run(source+r'''
 int main(){TMap<FString,FString>a;a.push_back({"level","raw-guid-A"});auto b=a;
 assert(ERMObjectsEqual(a,b));b[0].Value="raw-guid-B";assert(!ERMObjectsEqual(a,b));
@@ -202,7 +206,7 @@ assert(!ERMReloadIdentity(raw,raw,guid,other));assert(!ERMReloadIdentity(raw,raw
         self.assertIn('Digest == InitialRawDigest && ERMObjectsEqual(Authored,Now)',same)
         self.assertIn('ERMRegistryLinked(Capture.World,InitialLevelGuid)',same)
         verify=self.text.split('static int32 VerifyEntryReflectionMap(',1)[1]
-        self.assertIn('ERMReloadIdentity(Digest,Str(Proof,TEXT("authored_digest")),LevelGuid,Str(Proof,TEXT("saved_level_guid")))',verify)
+        self.assertIn('ERMLoadedRowsAccepted(ObjectsNow,Str(Proof,TEXT("saved_level_guid")),CanonicalDigest)',verify)
 
     def test_loaded_inspect_original_only_no_save_proof_and_no_mutations(self):
         loaded=section(self.text,'static int32 ERMInspectLoadedOriginal(', '// Synchronous commandlet-only')
@@ -280,6 +284,169 @@ int main(){
  assert(ERMInspectLoadedOriginal("")==3);assert(loads==1);assert(!completed->flags["snapshot_rows_complete"]);
 }
 ''')
+
+    def test_actual_loaded61_contract_with_pinned60_and78_rows(self):
+        root=HERE.parents[4]/'work/ut4-html5/entry-reflection-save'
+        snapshots=[]
+        for folder,pin in [('inspect-loaded-1','0113fb6a81bcf961d743db433c346a2fa0e046c1'),('inspect-loaded-2','306cde051c6b1d7201aa387be6b619492d193900'),('inspect1','cf5e348674462e227410397e4333dec8503b457d')]:
+            raw=(root/folder/'inspect.jsonl').read_bytes();self.assertEqual(hashlib.sha1(raw).hexdigest(),pin)
+            snapshots.append([json.loads(x) for x in raw.decode().splitlines()][1:-1])
+            keys=[r['object_path'] for r in snapshots[-1]]
+            self.assertEqual(keys,sorted(keys,key=str.lower)) # fixture shim must match pinned native order
+            self.assertIn(pin,self.text)
+        registry='/Script/Engine.MapBuildDataRegistry\nLevelLightingQuality[0]=(INVALID)\n'
+        self.assertEqual(hashlib.sha1(registry.encode('utf-16le')).hexdigest(),'c60ae14ddad45b2c783be42abaf2dc3791554b2a')
+        shim=r'''
+#include <cassert>
+#include <cstdint>
+#include <string>
+#include <vector>
+#include <map>
+#include <algorithm>
+#define TEXT(x) u##x
+using int32=int;using TCHAR=char16_t;using uint8=uint8_t;using uint32=uint32_t;
+const int INDEX_NONE=-1;
+namespace ESearchCase{enum Type{CaseSensitive};}namespace ESearchDir{enum Type{FromStart};}
+struct FString:std::u16string{
+ using std::u16string::u16string;FString(const std::u16string&s):std::u16string(s){}int Len()const{return size();}
+ const TCHAR*operator*()const{return c_str();}bool StartsWith(const FString&p,ESearchCase::Type)const{return compare(0,p.size(),p)==0;}
+ int Find(const FString&p,ESearchCase::Type,ESearchDir::Type=ESearchDir::FromStart,int at=0)const{auto n=find(p,at);return n==npos?-1:int(n);}
+ FString Mid(int at,int n=-1)const{return substr(at,n<0?npos:n);}FString Left(int n)const{return substr(0,n);}
+ FString ToLower()const{FString r=*this;for(auto&c:r)if(c>=u'A'&&c<=u'Z')c+=32;return r;}
+};
+template<class T>struct TArray:std::vector<T>{void Sort(){std::sort(this->begin(),this->end(),[](const T&a,const T&b){return a.ToLower()<b.ToLower();});}};
+template<class K,class V>struct TMap:std::map<K,V>{
+ int Num()const{return this->size();}void Add(const K&k,const V&v){(*this)[k]=v;}void Remove(const K&k){this->erase(k);}
+ void GetKeys(TArray<K>&out)const{for(auto&p:*this)out.push_back(p.first);}V&FindChecked(const K&k){return this->at(k);}const V&FindChecked(const K&k)const{return this->at(k);}
+ const V*Find(const K&k)const{auto i=this->find(k);return i==this->end()?nullptr:&i->second;}
+};
+// Independent test SHA1, using standard 80-round definition, not production helper code.
+struct FSHA1{
+ std::vector<uint8>b;uint32 h[5]={0x67452301,0xefcdab89,0x98badcfe,0x10325476,0xc3d2e1f0};
+ static uint32 rol(uint32 x,int n){return (x<<n)|(x>>(32-n));}
+ void Update(const uint8*p,int n){b.insert(b.end(),p,p+n);}
+ void Final(){uint64_t bits=b.size()*8;b.push_back(128);while(b.size()%64!=56)b.push_back(0);for(int i=7;i>=0;--i)b.push_back(bits>>(i*8));
+ for(size_t o=0;o<b.size();o+=64){uint32 w[80];for(int i=0;i<16;++i)w[i]=(uint32(b[o+i*4])<<24)|(uint32(b[o+i*4+1])<<16)|(uint32(b[o+i*4+2])<<8)|b[o+i*4+3];
+ for(int i=16;i<80;++i)w[i]=rol(w[i-3]^w[i-8]^w[i-14]^w[i-16],1);
+ uint32 a=h[0],c=h[2],d=h[3],e=h[4],bb=h[1];for(int i=0;i<80;++i){uint32 f,k;
+ if(i<20){f=(bb&c)|(~bb&d);k=0x5a827999;}else if(i<40){f=bb^c^d;k=0x6ed9eba1;}else if(i<60){f=(bb&c)|(bb&d)|(c&d);k=0x8f1bbcdc;}else{f=bb^c^d;k=0xca62c1d6;}
+ uint32 t=rol(a,5)+f+e+k+w[i];e=d;d=c;c=rol(bb,30);bb=a;a=t;}h[0]+=a;h[1]+=bb;h[2]+=c;h[3]+=d;h[4]+=e;}}
+ void GetHash(uint8*out){for(int i=0;i<20;++i)out[i]=h[i/4]>>(24-8*(i%4));}
+};
+FString BytesToHex(const uint8*p,int n){FString r;const char16_t*hex=u"0123456789abcdef";for(int i=0;i<n;++i){r+=hex[p[i]>>4];r+=hex[p[i]&15];}return r;}
+const TCHAR* ERMLevelPath=TEXT("/Game/RestrictedAssets/Maps/UT-Entry.UT-Entry:PersistentLevel");
+const TCHAR* ERMRegistryPath=TEXT("/Game/RestrictedAssets/Maps/UT-Entry.MapBuildDataRegistry");
+'''
+        code=shim+section(self.text,'static bool ERMGuid(', 'static bool ERMRegistryLinked(')
+        for number,rows in enumerate(snapshots):
+            code+=f'\nTMap<FString,FString> fixture{number}(){{TMap<FString,FString> rows;\n'
+            for row in rows:code+='rows.Add(TEXT('+json.dumps(row['object_path'])+'),TEXT('+json.dumps(row['snapshot_row'])+'));\n'
+            code+='return rows;}\n'
+        code+=r'''
+TMap<FString,FString> after(TMap<FString,FString> rows){
+ rows.Add(ERMRegistryPath,ERMRegistryRow);
+ FString level=rows.FindChecked(ERMLevelPath),normal,guid;
+ assert(ERMCanonicalLevelRow(ERMLevelPath,level,normal,guid));
+ auto at=level.find(guid);level.replace(at,32,u"11111111111111111111111111111111");
+ auto map=level.find(u"MapBuildData[0]=\n");assert(map!=FString::npos);
+ level.replace(map,FString(u"MapBuildData[0]=\n").size(),u"MapBuildData[0]=MapBuildDataRegistry'/Game/RestrictedAssets/Maps/UT-Entry.MapBuildDataRegistry'\n");
+ rows.FindChecked(ERMLevelPath)=level;return rows;
+}
+int main(){FString digest,guid=TEXT("11111111111111111111111111111111");
+ for(auto original:{fixture0(),fixture1()}){
+ assert(original.Num()==60);FString canonical,oldGuid;assert(ERMCanonical(original,canonical,oldGuid));assert(canonical==ERMLoadedDigest);
+ auto valid=after(original);assert(valid.Num()==61);assert(ERMLoadedRowsAccepted(valid,guid,digest));assert(digest==ERMLoadedDigest);
+ assert(!ERMLoadedRowsAccepted(original,guid,digest));assert(!ERMLoadedRowsAccepted(valid,TEXT("22222222222222222222222222222222"),digest));
+ auto bad=valid;bad.Remove(ERMRegistryPath);assert(!ERMLoadedRowsAccepted(bad,guid,digest));
+ bad=valid;bad.Add(TEXT("extra-registry"),ERMRegistryRow);assert(!ERMLoadedRowsAccepted(bad,guid,digest));
+ bad=valid;bad.FindChecked(ERMRegistryPath)=TEXT("/Script/Engine.MapBuildDataRegistry\nLevelLightingQuality[0]=Production\n");assert(!ERMLoadedRowsAccepted(bad,guid,digest));
+ bad=valid;bad.Remove(ERMRegistryPath);bad.Add(TEXT("wrong-registry-path"),ERMRegistryRow);assert(!ERMLoadedRowsAccepted(bad,guid,digest));
+ bad=valid;auto&row=bad.FindChecked(ERMLevelPath);row+=TEXT("UnexpectedAuthoredProperty[0]=True\n");assert(!ERMLoadedRowsAccepted(bad,guid,digest));
+ bad=valid;auto&wrong=bad.FindChecked(ERMLevelPath);wrong.replace(wrong.find(u"MapBuildDataRegistry'"),20,u"WrongBuildDataType___");assert(!ERMLoadedRowsAccepted(bad,guid,digest));
+ bad=valid;bad.FindChecked(ERMLevelPath)+=TEXT("MapBuildData[0]=\n");assert(!ERMLoadedRowsAccepted(bad,guid,digest));
+ }
+ assert(!ERMLoadedRowsAccepted(fixture2(),guid,digest)); // Never accept raw 78 editor rows as loaded preservation.
+}
+'''
+        compile_run(code)
+
+    def test_actual_bounded_archive_cap_seek_backpatch_names_null_flags(self):
+        writer=section(self.text,'class FERMRegistryWriter :', 'static bool ERMRegistryFingerprint(')
+        compile_run(r'''
+#include <cassert>
+#include <cstdint>
+#include <cstddef>
+#include <cstring>
+#include <climits>
+#include <string>
+#include <vector>
+#include <cstdarg>
+#define TEXT(x) x
+using int64=int64_t;using int32=int32_t;using uint8=uint8_t;using SIZE_T=size_t;
+struct FString:std::string{using std::string::string;FString(const std::string&s):std::string(s){}int Len()const{return size();}
+ static FString Printf(const char*fmt,...){char out[1024];va_list a;va_start(a,fmt);vsnprintf(out,sizeof(out),fmt,a);va_end(a);return out;}};
+struct FName{FString s;FString ToString(){return s;}};
+struct UObject{FString path;int calls=0;FString GetPathName(){++calls;return path;}};
+template<class T>struct TArray:std::vector<T>{void Reserve(int32 n){this->reserve(n);}int Num()const{return this->size();}void SetNumUninitialized(int32 n,bool){this->resize(n);}T* GetData(){return this->data();}};
+struct FMemory{static void Memcpy(void*a,const void*b,size_t n){memcpy(a,b,n);}};
+struct FArchive{
+ bool ArIsSaving=false,ArIsPersistent=false,ArIsLoading=false,ArIsTransacting=false,ArWantBinaryPropertySerialization=false,
+ ArIsFilterEditorOnly=false,ArIsSaveGame=false,ArNoDelta=false,ArIsCountingMemory=false,ArIsObjectReferenceCollector=false,
+ ArIsModifyingWeakAndStrongReferences=false,ArAllowLazyLoading=false,ArShouldSkipBulkData=false,ArUseCustomPropertyList=false,
+ ArForceByteSwapping=false,ArForceUnicode=false,ArSerializingDefaults=false,error=false;
+ unsigned ArPortFlags=0;void*ArCustomPropertyList=nullptr;int version=500;
+ virtual ~FArchive(){}virtual void Serialize(void*,int64)=0;virtual void Seek(int64)=0;virtual int64 Tell()=0;virtual int64 TotalSize()=0;
+ virtual FString GetArchiveName()const{return "";}virtual void Preload(UObject*){}virtual UObject*GetArchetypeFromLoader(const UObject*){return nullptr;}
+ virtual FArchive&operator<<(FName&){return *this;}virtual FArchive&operator<<(UObject*&){return *this;}
+ void SetError(){error=true;}void*CookingTarget()const{return nullptr;}int UE4Ver()const{return version;}int LicenseeUE4Ver()const{return 0;}
+};
+FArchive& operator<<(FArchive& a,FString& s){int32 n=s.size();a.Serialize(&n,4);if(n)a.Serialize(&s[0],n);return a;}
+''' + writer + r'''
+int main(){
+ UObject subject{"subject"},defaults{"defaults"};uint8 b[8]={1,2,3,4,5,6,7,8};
+ FERMRegistryWriter w(&subject,&defaults,8);assert(w.FlagsOK());auto flags=w.FlagsText();
+ assert(flags.find("port=0")!=FString::npos);assert(flags.find("nodelta=0")!=FString::npos);
+ w.Serialize(b,8);assert(w.TotalSize()==8);w.Seek(2);uint8 patch=99;w.Serialize(&patch,1);w.Seek(8);
+ assert(w.Bytes[2]==99);assert(w.Tell()==8);assert(!w.Failed);
+ w.Serialize(b,1);assert(w.Failed);auto old=w.Bytes;w.Seek(0);w.Serialize(b,8);assert(w.Bytes==old);
+ for(int which=0;which<5;++which){FERMRegistryWriter x(&subject,&defaults,8);
+ if(which==0)x.Seek(-1);if(which==1)x.Seek(1);if(which==2)x.Serialize(b,-1);if(which==3)x.Serialize(b,INT64_MAX);if(which==4)x.Serialize(nullptr,1);
+ assert(x.Failed);assert(x.TotalSize()==0);x.Seek(0);x.Serialize(b,1);assert(x.TotalSize()==0);}
+ FERMRegistryWriter invalid(&subject,&defaults,INT64_MAX);assert(invalid.Failed);assert(invalid.Bytes.capacity()==0);
+ FERMRegistryWriter names(&subject,&defaults,256);FName name{"Actor_12"};names<<name;
+ assert(names.TotalSize()==12);assert(memcmp(names.Bytes.GetData()+4,"Actor_12",8)==0);
+ UObject* null=nullptr;auto at=names.Tell();names<<null;assert(names.Bytes[at]==0);assert(names.TotalSize()==at+5);
+ UObject* ptr=&subject;at=names.Tell();names<<ptr;assert(names.Bytes[at]==1);assert(subject.calls==1);assert(ptr==&subject);
+ assert(names.GetArchetypeFromLoader(&subject)==&defaults);names.Preload(&subject);assert(names.Failed);
+ FERMRegistryWriter other(&subject,&defaults,8);other.GetArchetypeFromLoader(&defaults);assert(other.Failed);
+ FERMRegistryWriter f(&subject,&defaults,8);f.ArPortFlags=1;assert(!f.FlagsOK());f.ArPortFlags=0;f.ArNoDelta=true;assert(!f.FlagsOK());
+ f.ArNoDelta=false;f.ArIsLoading=true;assert(!f.FlagsOK());f.ArIsLoading=false;f.ArIsFilterEditorOnly=true;assert(!f.FlagsOK());
+}
+''')
+
+    def test_registry_fingerprint_source_flags_and_proof_dominance(self):
+        helper=section(self.text,'static bool ERMRegistryFingerprint(', 'static void ERMFingerprintFields(')
+        self.assertIn('Class->GetDefaultObject(false)',helper)
+        self.assertIn('Registry->Serialize(Writer)',helper)
+        self.assertIn('Writer.FlagsText()!=InitialFlags',helper)
+        self.assertIn('!ERMObjectsEqual(Before,After)',helper)
+        self.assertIn('World->GetOutermost()->IsDirty()!=Dirty',helper)
+        self.assertNotIn('NewObject',helper);self.assertNotIn('PreSave(',helper)
+        tick=section(self.text,'    bool Tick(float)', 'static TSharedPtr<FERMState>')
+        self.assertLess(tick.index('InitialRegistryHash,InitialRegistryBytes,InitialRegistryFlags'),tick.index('Capture.Target->SetCaptureIsDirty()'))
+        self.assertLess(tick.index('BeforeRegistryHash!=InitialRegistryHash'),tick.index('GEditor->SavePackage('))
+        self.assertGreater(tick.index('PostRegistryHash==InitialRegistryHash'),tick.index('GEditor->SavePackage('))
+        self.assertIn('RegistryProbe && !S->InspectOnly',self.text)
+        verify=self.text.split('static int32 VerifyEntryReflectionMap(',1)[1]
+        self.assertIn('Lines.Num()!=4',verify)
+        self.assertIn('Str(Row,TEXT("preservation_contract"))!=ERMPreservationContract',verify)
+        self.assertIn('RegistryHash==ExpectedRegistryHash && double(RegistryBytes)==ExpectedRegistryBytes && RegistryFlags==ExpectedRegistryFlags',verify)
+        root=HERE.parents[4]/'work/ut4-html5/entry-reflection-save/level-source'
+        data=(root/'LazyObjectPtr.cpp').read_bytes()
+        self.assertEqual(hashlib.sha256(data).hexdigest(),'70477e9625394550e658c78c8c4990d87c28ce49550f299846fc7a8f3c86dd22')
+        saving=section(data.decode(),'if (Ar.IsSaving() || Ar.IsCountingMemory())','else if (Ar.IsLoading())')
+        self.assertIn('GuidAnnotation.GetAnnotation(Object)',saving)
+        self.assertIn('Ar.GetPortFlags() & PPF_DuplicateForPIE',saving)
 
     def test_registry_export_and_source_contract(self):
         root=HERE.parents[4]/'work/ut4-html5/weapon-sampler-review/usage-api-extra'
@@ -433,7 +600,7 @@ int main(){
         self.assertLess(verify.index('FindPackage('),verify.index('LoadPackage('))
         self.assertIn('ERMTarget(World,false,Capture.Target)',verify)
         self.assertIn('R.Before() && ERMUnchanged(ProofPin)',verify)
-        for token in ['Lines.Num()!=3','saved_map_sha1','source_receipt_sha1','saved_identity','payload_sha1','brightness_bits','state_id','ActualDimension==128','ObjectsNow.Num()==78']:
+        for token in ['Lines.Num()!=4','saved_map_sha1','source_receipt_sha1','saved_identity','payload_sha1','brightness_bits','state_id','ActualDimension==128','ObjectsNow.Num()==61']:
             self.assertIn(token,verify)
 
     def test_source_backed_save_and_load_api(self):
