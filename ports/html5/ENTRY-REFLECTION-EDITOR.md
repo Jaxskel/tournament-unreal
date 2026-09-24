@@ -355,3 +355,103 @@ Neither null field alone demonstrates loss of the serialized editor helper.
 These results do not change the raw failed save, permit broad property exclusions,
 or establish browser rendering or multiplayer success. A separate, exact-generation
 preservation review is required before using this afterimage for a fresh cook.
+
+
+## Controlled cook after exact-generation review
+
+A separate private, read-only adjudicator checks 150 pinned evidence/source files,
+the exact 60-to-61 reflected-object changes, registry/HDR equality, source-backed
+reference filtering and process/file audit continuity. Eleven adversarial tests
+passed. Its result permits a controlled cook experiment for the exact saved map;
+it explicitly retains the failed native save, false preservation acceptance and
+unverified script behavior. No general property exclusions or successful-save
+reclassification were introduced.
+
+The cook launcher passed twelve focused tests independently and on Windows,
+including atomic config staging, late file-identity drift, failed rename/fsync,
+and preservation of the primary exception when cleanup also fails. The engine's
+normal cook path does not consume the commandlet's old-cooker output override.
+The launcher therefore moved the complete old `Saved/Cooked/HTML5` directory to
+retained private evidence, then used the normal fresh output directory. It
+removed only fourteen exact forced-directory lines from `DefaultGame.ini` for
+this run and restored the original bytes after the owned process tree drained.
+No engine source or content package was edited by the launcher.
+
+The native cook completed in 27.254 seconds with exit 0 and zero engine errors.
+The overall wrapper remains **failed** (`Unexpected cooked map set`): despite
+`-cooksinglepackage`, output included Engine Entry and Example_Map as well as
+UT-Entry. Ninety-seven files were produced. Warnings, including existing material
+fallbacks, are retained. No broad adoption of these outputs is authorized by
+this observation.
+
+A separate terminal audit rehashed the previous 7,794 cooked files unchanged,
+all 97 new files unchanged, all 46 protected observations and all 90 source/config
+inputs, allowing only the explicitly recorded restored config identity. The
+config bytes match the original. No compiler/editor processes remain owned by
+this completed invocation. All thirteen downloaded raw evidence files match
+remote byte counts and SHA-256 pins.
+
+The exact new cooked Entry is 549,238 bytes, SHA-256
+`b68a33595f6990cb86ba4a98c68e28e0532694346e491e308775eb35a1ff0613`.
+A bounded read of its reflection component, interpreted using the pinned v511
+unversioned package layout and reflection serializer, finds `EncodedHDR` valid
+with 524,280 bytes: six faces and eight mips at size 128 in four-byte pixels.
+The prior cooked component had valid=false. Encoded payload SHA-256:
+`8310464bc4dd176e3c29d5726a5ae10b07472cd2210b8e2053943bb351124ffa`.
+This proves the missing-data transition, not image fidelity. Eight export payloads
+differ between old and new cooked maps; whole-map behavior is not established by
+this check. Packaging must select only the verified Entry file, prove all other
+archive entries unchanged, and pass fresh multiplayer/browser regression.
+
+Raw cook wrapper result SHA-256:
+`98cea2998ca4617a94a681be2fb9368f316e3ad254779de2c2030dda93ea6aa9`.
+Raw cook log SHA-256:
+`daf707596a1b30a25aa7ea843071ee7f9cdcdb422420e49c33750bcb070048e4`.
+
+
+## Exact one-entry archive candidate
+
+The controlled cook's extra files were not adopted. A separate packaging step
+reused the prior 9,179-entry response and compression policy, selecting only the
+new UT-Entry payload. UnrealPak integrity testing and the read-only
+[replacement verifier](verify-entry-replacement.py) passed. All 9,178 non-Entry
+entries retain their decoded and stored payload hashes, relative block framing,
+compression methods, inventory order and mount. The replacement decodes exactly
+to the cooked Entry hash above. All five non-pak data slices remain byte-identical.
+Every owned packaging process exited 0 and drained.
+
+The verifier requires explicit full input hashes, distinct physical files, the
+pinned archive reader, exactly 9,179 entries and final input rechecks. Run it with
+operator-owned licensed files; it neither writes archives nor grants whole-map
+or browser acceptance:
+
+```sh
+python3 -B ports/html5/verify-entry-replacement.py \
+  --baseline "$BASELINE_PAK" --baseline-sha256 "$BASELINE_SHA256" \
+  --candidate "$CANDIDATE_PAK" --candidate-sha256 "$CANDIDATE_SHA256" \
+  --cooked-entry "$COOKED_ENTRY" --cooked-entry-sha256 "$ENTRY_SHA256"
+python3 -B ports/html5/test_verify_entry_replacement.py -v
+```
+
+Eight focused tests cover payload/framing drift, incorrect Entry bytes,
+compression/order/mount changes, corruption, CLI count and final input rehashing.
+Private package result SHA-256:
+`478a293a578edb5937aa39b05d3746d774d698df2770837fdf458dae1fd601b0`.
+Exact replacement proof SHA-256:
+`6174ac0595e87431fc780c7ac13e6746c7d2a84f90fbfebcfd3022b95e951036`.
+
+A separate preview retains all matching runtime/client records. Its first strict
+two-client run failed during initialization and recorded rejected WebSocket
+handshakes (403) on the old gateway. The next diagnostic uses its own exact-origin
+gateway; the existing preview and gateway remain unchanged. This routing fix
+is not an engine acceptance result. The failed save/cook-wrapper records remain
+failed, and multiplayer, whole-map behavior and visual fidelity remain unverified.
+
+
+The exact-origin route subsequently reached postRun/Ready in both clients and
+sustained 30.050 seconds of paired traffic and native-frame advancement without a
+fatal engine diagnostic. Reconnect then failed with a visible `.data` network
+error while the second client remained Ready. That run is **failed**, not clean
+multiplayer acceptance; its after-run served-file comparison was not reached.
+Owned-browser exit was 0 and gateway sessions returned to zero. The next bounded
+diagnostic records package-request metadata to distinguish the reconnect failure.

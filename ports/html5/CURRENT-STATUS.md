@@ -99,8 +99,32 @@ loader excludes their editor-only export in the observed client-only commandlet
 context. These observations explain those differences without restoring a stale
 component. Both runs retained all 46 audit rows, exact expected snapshots and
 drained owned processes. The diagnostic passed 25 tests and its native build;
-the failed save remains failed. A separate preservation decision, matching
-cook/package and strict multiplayer rerun remain pending.
+the failed save remains failed. A separate exact-generation review now explains
+only the observed reflected-state changes and permits a controlled cook experiment;
+it does not accept the whole map or verify generated script behavior.
+
+That cook's native process exited 0 with complete process-tree drain and zero
+engine errors. Its wrapper remains **failed** because the engine emitted two extra
+maps in addition to UT-Entry. All 46 protected observations and 90 source/config
+inputs were checked; the temporary cook-list change was restored. The entire
+previous 7,794-file cooked generation is preserved and rehashed unchanged.
+The new Entry payload now contains a valid 524,280-byte encoded reflection cubemap
+(six faces, eight mips at 128 pixels); the previous cooked Entry had no valid
+encoded payload. This closes the missing-data finding at the file level only.
+The other 96 emitted files were excluded from packaging. The new archive passed
+its integrity test and an exact replacement proof: all 9,178 other entries retain
+their stored/decoded payloads, framing, order and compression methods. The five
+non-pak data slices also remain byte-identical. A separately addressed browser
+candidate retains the matching runtime and client files. Its first strict
+multiplayer attempt failed during initialization and recorded WebSocket 403
+responses from a gateway configured for an older preview origin. That failed run
+is preserved. A separate exact-origin route then allowed both clients to reach
+postRun/Ready and sustain 30.050 seconds of bidirectional traffic with advancing
+native frames. No fatal engine diagnostic fired during that interval. Reconnecting
+one client failed with a real game-package download error; the other remained
+Ready. The owned browser exited 0 and gateway sessions drained to zero. The whole
+run remains failed, after-run asset equality was not reached, and reconnect,
+combat and travel remain unverified. The existing playable preview is unchanged.
 
 The latest private playable preview is **http://127.0.0.1:8081/index.html**.
 Its cook finished in 2,307.428 seconds with zero selected-family failures and zero
