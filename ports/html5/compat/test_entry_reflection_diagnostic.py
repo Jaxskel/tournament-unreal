@@ -5,6 +5,7 @@ not compile UE, run an editor, recapture a map, or authorize package saving.
 """
 import argparse
 import hashlib
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -240,6 +241,11 @@ UEditorPerProjectUserSettings s{true};FERDPerformanceMonitor m;m.Disable(&s);s.b
         text=text.replace('if (!Settings || !PerformanceSettings)', 'if (!Settings)')
         self.assertEqual(hashlib.sha256(text.encode()).hexdigest(),'07540eb4ae0bf65116bd992ace9006ac3cc39ff8354691b15a5a99d84db301c6')
         cpp=(HEADER.parent/'UT4Html5Compat.cpp').read_bytes().replace(b'#include "Editor/EditorPerProjectUserSettings.h"\n',b'')
+        # The independently checked map-save integration is separate from this older performance delta.
+        for tag in (b'DECL',b'START',b'INCLUDE',b'VERIFY'):
+            cpp,count=re.subn(rb'(?m)^[ \t]*// ENTRY_MAP_REPAIR_'+tag+rb'_BEGIN\n.*?^[ \t]*// ENTRY_MAP_REPAIR_'+tag+rb'_END\n',b'',cpp,flags=re.S)
+            self.assertEqual(count,1)
+        cpp=cpp.replace(b'UT4Compat::ShutdownEntryReflectionMapSave(); ',b'',1)
         self.assertEqual(hashlib.sha256(cpp).hexdigest(),'030fd1ac3f62955cbe5088735671666d99d098311499712a89fc83b71c4a0410')
 
 

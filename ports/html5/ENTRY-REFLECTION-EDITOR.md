@@ -180,3 +180,37 @@ Read-only diagnosis artifact SHA-256:
 `3d86d24e64db186a51d74d9ac477e6588c4de38141a4197ddfdf76cd71746599`.
 No package save, persistence verification, cook, or multiplayer acceptance follows
 from this diagnosis alone.
+
+## Compiled persistence and read-only load helpers
+
+`EntryReflectionMapRepair.h` adds a separate, fixed-one-map persistence operation
+and a synchronous verifier. It requires pinned original/copy/backup files, the
+reviewed capture proof and a separate single-map save receipt. Its only save call
+uses the matching editor's exported `SavePackage`; partial failure preserves
+external evidence and never automatically rolls back or adopts a new file.
+The launcher separately audits all fifteen selected/original map pairs, five
+junctions and pinned build/preparation inputs.
+
+The corrected cross-load comparison normalizes only the exact persistent level's
+valid nonzero build-data GUID in a copied snapshot. Capture and save still require
+full raw equality with the initial in-process snapshot and a matching registry
+key. Fresh verification additionally requires the saved GUID, raw digest and HDR
+payload to survive synchronous loading. The original diagnostic's digest remains
+historical proof, rather than the new cross-process baseline. The canonical digest
+from both complete inspections is `4fb768cf9ba362b390affa07c74d3237ab88ab85`.
+
+A separate `-EntryMapInspectLoaded` branch of `EntryReflectionMapVerify` accepts
+only the original map hash. It omits SaveProof arguments and records the synchronous
+load's object rows, GUID and registry observation. It has no startup map, world
+registration, ticker, capture, `PreSave` or package-save call. Different object
+counts or absent migrated registry data are observations; they do not grant save
+or persistence success. The caller must retain all file audits and actual owned
+process completion.
+
+Sixteen focused local tests passed, including compiled extracted canonicalization,
+raw-equality/reload-ID and read-only-inspection code, plus source/API checks. The
+matching Windows plugin-only build passed with complete process-tree drain and no
+external assist. Plugin DLL SHA-256:
+`e8397155a18bb313f65c8ef727222be0f60a59a16847107e004b8352b00737d9`.
+This establishes compilation only. The original-map fresh-load inspection and
+subsequent save/reload acceptance remain separate gates.

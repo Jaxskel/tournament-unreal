@@ -96,16 +96,27 @@
 
 // Entry diagnostic is opt-in and runs in an ordinary unattended editor.
 namespace UT4Compat { static int32 EntryReflectionDiagnostic(const FString&); static void ShutdownEntryReflectionDiagnostic(); }
+// ENTRY_MAP_REPAIR_DECL_BEGIN
+namespace UT4Compat { static int32 StartEntryReflectionMapSave(const FString&); static void ShutdownEntryReflectionMapSave(); }
+// ENTRY_MAP_REPAIR_DECL_END
 class FUt4Html5CompatModule : public FDefaultModuleImpl
 {
 public:
     virtual void StartupModule() override
     {
+        // ENTRY_MAP_REPAIR_START_BEGIN
+        if (FParse::Param(FCommandLine::Get(), TEXT("EntryReflectionMapSave")))
+        {
+            if (UT4Compat::StartEntryReflectionMapSave(FCommandLine::Get()) != 0)
+                FPlatformMisc::RequestExit(false);
+            return;
+        }
+        // ENTRY_MAP_REPAIR_START_END
         if (FParse::Param(FCommandLine::Get(), TEXT("EntryReflectionDiagnostic")) &&
             UT4Compat::EntryReflectionDiagnostic(FCommandLine::Get()) != 0)
             FPlatformMisc::RequestExit(false);
     }
-    virtual void ShutdownModule() override { UT4Compat::ShutdownEntryReflectionDiagnostic(); }
+    virtual void ShutdownModule() override { UT4Compat::ShutdownEntryReflectionMapSave(); UT4Compat::ShutdownEntryReflectionDiagnostic(); }
 };
 IMPLEMENT_MODULE(FUt4Html5CompatModule, UT4Html5Compat)
 DEFINE_LOG_CATEGORY_STATIC(LogUT4Html5Compat, Log, All);
@@ -409,6 +420,9 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
 #include "WeaponTessellationUpgrade.h"
 #include "WeaponUsageReport.h"
 #include "EntryReflectionDiagnostic.h"
+// ENTRY_MAP_REPAIR_INCLUDE_BEGIN
+#include "EntryReflectionMapRepair.h"
+// ENTRY_MAP_REPAIR_INCLUDE_END
 #include "WeaponGrenadeAssignmentReport.h"
 #include "EnforcerConsumerReport.h"
 #include "WeaponShaderProbe.h"
@@ -615,6 +629,10 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
         return EnforcerConsumerReport(Params);
     if (Mode.Equals(TEXT("WeaponGrenadeAssignmentReport"), ESearchCase::IgnoreCase))
         return WeaponGrenadeAssignmentReport(Params);
+    // ENTRY_MAP_REPAIR_VERIFY_BEGIN
+    if (Mode.Equals(TEXT("EntryReflectionMapVerify"), ESearchCase::IgnoreCase))
+        return VerifyEntryReflectionMap(Params);
+    // ENTRY_MAP_REPAIR_VERIFY_END
     if (Mode.Equals(TEXT("SceneColorShaderProbe"), ESearchCase::IgnoreCase))
         return SceneColorShaderProbe(Params);
     if (Mode.Equals(TEXT("WeaponShaderBatchProbe"), ESearchCase::IgnoreCase))
