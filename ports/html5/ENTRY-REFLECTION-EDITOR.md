@@ -268,3 +268,46 @@ candidate for the raw-object mismatch, not a complete account of post-save chang
 The captured HDR payload in this attempt also contains nonzero channels; that
 alone does not establish visual correctness. No fresh-load acceptance, cook,
 package promotion, reset or automatic retry follows from the failed save.
+
+## Read-only inspection of the failed afterimage
+
+`-EntryMapInspectFailedSave2` is a separate commandlet branch of
+`EntryReflectionMapVerify`. It requires the exact failed map and raw failed-save
+proof, with the existing original/backup receipt checks. It cannot accept a
+successful-save proof or grant save authority. It performs one synchronous load,
+without world registration, capture, ticking or `PreSave`. Snapshot, payload and
+registry observations are attempted independently; a failure in one does not
+silently suppress the others. Completion always reports
+`preservation_accepted=false`.
+
+Twenty-two focused tests and the Windows plugin-only build passed. The resulting
+DLL SHA-256 is
+`583a9ffd6f7048abb132c9d8a755ec0c20844f85fd42630b2cf4f8f8c88b253e`.
+The actual fresh inspection exited 0 with owned-process drain, no save, and all
+46 audited file/link rows unchanged. All nine downloaded evidence files matched
+their remote size/hash pins.
+
+The loaded 128-pixel HDR payload SHA-1
+`0bd2927b7dd0a0c25ce37d180c1e066d03d54d59`, capture state, brightness and zero-channel
+count match the pre-save record. Independent bounded extraction of the saved
+package's compressed HDR bytes agrees. The registry fingerprint also matches:
+1,076 bytes, SHA-1 `8f96c4c0c8ce7ac6f4295d0c75a3f46fe826de58`, with identical archive
+flags and the saved level GUID. This establishes persistence of those payloads,
+not complete map or visual acceptance.
+
+The fresh 61-object snapshot differs from the original 60-object load by the
+expected registry addition and these remaining changes:
+
+- The level-script actor is named `UT-Entry_C_0` instead of `UT-Entry_C_1`; its
+  complete reflected row is otherwise identical, and the level reference follows it.
+- The preview Cube's `UCSModifiedProperties` entry for `BodyInstance` is empty.
+  It was already empty in the original running-editor snapshot; all other Cube
+  properties match the original synchronous load.
+- Both CaptureOffset references and the WorldSettings root reference are empty.
+  The pinned property-export implementation supports actual null references here,
+  rather than a display-name difference. Their cause and preservation implications
+  remain under investigation.
+
+No comparison exclusions, reset, map promotion or successful-save reclassification
+follow from this inspection. The failed raw result and original backup remain
+preserved. Cooked/browser behavior and strict multiplayer startup are still open.

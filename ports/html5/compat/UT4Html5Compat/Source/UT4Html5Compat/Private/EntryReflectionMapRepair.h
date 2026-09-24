@@ -530,6 +530,12 @@ static TSharedPtr<FERMState> GEntryMapRepair;
 // Call only in module startup before GEngine/GEditor creation; never from commandlet routing.
 static int32 StartEntryReflectionMapSave(const FString& Params)
 {
+    // FAILED_SAVE2_SAVE_GUARD_BEGIN
+    FString FailedOnly;
+    if (FParse::Param(*Params,TEXT("EntryMapInspectFailedSave2")) ||
+        FParse::Value(*Params,TEXT("FailedSaveProof="),FailedOnly) || FParse::Value(*Params,TEXT("FailedSaveProofSHA1="),FailedOnly))
+        return WFRStop(TEXT("entry-map-failed-save2-commandlet-only"));
+    // FAILED_SAVE2_SAVE_GUARD_END
     if (!GIsEditor || IsRunningCommandlet() || !IsInGameThread() || !FApp::CanEverRender() || !FApp::IsUnattended() ||
         GEngine || GEditor || GEntryMapRepair.IsValid() || GEntryReflectionDiagnostic.IsValid() ||
         !FParse::Param(*Params,TEXT("EntryReflectionMapSave")) || !FParse::Param(*Params,TEXT("EntryReflectionDiagnostic")) ||
@@ -568,6 +574,108 @@ static void ShutdownEntryReflectionMapSave()
     if (!S->Finished) S->Finish(false,TEXT("shutdown before completion"));
     S->Capture.RestoreSettings(); S->Evidence.Close(); GEntryMapRepair.Reset();
 }
+
+// FAILED_SAVE2_INSPECTION_BEGIN
+// Fixed failed afterimage only. This is observation, never successful-save adoption.
+static bool ERMFailedSave2Row(const TSharedPtr<FJsonObject>& Row,int32 Index,const FERMReceipt& R)
+{
+    const TCHAR* Kinds[]={TEXT("begin"),TEXT("registry_before_capture"),TEXT("before_save"),TEXT("complete")};
+    bool Visual=true,Attempted=false;
+    if (Index<0 || Index>=4 || !Row.IsValid() ||
+        Str(Row,TEXT("schema"))!=TEXT("ut4-entry-map-result-v1") || Str(Row,TEXT("mode"))!=TEXT("save") ||
+        Str(Row,TEXT("kind"))!=Kinds[Index] || Str(Row,TEXT("package"))!=ERDPackage ||
+        Str(Row,TEXT("source_receipt_sha1"))!=R.ReceiptSHA1 || Str(Row,TEXT("selected"))!=R.Selected ||
+        !Row->TryGetBoolField(TEXT("visual_success_claim"),Visual) || Visual) return false;
+    return Index!=3 || (Str(Row,TEXT("status"))==TEXT("failed") &&
+        Row->TryGetBoolField(TEXT("save_attempted"),Attempted) && Attempted &&
+        Str(Row,TEXT("saved_map_sha1"))==R.SelectedPin.SHA1 &&
+        Str(Row,TEXT("saved_identity"))==R.SelectedPin.Identity);
+}
+static int32 ERMInspectFailedSave2(const FString& Params)
+{
+    FERMReceipt R; FString Output,Forbidden,ProofPath,ProofSHA;
+    if (FParse::Param(*Params,TEXT("EntryMapInspectLoaded")) ||
+        FParse::Value(*Params,TEXT("EntryMapSaveProof="),Forbidden) ||
+        FParse::Value(*Params,TEXT("EntryMapSaveProofSHA1="),Forbidden) ||
+        !R.Read(Params,false) || R.SelectedPin.SHA1!=TEXT("7797936e53bf4267307b0f461ea532632fb8c4a1") ||
+        !FParse::Value(*Params,TEXT("FailedSaveProof="),ProofPath) ||
+        !FParse::Value(*Params,TEXT("FailedSaveProofSHA1="),ProofSHA) ||
+        ProofSHA!=TEXT("48e89afcf61055202073dc541de069ddbe0c0b68") ||
+        !FParse::Value(*Params,TEXT("EntryMapOutput="),Output)) return WFRStop(TEXT("entry-map-failed-save2-input"));
+    ProofPath=Full(ProofPath); FWURFile ProofPin;
+    if (!R.External(ProofPath) || !FWURFile::Inspect(ProofPath,false,ProofPin,nullptr,65536) || ProofPin.SHA1!=ProofSHA)
+        return WFRStop(TEXT("entry-map-failed-save2-pin"));
+    FString Text; TArray<FString> Lines;
+    if (!FFileHelper::LoadFileToString(Text,*ProofPath)) return WFRStop(TEXT("entry-map-failed-save2-read"));
+    Text.ParseIntoArrayLines(Lines,true);
+    if (Lines.Num()!=4) return WFRStop(TEXT("entry-map-failed-save2-sequence"));
+    for (int32 I=0;I<4;++I)
+    {
+        TSharedPtr<FJsonObject> Row;
+        if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Lines[I]),Row) || !ERMFailedSave2Row(Row,I,R))
+            return WFRStop(TEXT("entry-map-failed-save2-proof"));
+    }
+    FERMEvidence Evidence;
+    if (!Evidence.Open(Full(Output),R) || !Evidence.Emit(ERMRecord(TEXT("inspect_failed_save2"),TEXT("begin"),R)))
+        return WFRStop(TEXT("entry-map-failed-save2-evidence"));
+    if (FindPackage(nullptr,ERDPackage) || !R.Before() || !ERMUnchanged(ProofPin))
+        return WFRStop(TEXT("entry-map-failed-save2-preload"));
+    UPackage* Package=LoadPackage(nullptr,ERDPackage,LOAD_None);
+    UWorld* World=Package ? UWorld::FindWorldInPackage(Package) : nullptr;
+    FERDState Capture; Capture.World=World;
+    const bool TargetOK=World && !World->Scene && ERMTarget(World,false,Capture.Target);
+    TMap<FString,FString> Rows; FString Digest,CanonicalDigest,Guid,Payload,Brightness,State,RegistryHash,RegistryFlags;
+    int32 Dimension=0; int64 Zeros=0,RegistryBytes=0;
+    // FAILED_SAVE2_OBSERVATIONS_BEGIN
+    const bool SnapshotAttempted=TargetOK;
+    const bool SnapshotOK=SnapshotAttempted && FERDState::Snapshot(World,Capture.Target,Rows,Digest);
+    const bool CanonicalOK=SnapshotOK && ERMCanonical(Rows,CanonicalDigest,Guid);
+    // Read actual level GUID independently of snapshot/canonical success.
+    const bool LevelPresent=World && World->PersistentLevel;
+    const FString ActualGuid=LevelPresent ? World->PersistentLevel->LevelBuildDataId.ToString() : FString();
+    const bool RegistryLinked=LevelPresent && ERMRegistryLinked(World,ActualGuid);
+    const bool PayloadAttempted=TargetOK;
+    const bool PayloadOK=PayloadAttempted && Capture.ValidatePayload(Payload,Dimension,Zeros);
+    if (TargetOK) { Brightness=ERMBrightness(Capture.Target); State=Capture.StateIdText(); }
+    const bool RegistryAttempted=TargetOK && RegistryLinked;
+    const bool RegistryOK=RegistryAttempted && ERMRegistryFingerprint(World,Capture.Target,ActualGuid,RegistryHash,RegistryBytes,RegistryFlags);
+    // FAILED_SAVE2_OBSERVATIONS_END
+    bool RowsOK=SnapshotOK;
+    if (SnapshotOK)
+    {
+        TArray<FString> Keys; Rows.GetKeys(Keys); Keys.Sort();
+        for (const FString& Key : Keys)
+        {
+            TSharedPtr<FJsonObject> Row=ERMRecord(TEXT("inspect_failed_save2"),TEXT("snapshot_row"),R);
+            Row->SetStringField(TEXT("object_path"),Key); Row->SetStringField(TEXT("snapshot_row"),Rows.FindChecked(Key));
+            if (!Evidence.Emit(Row,8*1024*1024)) { RowsOK=false; break; }
+        }
+    }
+    // No object-count/digest/payload/registry match is an acceptance gate here.
+    // File immutability and complete snapshot evidence remain mandatory.
+    const bool OK=RowsOK && R.Before() && ERMUnchanged(ProofPin);
+    TSharedPtr<FJsonObject> J=ERMRecord(TEXT("inspect_failed_save2"),TEXT("complete"),R);
+    J->SetStringField(TEXT("status"),OK ? TEXT("inspected") : TEXT("failed"));
+    J->SetBoolField(TEXT("preservation_accepted"),false);
+    J->SetBoolField(TEXT("save_attempted"),false); J->SetBoolField(TEXT("package_saved"),false);
+    J->SetStringField(TEXT("failed_save_proof_sha1"),ProofSHA); J->SetStringField(TEXT("inspected_map_sha1"),R.SelectedPin.SHA1);
+    J->SetBoolField(TEXT("target_present"),TargetOK);
+    J->SetBoolField(TEXT("snapshot_attempted"),SnapshotAttempted); J->SetBoolField(TEXT("snapshot_ok"),SnapshotOK);
+    J->SetBoolField(TEXT("snapshot_rows_complete"),RowsOK); J->SetNumberField(TEXT("objects"),Rows.Num());
+    J->SetStringField(TEXT("authored_digest"),Digest); J->SetBoolField(TEXT("canonical_valid"),CanonicalOK);
+    J->SetStringField(TEXT("canonical_digest"),CanonicalDigest); J->SetStringField(TEXT("level_build_data_id"),ActualGuid);
+    J->SetStringField(TEXT("registry_path"),LevelPresent && World->PersistentLevel->MapBuildData ? World->PersistentLevel->MapBuildData->GetPathName() : FString());
+    J->SetBoolField(TEXT("registry_link_valid"),RegistryLinked);
+    J->SetBoolField(TEXT("payload_attempted"),PayloadAttempted); J->SetBoolField(TEXT("payload_succeeded"),PayloadOK);
+    J->SetStringField(TEXT("payload_sha1"),Payload); J->SetNumberField(TEXT("dimension"),Dimension);
+    J->SetNumberField(TEXT("zero_channels"),double(Zeros)); J->SetStringField(TEXT("brightness_bits"),Brightness);
+    J->SetStringField(TEXT("state_id"),State);
+    J->SetBoolField(TEXT("registry_attempted"),RegistryAttempted); J->SetBoolField(TEXT("registry_succeeded"),RegistryOK);
+    ERMFingerprintFields(J,RegistryHash,RegistryBytes,RegistryFlags);
+    if (!Evidence.Emit(J) || !OK) return WFRStop(TEXT("entry-map-failed-save2-observation"));
+    return 0;
+}
+// FAILED_SAVE2_INSPECTION_END
 
 // Routed only through VerifyEntryReflectionMap's commandlet/mode/absence guards.
 // Add -EntryMapInspectLoaded with ORIGINAL EntryMapExpectedSHA1 and the current
@@ -629,6 +737,12 @@ static int32 VerifyEntryReflectionMap(const FString& Params)
         FParse::Param(*Params,TEXT("EntryReflectionMapSave")) || FParse::Param(*Params,TEXT("EntryReflectionDiagnostic")) ||
         !FParse::Param(*Params,TEXT("EntryReflectionMapVerify")) || FindPackage(nullptr,ERDPackage))
         return WFRStop(TEXT("entry-map-verify-mode/package-present"));
+    // FAILED_SAVE2_ROUTE_BEGIN
+    if (FParse::Param(*Params,TEXT("EntryMapInspectFailedSave2"))) return ERMInspectFailedSave2(Params);
+    FString FailedOnly;
+    if (FParse::Value(*Params,TEXT("FailedSaveProof="),FailedOnly) || FParse::Value(*Params,TEXT("FailedSaveProofSHA1="),FailedOnly))
+        return WFRStop(TEXT("entry-map-failed-save2-flag-required"));
+    // FAILED_SAVE2_ROUTE_END
     if (FParse::Param(*Params,TEXT("EntryMapInspectLoaded"))) return ERMInspectLoadedOriginal(Params);
     FERMReceipt R; FString ProofPath,ProofSHA,Output;
     if (!R.Read(Params,false) || R.SelectedPin.SHA1==ERDMapSHA1 ||

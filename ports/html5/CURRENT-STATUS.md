@@ -83,8 +83,16 @@ All 45 other audit rows stayed unchanged, and the owned process drained. The
 failed result, changed map and original backup are retained without rollback or
 promotion. The saved level-script actor name differs; the normal save path also
 recompiles the level Blueprint. A read-only inspection must identify the complete
-change before any acceptance decision. Fresh-load persistence, matching
-cook/package and strict multiplayer rerun remain pending.
+change before any acceptance decision. A subsequent, separately pinned read-only
+load of that failed afterimage completed with all 46 file/link audit rows unchanged
+and its owned process tree drained. The HDR payload, capture state and brightness,
+and all 1,076 registry fingerprint bytes match the pre-save evidence exactly.
+The 61-object load still fails whole-map preservation: the renamed level-script
+actor has an otherwise identical row, while the Cube construction bookkeeping,
+two CaptureOffset references and WorldSettings root reference differ. These are
+not blanket-excluded or accepted. The read-only inspector passed 22 focused tests
+and a native plugin build; its completion explicitly reports preservation false.
+Matching cook/package and strict multiplayer rerun remain pending.
 
 The latest private playable preview is **http://127.0.0.1:8081/index.html**.
 Its cook finished in 2,307.428 seconds with zero selected-family failures and zero

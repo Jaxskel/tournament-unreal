@@ -41,6 +41,102 @@ class RepairTests(unittest.TestCase):
     def setUp(self):
         self.text = HEADER.read_text()
 
+    def test_failed_save2_inverse_and_readonly_boundary(self):
+        clean=self.text
+        for label in ('INSPECTION','ROUTE','SAVE_GUARD'):
+            clean=re.sub(r'(?m)^ *// FAILED_SAVE2_'+label+r'_BEGIN\n.*?^ *// FAILED_SAVE2_'+label+r'_END\n', '', clean, flags=re.S)
+        clean=clean.replace('\n\n\n// Routed only through', '\n\n// Routed only through')
+        self.assertEqual(hashlib.sha256(clean.encode()).hexdigest(),'9e8679b103370128e3d7a70742e9b2de057401d82ef711b67f119a321893d891')
+        body=section(self.text,'static int32 ERMInspectFailedSave2(', '// FAILED_SAVE2_INSPECTION_END')
+        for token in ('SetCaptureIsDirty','UpdateReflectionCaptureContents','PreSave(', 'SavePackage(', 'AddTicker(', 'InitWorld(', 'RegisterComponent', 'GetMutableDefault'):
+            self.assertNotIn(token,body)
+        self.assertEqual(body.count('LoadPackage('),1)
+        self.assertLess(body.index('FindPackage('),body.index('LoadPackage('))
+        self.assertIn('!World->Scene && ERMTarget(World,false,Capture.Target)',body)
+        self.assertIn('const bool OK=RowsOK && R.Before() && ERMUnchanged(ProofPin);',body)
+        self.assertIn('TEXT("preservation_accepted"),false',body)
+        for token in ('Lines.Num()!=4','ProofPin.SHA1!=ProofSHA','R.External(ProofPath)'):
+            self.assertIn(token,body)
+
+    def test_failed_save2_actual_proof_rows_and_input_guard(self):
+        root=next(x for x in HERE.parents if (x/'work/ut4-html5').is_dir())
+        raw=(root/'work/ut4-html5/entry-reflection-save/save2/save.jsonl').read_bytes()
+        self.assertEqual(hashlib.sha1(raw).hexdigest(),'48e89afcf61055202073dc541de069ddbe0c0b68')
+        self.assertEqual(hashlib.sha256(raw).hexdigest(),'93fdc135be17e776e8557a3b60d0b0125086d15ec1904e379999c114b536c6d9')
+        self.assertNotEqual(hashlib.sha1(raw+b' ').hexdigest(),hashlib.sha1(raw).hexdigest())
+        rows=[json.loads(x) for x in raw.splitlines()]
+        helper=section(self.text,'static bool ERMFailedSave2Row(', 'static int32 ERMInspectFailedSave2(')
+        admission=section(self.text,'    FERMReceipt R; FString Output,Forbidden,ProofPath,ProofSHA;', '    ProofPath=Full(ProofPath); FWURFile ProofPin;')
+        assignments=[]
+        for i,row in enumerate(rows):
+            for key,value in row.items():
+                if isinstance(value,str):assignments.append(f'rows[{i}]->strings[{json.dumps(key)}]={json.dumps(value)};')
+                elif isinstance(value,bool):assignments.append(f'rows[{i}]->flags[{json.dumps(key)}]={str(value).lower()};')
+        shim=r'''
+#include <cassert>
+#include <string>
+#include <map>
+#include <memory>
+#define TEXT(x) x
+using FString=std::string;using int32=int;using TCHAR=char;
+const char* operator*(const FString& s){return s.c_str();}
+template<class T>struct TSharedPtr:std::shared_ptr<T>{using std::shared_ptr<T>::shared_ptr;bool IsValid()const{return bool(*this);}};
+struct FJsonObject{std::map<FString,FString> strings;std::map<FString,bool> flags;bool TryGetBoolField(const char* k,bool& v){if(!flags.count(k))return false;v=flags[k];return true;}};
+FString Str(const TSharedPtr<FJsonObject>& j,const char* k){return j->strings[k];}
+const char* ERDPackage="/Game/RestrictedAssets/Maps/UT-Entry";
+FString mapSHA="7797936e53bf4267307b0f461ea532632fb8c4a1";bool receiptOK=true;
+struct FERMReceipt{FString ReceiptSHA1,Selected;struct Pin{FString SHA1,Identity;}SelectedPin;bool Read(const FString&,bool forSave){assert(!forSave);SelectedPin.SHA1=mapSHA;return receiptOK;}};
+std::map<FString,FString> args;bool originalFlag=false;
+struct FParse{static bool Param(const char*,const char*){return originalFlag;}static bool Value(const char*,const char* key,FString& out){if(!args.count(key))return false;out=args[key];return true;}};
+int WFRStop(const char*){return 3;}
+'''
+        code=shim+helper+'\nint admission(){FString Params;\n'+admission+'\nreturn 0;}\nint main(){\n'
+        code+='TSharedPtr<FJsonObject> rows[4];for(auto& r:rows)r=TSharedPtr<FJsonObject>(new FJsonObject);\n'+'\n'.join(assignments)
+        code+='\nFERMReceipt R;R.ReceiptSHA1=rows[0]->strings["source_receipt_sha1"];R.Selected=rows[0]->strings["selected"];R.SelectedPin.SHA1=mapSHA;R.SelectedPin.Identity=rows[3]->strings["saved_identity"];\n'
+        code+=r'''
+for(int i=0;i<4;++i){assert(ERMFailedSave2Row(rows[i],i,R));
+ for(auto key:{"schema","mode","kind","package","source_receipt_sha1","selected"}){auto old=rows[i]->strings[key];rows[i]->strings[key]="bad";assert(!ERMFailedSave2Row(rows[i],i,R));rows[i]->strings[key]=old;}
+ rows[i]->flags["visual_success_claim"]=true;assert(!ERMFailedSave2Row(rows[i],i,R));rows[i]->flags["visual_success_claim"]=false;
+}
+for(auto key:{"status","saved_map_sha1","saved_identity"}){auto old=rows[3]->strings[key];rows[3]->strings[key]="bad";assert(!ERMFailedSave2Row(rows[3],3,R));rows[3]->strings[key]=old;}
+rows[3]->flags["save_attempted"]=false;assert(!ERMFailedSave2Row(rows[3],3,R));
+args={{"FailedSaveProof=","proof"},{"FailedSaveProofSHA1=","48e89afcf61055202073dc541de069ddbe0c0b68"},{"EntryMapOutput=","out"}};
+assert(admission()==0);auto valid=args;
+for(auto key:{"FailedSaveProof=","FailedSaveProofSHA1=","EntryMapOutput="}){args=valid;args.erase(key);assert(admission()==3);}
+args=valid;args["FailedSaveProofSHA1="]="bad";assert(admission()==3);
+for(auto key:{"EntryMapSaveProof=","EntryMapSaveProofSHA1="}){args=valid;args[key]="forbidden";assert(admission()==3);}
+args=valid;originalFlag=true;assert(admission()==3);originalFlag=false;
+mapSHA="653a6eb7a37f00c5238d210e5f45d7729117a246";assert(admission()==3);
+mapSHA="7797936e53bf4267307b0f461ea532632fb8c4a1";receiptOK=false;assert(admission()==3);
+}
+'''
+        compile_run(code)
+
+    def test_failed_save2_observations_independent_compiled(self):
+        block=section(self.text,'    // FAILED_SAVE2_OBSERVATIONS_BEGIN','    // FAILED_SAVE2_OBSERVATIONS_END')
+        compile_run(r'''
+#include <cassert>
+#include <string>
+#include <map>
+using FString=std::string;using int32=int;using int64=long long;
+template<class K,class V>using TMap=std::map<K,V>;
+struct Guid{FString ToString(){return "guid";}};struct Level{Guid LevelBuildDataId;};struct WorldStub{Level* PersistentLevel;};
+bool snap,canon,payload,registry,linked;int sc,pc,rc;
+struct FERDState{void* Target=nullptr;static bool Snapshot(WorldStub*,void*,TMap<FString,FString>&,FString&){++sc;return snap;}bool ValidatePayload(FString&,int32&,int64&){++pc;return payload;}FString StateIdText(){return "state";}};
+bool ERMCanonical(const TMap<FString,FString>&,FString&,FString&){return canon;}
+bool ERMRegistryLinked(WorldStub*,const FString&){return linked;}
+bool ERMRegistryFingerprint(WorldStub*,void*,const FString&,FString&,int64&,FString&){++rc;return registry;}
+FString ERMBrightness(void*){return "brightness";}
+void run(bool TargetOK){Level level;WorldStub w{&level};WorldStub* World=&w;FERDState Capture;
+TMap<FString,FString> Rows;FString Digest,CanonicalDigest,Guid,Payload,Brightness,State,RegistryHash,RegistryFlags;int32 Dimension=0;int64 Zeros=0,RegistryBytes=0;
+''' + block + r'''
+assert(SnapshotAttempted==TargetOK);assert(SnapshotOK==(TargetOK&&snap));assert(CanonicalOK==(TargetOK&&snap&&canon));
+assert(PayloadAttempted==TargetOK);assert(PayloadOK==(TargetOK&&payload));assert(RegistryAttempted==(TargetOK&&linked));assert(RegistryOK==(TargetOK&&linked&&registry));
+assert(sc==int(TargetOK)&&pc==int(TargetOK)&&rc==int(TargetOK&&linked));
+}
+int main(){for(int mask=0;mask<64;++mask){snap=mask&1;canon=mask&2;payload=mask&4;registry=mask&8;linked=mask&16;sc=pc=rc=0;run(mask&32);}}
+''')
+
     def test_actual_verify_evidence_statement_compiles_and_short_circuits(self):
         statement = next(line for line in self.text.splitlines() if 'if (!Evidence.Open(Full(Output),R)' in line and 'TEXT("verify")' in line)
         compile_run(r'''
