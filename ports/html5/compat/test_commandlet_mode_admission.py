@@ -8,7 +8,18 @@ from test_weapon_tessellation import compile_run
 CPP = Path(__file__).parent / 'UT4Html5Compat/Source/UT4Html5Compat/Private/UT4Html5Compat.cpp'
 PATTERN = r'    // EXPLICIT_MODE_ADMISSION_BEGIN\n(.*?)    // EXPLICIT_MODE_ADMISSION_END\n'
 
+def without_scene_color_dispatch(source):
+    blocks = ('#include "SceneColorShaderProbe.h"\n',
+              '    if (Mode.Equals(TEXT("SceneColorShaderProbe"), ESearchCase::IgnoreCase))\n'
+              '        return SceneColorShaderProbe(Params);\n')
+    for block in blocks:
+        if source.count(block) != 1:
+            raise AssertionError('Expected exactly one SceneColor integration block: ' + block)
+        source = source.replace(block, '', 1)
+    return source
+
 def without_supplement_repair_dispatch(source):
+    source = without_scene_color_dispatch(source)
     blocks = ['#include "SupplementMaterialRepair.h"\n']
     for mode, args in (('Preflight', 'false, true'), ('Apply', 'false'), ('Verify', 'true')):
         blocks.append('    if (Mode.Equals(TEXT("SupplementMaterialRepair%s"), ESearchCase::IgnoreCase))\n        return SupplementMaterialRepair(Params, %s);\n' % (mode, args))

@@ -325,3 +325,25 @@ baseline. Material facts and package hashes matched the run without the observer
 Disconnected native function inputs may have `OutputIndex = INDEX_NONE (-1)`
 (`MaterialExpressions.cpp:8316`). Only disconnected -1 is accepted; connected
 negative indices and values below -1 are rejected.
+
+## Original Bio glass shader diagnostic
+
+`-Mode=SceneColorShaderProbe -SceneColorOriginalContent=<physical original Content>`
+compiles the pinned `Bio_HazyGlass` material and `BIO_HazyGlass_1p` instance at
+Low, High and Medium quality for `SP_OPENGL_ES2_WEBGL`. Use a fresh commandlet
+process with `-AllowCommandletRendering` and an explicitly verified private DDC
+graph. This mode does not save assets or change material/static-lighting settings.
+It does not itself enable SceneColor on unsupported renderers.
+
+The selected package paths and original SHA-1 values are fixed. Read-only content
+links must resolve to the exact supplied physical original files; this does not
+change any repair mode's physical-file or save-policy rules. Each resource is
+finished before release. The report distinguishes observed local translation
+from cache reuse, checks compile/map validity and sampler limits, and compares
+the documented material-instance identity subset. The engine receives the full
+requested shader-map ID for lookup and compilation.
+
+A successful six-resource result is shader-cache evidence only. It does not prove
+browser shader linking, scene-color texture binding, glass appearance, fresh cook
+coverage or frame pacing. Keep failed runs and original asset hashes alongside
+any successful result.

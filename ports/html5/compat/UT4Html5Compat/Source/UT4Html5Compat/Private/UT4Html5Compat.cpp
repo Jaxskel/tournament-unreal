@@ -390,6 +390,7 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
 #include "WeaponGrenadeAssignmentReport.h"
 #include "EnforcerConsumerReport.h"
 #include "WeaponShaderProbe.h"
+#include "SceneColorShaderProbe.h"
 #include "WeaponShaderBatchProbe.h"
 #include "WeaponSamplerAliasProbe.h"
 #include "WeaponGrenadeRepair.h"
@@ -592,6 +593,8 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
         return EnforcerConsumerReport(Params);
     if (Mode.Equals(TEXT("WeaponGrenadeAssignmentReport"), ESearchCase::IgnoreCase))
         return WeaponGrenadeAssignmentReport(Params);
+    if (Mode.Equals(TEXT("SceneColorShaderProbe"), ESearchCase::IgnoreCase))
+        return SceneColorShaderProbe(Params);
     if (Mode.Equals(TEXT("WeaponShaderBatchProbe"), ESearchCase::IgnoreCase))
         return WeaponShaderBatchProbe(Params);
     if (Mode.Equals(TEXT("WeaponSamplerAliasProbe"), ESearchCase::IgnoreCase))
