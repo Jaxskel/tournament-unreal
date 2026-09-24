@@ -57,9 +57,13 @@ MainFrame creation, but a global notification popup hit the same swapchain
 failure. A narrow notification patch built successfully, but a third run reached
 frame 99 and failed when the performance monitor opened a warning popup. All 42
 map/source/DLL audit rows remained unchanged. The diagnostic now temporarily
-disables that existing warning setting; its plugin-only rebuild passed with a
-drained owned process tree. A successful native readback, separately controlled
-map repair, matching cook/package and strict multiplayer rerun remain pending.
+disables that existing warning setting; its plugin-only rebuild passed. The fourth
+normal-editor run then completed real 128-pixel HDR capture/readback with all 78
+authored-object records and 42 file audit rows unchanged, exit 0 and complete
+owned-process drain. The renderer-produced entry-map payload was entirely zero;
+this proves structural capture/readback, not visual lighting fidelity. No map was
+saved. A separate one-map save/fresh-load check, matching cook/package and strict
+multiplayer rerun remain pending.
 
 The latest private playable preview is **http://127.0.0.1:8081/index.html**.
 Its cook finished in 2,307.428 seconds with zero selected-family failures and zero

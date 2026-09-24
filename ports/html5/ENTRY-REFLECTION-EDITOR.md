@@ -129,3 +129,22 @@ Plugin build result SHA-256:
 `0d46b3791e76a19d82da5623c009ffb05216c993abe6ff2802607f4293aa2567`.
 Plugin DLL SHA-256:
 `9c0a0ea44829d327033d27ea42935169e7ce935a258f4d1be5ec7df3a389c033`.
+
+## Native readback result
+
+The fourth normal-editor run passed in 72.812 seconds: exactly one capture at
+128 pixels, all six faces and mip levels structurally valid, capture StateId
+advanced, and all 78 authored-object records unchanged. The authored digest was
+`72c5d75b7c786ec992026ef11eeb3a758431e01c`; decoded HDR payload SHA-1 was
+`3804faae2cc8e0f9b93e101afe556eb7e1ed51d3`. All 524,280 RGBA channel values
+were zero. This is the renderer-produced result for this entry map; zero values
+are descriptive, and this does **not** prove useful lighting or visual fidelity.
+
+The editor exited 0, its owned process tree drained, and all 42 map/source/DLL
+audit rows matched before and after. Nine raw evidence files matched remote
+size/hash pins. No package was saved. Persisting the capture needs a separate
+one-map save, synchronous fresh-load verification before automatic recapture,
+and a matching cook/package plus strict multiplayer rerun.
+
+Diagnostic result SHA-256:
+`def14970c3b4ba71f4826ce856dcf6c833834f22175dbae531ed057e0969f687`.
