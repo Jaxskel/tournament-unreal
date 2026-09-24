@@ -395,6 +395,7 @@ static void Emit(const TSharedPtr<FJsonObject>& J)
 #include "WeaponGrenadeRepair.h"
 #include "EnforcerMaterialCandidate.h"
 #include "SupplementMaterialCandidate.h"
+#include "SupplementConsumerReport.h"
 #include "EnforcerMeshInvariant.h"
 #include "EnforcerMeshReport.h"
 #include "EnforcerMaterialRepair.h"
@@ -578,6 +579,8 @@ int32 UUT4Html5CompatCommandlet::Main(const FString& Params)
         return EnforcerMaterialCandidate(Params);
     if (Mode.Equals(TEXT("SupplementMaterialCandidate"), ESearchCase::IgnoreCase))
         return SupplementMaterialCandidate(Params);
+    if (Mode.Equals(TEXT("SupplementConsumerReport"), ESearchCase::IgnoreCase))
+        return SupplementConsumerReport(Params);
     if (Mode.Equals(TEXT("EnforcerConsumerReport"), ESearchCase::IgnoreCase))
         return EnforcerConsumerReport(Params);
     if (Mode.Equals(TEXT("WeaponGrenadeAssignmentReport"), ESearchCase::IgnoreCase))

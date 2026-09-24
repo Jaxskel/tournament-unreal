@@ -6,6 +6,8 @@ The [Enforcer consumer report](ENFORCER-CONSUMER-REPORT.md) records a fixed-seve
 
 The [Bio Rifle body and grenade-ammunition candidate](SUPPLEMENT-MATERIAL-CANDIDATE.md) compiles twelve ordinary shader resources from transient copies while checking the original material parameters and parent chains. It saves no assets and excludes Bio glass.
 
+The [fixed Bio/Grenade consumer query](SUPPLEMENT-CONSUMER-REPORT.md) observes the relevant material slots and component defaults before choosing a persistent repair. It also saves nothing.
+
 Original editor-only plugin and bounded copy-on-write preparation. No engine source
 is bundled. The editor plugin now compiles against the isolated UT4 source, and Report has run on the recovered Malcolm and weapon assets. Twelve Python preparation tests pass. Apply/Verify and full browser appearance are tracked separately in the parent verification record.
 
